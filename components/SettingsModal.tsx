@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
 import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Search, Filter } from 'lucide-react';
@@ -223,6 +222,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <option value="openai">OpenAI Compatible</option>
                         </select>
                     </div>
+
+                    {/* NEW: Model Selection */}
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Model Tier</label>
+                        <select 
+                            value={formData.llmModel}
+                            onChange={e => setFormData({...formData, llmModel: e.target.value})}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-purple-500/50"
+                        >
+                            {formData.llmProvider === 'gemini' ? (
+                                <>
+                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Standard)</option>
+                                    <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Reasoning)</option>
+                                </>
+                            ) : formData.llmProvider === 'zai' ? (
+                                <option value="GLM-4.6">GLM-4.6</option>
+                            ) : (
+                                <option value="gpt-4o">GPT-4o</option>
+                            )}
+                        </select>
+                    </div>
+
                     {formData.llmProvider !== 'gemini' && (
                         <div className="space-y-1">
                             <label className="text-[10px] font-bold text-emerald-500 uppercase">Custom API Key</label>

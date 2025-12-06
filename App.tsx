@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LogInput } from './components/LogInput';
 import { AgentStatus } from './components/AgentStatus';
@@ -556,7 +555,7 @@ const App: React.FC = () => {
                     <Zap className="w-3 h-3 mr-1" /> SIMULATION MODE
                 </span>
             )}
-            <p className="text-slate-500 font-mono text-sm">v5.3.1 (Diff Pre-Check)</p>
+            <p className="text-slate-500 font-mono text-sm">v6.0 (Gemini 3 Pro)</p>
           </div>
         </div>
         <div className="mt-4 md:mt-0 flex gap-4">

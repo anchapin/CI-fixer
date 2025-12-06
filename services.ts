@@ -2,9 +2,12 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { AppConfig, CodeFile, WorkflowRun, RunGroup, FileChange, AgentState, AgentPhase, AgentPlan, LogLine } from './types';
 
-// --- GitHub API Helpers ---
-
+// --- Constants ---
 const GITHUB_API_BASE = 'https://api.github.com';
+const MODEL_FAST = 'gemini-2.5-flash';
+const MODEL_SMART = 'gemini-3-pro-preview';
+
+// --- GitHub API Helpers ---
 
 async function fetchWithAuth(url: string, token: string, options: RequestInit = {}) {
   const cleanToken = token.trim();
@@ -170,6 +173,29 @@ export async function listRepoDirectory(config: AppConfig, path: string, commitS
   }
 }
 
+// --- HELPER: Code Extraction (Fix Prompt Leakage) ---
+function extractCode(raw: string, language: string): string {
+    // 1. Try to find markdown blocks specifically for the language
+    const langPattern = new RegExp(`\`\`\`${language}([\\s\\S]*?)\`\`\``, 'i');
+    const langMatch = raw.match(langPattern);
+    if (langMatch && langMatch[1]) return langMatch[1].trim();
+
+    // 2. Try generic markdown blocks
+    const genericMatch = raw.match(/```([\s\S]*?)```/);
+    if (genericMatch && genericMatch[1]) return genericMatch[1].trim();
+
+    // 3. Fallback: If no blocks, but raw text looks like it contains the JSON prompt leak, strip it
+    // Remove common "Return JSON" instructions if they appear at the end
+    let clean = raw.replace(/Return JSON:[\s\S]*$/, '').trim();
+    
+    // Remove "Here is the code:" prefixes (Safety check: only for code-like files)
+    if (['python', 'javascript', 'typescript', 'java', 'go'].includes(language) || language === 'python') {
+        clean = clean.replace(/^[\s\S]*?import /, 'import ').replace(/^[\s\S]*?def /, 'def ');
+    }
+    
+    return clean;
+}
+
 // --- TOOL 1: CODEBASE SEARCH (grep) ---
 export async function toolCodeSearch(config: AppConfig, query: string): Promise<string[]> {
     const { repoUrl, githubToken } = config;
@@ -214,7 +240,8 @@ export async function toolLintCheck(config: AppConfig, code: string, language: s
     try {
         const response = await unifiedGenerate(config, {
              contents: prompt,
-             config: { responseMimeType: "application/json" }
+             config: { responseMimeType: "application/json" },
+             model: MODEL_FAST
         });
         return safeJsonParse(response.text || "{}", { valid: true });
     } catch {
@@ -281,7 +308,7 @@ export async function toolWebSearch(config: AppConfig, query: string): Promise<s
         try {
             const ai = getGeminiClient(config);
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: MODEL_FAST,
                 contents: `Search Google for: "${query}". Summarize the technical solution in 3 sentences.`,
                 config: { 
                     tools: [{ googleSearch: {} }] 
@@ -456,7 +483,8 @@ async function generateWorkflowOverride(config: AppConfig, workflowContent: stri
     try {
         const response = await unifiedGenerate(config, {
              contents: prompt,
-             config: { maxOutputTokens: 8192 }
+             config: { maxOutputTokens: 8192 },
+             model: MODEL_FAST
         });
         
         let cleanYaml = response.text || "";
@@ -694,12 +722,15 @@ async function generateWithFallback(
     config: AppConfig,
     params: any
 ): Promise<GenerateContentResponse> {
-    const userModel = config.llmModel || 'gemini-2.5-flash';
-    const candidates = [
-        userModel, 
-        'gemini-2.0-flash', 
-        'gemini-flash-latest'
-    ];
+    // Allow model override from params (e.g. for Pro model requests)
+    const userModel = params.model || config.llmModel || MODEL_FAST;
+    
+    const candidates = [userModel];
+    // Only add fallbacks if we are using the default config model, not a specific override
+    if (!params.model) {
+        candidates.push('gemini-2.0-flash');
+        candidates.push('gemini-flash-latest');
+    }
     const uniqueCandidates = [...new Set(candidates)];
 
     let lastError: any = null;
@@ -831,7 +862,8 @@ export async function generateRepoSummary(config: AppConfig): Promise<string> {
     try {
         const response = await unifiedGenerate(config, {
             contents: prompt,
-            config: { maxOutputTokens: 1024 }
+            config: { maxOutputTokens: 1024 },
+            model: MODEL_FAST
         });
         return response.text || "No summary generated.";
     } catch (e: any) {
@@ -880,7 +912,8 @@ export async function generatePostMortem(config: AppConfig, failedAgents: AgentS
     try {
         const response = await unifiedGenerate(config, {
             contents: prompt,
-            config: { maxOutputTokens: 512 }
+            config: { maxOutputTokens: 512 },
+            model: MODEL_FAST
         });
         return response.text || "Manual intervention required. Please check logs.";
     } catch {
@@ -925,7 +958,8 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
               filePath: { type: Type.STRING }
             }
           }
-        }
+        },
+        model: MODEL_FAST
       });
       
       const text = response.text || "{}";
@@ -973,7 +1007,8 @@ export async function generateDetailedPlan(config: AppConfig, errorSummary: stri
             config: { 
                 responseMimeType: "application/json",
                 maxOutputTokens: 1024
-            }
+            },
+            model: MODEL_SMART // PRO MODEL for Logic
         });
         const plan = safeJsonParse(response.text || "{}", { goal: "Fix error", tasks: [] as any[], approved: false });
         // Enforce approved false
@@ -1005,7 +1040,8 @@ export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, erro
     try {
         const response = await unifiedGenerate(config, {
              contents: prompt,
-             config: { responseMimeType: "application/json" }
+             config: { responseMimeType: "application/json" },
+             model: MODEL_FAST // Judge can be fast usually, logic already in plan
         });
         return safeJsonParse(response.text || "{}", { approved: true, feedback: "Auto-approved due to judge error." });
     } catch {
@@ -1039,9 +1075,11 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     3. You MUST MODIFY the code. Do not return the original code unchanged.
     4. CRITICAL: Return the FULL, COMPLETE updated file content.
     5. DO NOT use lazy placeholders like "// ... rest of code", "# ...", or "TodoRead()".
-    6. DO NOT summarize. If the file is 500 lines, output 500 lines.
-    7. DO NOT use markdown formatting (like \`\`\`python). Just raw text if possible, or wrapped in standard code blocks.
-    8. YAML SPECIFIC: Ensure strict indentation (2 spaces) and valid syntax. Do not leave trailing open lines like 'run: |'.
+    6. CRITICAL: You must output the FULL file content from start to finish.
+    7. STOPPING EARLY IS A FAILURE. Ensure the last line of your output matches the expected last line of the file logic.
+    8. DO NOT summarize. If the file is 500 lines, output 500 lines.
+    9. DO NOT use markdown formatting (like \`\`\`python). Just raw text if possible, or wrapped in standard code blocks.
+    10. YAML SPECIFIC: Ensure strict indentation (2 spaces) and valid syntax. Do not leave trailing open lines like 'run: |'.
     
     File Content:
     ${codeFile.content}
@@ -1051,11 +1089,11 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     contents: prompt,
     config: {
         maxOutputTokens: 8192
-    }
+    },
+    model: MODEL_SMART // PRO MODEL for Code Generation
   });
   
-  let cleanCode = response.text || "";
-  cleanCode = cleanCode.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '');
+  let cleanCode = extractCode(response.text || "", codeFile.language);
   return cleanCode;
 }
 
@@ -1114,7 +1152,8 @@ export async function judgeFix(config: AppConfig, original: string, modified: st
                 },
                 tools: useSearch ? [{googleSearch: {}}] : undefined,
                 maxOutputTokens: 1024
-            }
+            },
+            model: MODEL_SMART // Judge needs good reasoning
         });
         
         return safeJsonParse(response.text || "{}", { passed: false, reasoning: "Empty or Malformed Response", score: 0 });
@@ -1145,7 +1184,8 @@ export async function consolidateFixes(config: AppConfig, originalContent: strin
     try {
         const response = await unifiedGenerate(config, {
             contents: prompt,
-            config: { maxOutputTokens: 8192 }
+            config: { maxOutputTokens: 8192 },
+            model: MODEL_FAST // Merging is usually mechanical
         });
 
         let cleanCode = response.text || "";
@@ -1159,7 +1199,7 @@ export async function consolidateFixes(config: AppConfig, originalContent: strin
 export async function getAgentChatResponse(config: AppConfig, message: string): Promise<string> {
     const prompt = `You are a sci-fi DevOps Agent. User: "${message}". Respond briefly.`;
     try {
-        const response = await unifiedGenerate(config, { contents: prompt });
+        const response = await unifiedGenerate(config, { contents: prompt, model: MODEL_FAST });
         return response.text || "Acknowledged.";
     } catch {
         return "System Warning: Uplink unstable (Rate Limit/Error).";
@@ -1248,10 +1288,23 @@ export async function runSandboxTest(
                      logs: `[SANDBOX] GitHub Actions Verification PASSED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
                  };
              } else {
-                 return {
-                     passed: false,
-                     logs: `[SANDBOX] GitHub Actions Verification FAILED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
-                 };
+                 // --- MENTAL WALKTHROUGH (Pro) ---
+                 logCallback(`[SANDBOX] Analyzing failure cause (Mental Walkthrough)...`);
+                 try {
+                     const analysis = await unifiedGenerate(config, {
+                         contents: `Compare these new logs to the original error: "${errorSummary}". Did the error message change? If yes, we made progress. If no, why did the fix fail? Logs:\n${executionLogs.substring(0, 4000)}`,
+                         model: MODEL_SMART
+                     });
+                     return {
+                        passed: false,
+                        logs: `[SANDBOX] GitHub Actions Verification FAILED.\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
+                     };
+                 } catch {
+                     return {
+                         passed: false,
+                         logs: `[SANDBOX] GitHub Actions Verification FAILED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
+                     };
+                 }
              }
              
          } catch (e: any) {
@@ -1265,7 +1318,7 @@ export async function runSandboxTest(
          }
     }
     
-    if (config.githubToken) {
+    if (config.githubToken || config.customApiKey) {
          const prompt = `
             You are a Strict CI/CD Test Runner Simulator.
             
@@ -1305,12 +1358,34 @@ export async function runSandboxTest(
                         }
                      },
                      maxOutputTokens: 2048 
-                 }
+                 },
+                 model: MODEL_FAST
              });
              const result = safeJsonParse(response.text || "{}", { passed: false, logs: "Sandbox Error: Failed to parse simulation result." });
+             
+             let finalLogs = `[SANDBOX] Booting Virtual Simulator for ${group.name}...\n[SANDBOX] Applying patch...\n${result.logs}`;
+
+             // --- MENTAL WALKTHROUGH (Simulation) ---
+             if (!result.passed) {
+                 logCallback(`[SANDBOX] Simulation failed. Analyzing cause (Mental Walkthrough)...`);
+                 try {
+                     const analysis = await unifiedGenerate(config, {
+                         contents: `Compare these simulated logs to the original error: "${errorSummary}". 
+Did the error message change? If yes, explain what changed and what the new error implies.
+If no, why did the fix fail?
+Simulated Logs:
+${result.logs.substring(0, 4000)}`,
+                         model: MODEL_SMART
+                     });
+                     finalLogs += `\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}`;
+                 } catch (e) {
+                     console.warn("Mental Walkthrough failed", e);
+                 }
+             }
+
              return {
                  passed: result.passed,
-                 logs: `[SANDBOX] Booting Virtual Simulator for ${group.name}...\n[SANDBOX] Applying patch...\n${result.logs}`
+                 logs: finalLogs
              };
          } catch (e: any) {
              return {
@@ -1376,7 +1451,14 @@ export const runIndependentAgentLoop = async (
             const { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.mainRun.id, config.githubToken);
 
             // --- TOOL: SCAN DEPENDENCIES (If import error suspected) ---
-            if (logText.includes("ModuleNotFoundError") || logText.includes("ImportError")) {
+            const isDependencyIssue = logText.includes("ModuleNotFoundError") || 
+                                      logText.includes("ImportError") || 
+                                      logText.includes("No module named") ||
+                                      logText.includes("Missing dependency") ||
+                                      logText.includes("package") ||
+                                      logText.includes("Cannot find module");
+                                      
+            if (isDependencyIssue) {
                  currentState = { ...currentState, phase: AgentPhase.TOOL_USE };
                  updateStateCallback(group.id, currentState);
                  log('TOOL', 'Invoking Dependency Inspector (toolScanDependencies)...');
