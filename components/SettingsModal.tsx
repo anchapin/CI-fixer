@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
-import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Search, Filter } from 'lucide-react';
+import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Search, Filter, Sliders } from 'lucide-react';
 import { getPRFailedRuns } from '../services';
 
 interface SettingsModalProps {
@@ -278,19 +278,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <option value="github_actions">GitHub Actions (Real / Cloud)</option>
                         </select>
                     </div>
-
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Log Verbosity</label>
-                        <select 
-                            value={formData.logLevel}
-                            onChange={e => setFormData({...formData, logLevel: e.target.value as any})}
-                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-amber-500/50"
-                        >
-                            <option value="info">Info (Standard)</option>
-                            <option value="debug">Debug (Detailed)</option>
-                            <option value="verbose">Verbose (All)</option>
-                        </select>
-                    </div>
                     
                     {formData.sandboxMode === 'github_actions' && (
                         <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
@@ -354,28 +341,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               </div>
           </div>
 
-          {/* Workflow Exclusion Filter */}
+          {/* System Control (Filters & Logging) */}
           <div className="border border-slate-800 rounded bg-slate-950/50 p-3">
               <h3 className="text-xs font-bold text-slate-300 uppercase mb-3 flex items-center gap-2">
-                  <Filter className="w-3 h-3 text-slate-400" /> Run Exclusions
+                  <Sliders className="w-3 h-3 text-slate-400" /> System Control
               </h3>
-              <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">
-                      Excluded Workflow Name Patterns (Comma Separated)
-                  </label>
-                  <input
-                      type="text"
-                      value={formData.excludeWorkflowPatterns?.join(', ') || ''}
-                      onChange={(e) => setFormData({
-                          ...formData,
-                          excludeWorkflowPatterns: e.target.value.split(',').map(s => s.trim()).filter(s => s)
-                      })}
-                      placeholder="e.g. ci act, ci simple, local-tests"
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-slate-500/50 font-mono"
-                  />
-                  <p className="text-[9px] text-slate-600">
-                      Workflows matching these names will be hidden from the failed runs list.
-                  </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Workflow Exclusion Filter */}
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          Excluded Workflow Patterns
+                      </label>
+                      <input
+                          type="text"
+                          value={formData.excludeWorkflowPatterns?.join(', ') || ''}
+                          onChange={(e) => setFormData({
+                              ...formData,
+                              excludeWorkflowPatterns: e.target.value.split(',').map(s => s.trim()).filter(s => s)
+                          })}
+                          placeholder="e.g. ci act, ci simple, local-tests"
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-slate-500/50 font-mono"
+                      />
+                      <p className="text-[9px] text-slate-600">
+                          Hide runs matching these terms.
+                      </p>
+                  </div>
+
+                  {/* Log Verbosity Selector */}
+                  <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Log Verbosity</label>
+                        <select 
+                            value={formData.logLevel}
+                            onChange={e => setFormData({...formData, logLevel: e.target.value as any})}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-slate-500/50"
+                        >
+                            <option value="info">Info (Standard)</option>
+                            <option value="debug">Debug (Detailed)</option>
+                            <option value="verbose">Verbose (All)</option>
+                        </select>
+                        <p className="text-[9px] text-slate-600">
+                          Controls detail level of terminal output.
+                      </p>
+                  </div>
               </div>
           </div>
 
