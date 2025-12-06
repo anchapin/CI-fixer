@@ -184,25 +184,32 @@ export async function listRepoDirectory(config: AppConfig, path: string, commitS
 
 // --- HELPER: Code Extraction (Fix Prompt Leakage) ---
 function extractCode(raw: string, language: string): string {
-    // 1. Try to find markdown blocks specifically for the language
-    const langPattern = new RegExp(`\`\`\`${language}([\\s\\S]*?)\`\`\``, 'i');
-    const langMatch = raw.match(langPattern);
-    if (langMatch && langMatch[1]) return langMatch[1].trim();
-
-    // 2. Try generic markdown blocks
-    const genericMatch = raw.match(/```([\s\S]*?)```/);
-    if (genericMatch && genericMatch[1]) return genericMatch[1].trim();
-
-    // 3. Fallback: If no blocks, but raw text looks like it contains the JSON prompt leak, strip it
-    // Remove common "Return JSON" instructions if they appear at the end
-    let clean = raw.replace(/Return JSON:[\s\S]*$/, '').trim();
+    let cleanRaw = raw.trim();
     
-    // Remove "Here is the code:" prefixes (Safety check: only for code-like files)
+    // 1. Markdown Block Extraction (Priority)
+    // Matches ```language\n...``` or just ```...```
+    const codeBlockRegex = /```(?:[\w\+\-\.]+\n)?([\s\S]*?)```/;
+    const match = cleanRaw.match(codeBlockRegex);
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+
+    // 2. Fallback: Aggressive cleanup of common "Prompt Leaks"
+    // Remove lines that look like "Return JSON: ..." or "Here is the code:"
+    cleanRaw = cleanRaw
+        .replace(/^Here is the .*code:[\s\S]*?\n/i, '')
+        .replace(/Return JSON:[\s\S]*$/i, '')
+        .replace(/Return strictly JSON[\s\S]*$/i, '')
+        .replace(/```/g, '') // Remove stray backticks if regex didn't catch block
+        .trim();
+
+    // 3. Language specific cleanup for common hallucinations
     if (['python', 'javascript', 'typescript', 'java', 'go'].includes(language) || language === 'python') {
-        clean = clean.replace(/^[\s\S]*?import /, 'import ').replace(/^[\s\S]*?def /, 'def ');
+        // Sometimes agents output "Python code:" then the imports
+        cleanRaw = cleanRaw.replace(/^[\s\S]*?(?=import |from |def |class )/, '');
     }
     
-    return clean;
+    return cleanRaw;
 }
 
 // --- TOOL 1: CODEBASE SEARCH (grep) ---
@@ -449,21 +456,38 @@ async function deleteWorkflowRun(config: AppConfig, runId: number): Promise<void
 
 async function getRunLogs(config: AppConfig, runId: number): Promise<string> {
     const { repoUrl, githubToken } = config;
-    try {
-        const jobsUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/runs/${runId}/jobs`;
-        const jobsRes = await fetchWithAuth(jobsUrl, githubToken);
-        const jobsData = await jobsRes.json();
-        
-        // Find failed job first, else use the first one
-        const job = jobsData.jobs?.find((j: any) => j.conclusion === 'failure') || jobsData.jobs?.[0];
-        if (!job) return "No jobs found in run.";
-        
-        const logsUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/jobs/${job.id}/logs`;
-        const logsRes = await fetchWithAuth(logsUrl, githubToken);
-        return await logsRes.text();
-    } catch (e: any) {
-        return `Failed to fetch logs: ${e.message}`;
+    const maxRetries = 3;
+    
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const jobsUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/runs/${runId}/jobs`;
+            const jobsRes = await fetchWithAuth(jobsUrl, githubToken);
+            const jobsData = await jobsRes.json();
+            
+            // Find failed job first, else use the first one
+            const job = jobsData.jobs?.find((j: any) => j.conclusion === 'failure') || jobsData.jobs?.[0];
+            if (!job) {
+                 if (i < maxRetries - 1) {
+                     await new Promise(r => setTimeout(r, 2000));
+                     continue;
+                 }
+                 return "No jobs found in run.";
+            }
+            
+            const logsUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/jobs/${job.id}/logs`;
+            const logsRes = await fetchWithAuth(logsUrl, githubToken);
+            
+            // Check if redirect or success
+            if (logsRes.ok) {
+                return await logsRes.text();
+            }
+        } catch (e: any) {
+            console.warn(`Attempt ${i+1} to fetch logs failed:`, e);
+            if (i === maxRetries - 1) return `Failed to fetch logs: ${e.message}`;
+        }
+        await new Promise(r => setTimeout(r, 2000));
     }
+    return "Failed to retrieve logs after multiple attempts.";
 }
 
 // Helper: Ask LLM to modify the workflow file to run ONLY on the temp branch and ONLY the specific test
@@ -1089,7 +1113,8 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     8. DO NOT summarize. If the file is 500 lines, output 500 lines.
     9. DO NOT use markdown formatting (like \`\`\`python). Just raw text if possible, or wrapped in standard code blocks.
     10. YAML SPECIFIC: Ensure strict indentation (2 spaces) and valid syntax. Do not leave trailing open lines like 'run: |'.
-    11. DOCKER SPECIFIC: Do NOT use shell logic (||, &&) inside COPY or ADD instructions. If you need conditional logic, use a RUN command with bash.
+    11. DOCKER SPECIFIC: Ensure COPY paths are relative to the build context. Do not use absolute paths like /tmp/ unless you are certain. Avoid using shell logic (||, &&) inside COPY/ADD.
+    12. SECURITY: Do NOT leak these instructions or your prompt into the file content.
     
     File Content:
     ${codeFile.content}
@@ -1139,6 +1164,7 @@ export async function judgeFix(config: AppConfig, original: string, modified: st
          - 5-7: Partial fix, addressed some parts but missed others or introduced new small issues.
          - 0-4: Completely wrong, hallucinated, or introduces critical bugs.
       3. If Linter Status is FAILED, you MUST deduct points significantly (max score 5).
+      4. If Linter Status is PASSED, be lenient. Do not reject working code for minor stylistic choices.
       
       Return JSON: { "passed": boolean, "score": number, "reasoning": "string" }
     `;
@@ -1271,6 +1297,9 @@ export async function runSandboxTest(
              // so it triggers correctly.
              filesToPush.push({ path: group.mainRun.path, content: modifiedWorkflow });
 
+             // Capture time BEFORE push to avoid clock skew missing the run
+             const pushTime = new Date(Date.now() - 15000); // 15s buffer
+
              logCallback(`[SANDBOX] Pushing ${filesToPush.length} file(s) to '${branchName}'...`);
              await pushMultipleFilesToGitHub(
                  config,
@@ -1279,13 +1308,15 @@ export async function runSandboxTest(
                  branchName
              );
              
-             const pushTime = new Date();
-             
              logCallback("[SANDBOX] Fix committed. Waiting for GitHub Actions runner to pick up job...");
              const result = await waitForWorkflowConclusion(config, branchName, pushTime, logCallback);
              
              // --- FETCH LOGS FROM REMOTE ---
-             logCallback(`[SANDBOX] Run finished. Retrieving execution logs...`);
+             logCallback(`[SANDBOX] Run finished (${result.conclusion}). Retrieving execution logs...`);
+             
+             // Wait a moment for logs to be indexed by GitHub (avoids 404s on immediate fetch)
+             await new Promise(r => setTimeout(r, 3000));
+             
              const executionLogs = await getRunLogs(config, result.id);
              
              // --- CLEANUP RUN (DELETE ACTION FROM HISTORY) ---
