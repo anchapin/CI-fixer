@@ -1,0 +1,5 @@
+{
+  "name": "Recursive DevOps Agent",
+  "description": "A sci-fi themed mission control dashboard simulating a self-healing AI DevOps agent that recursively fixes broken build pipelines.",
+  "requestFramePermissions": []
+}

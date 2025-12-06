@@ -1,0 +1,138 @@
+
+import React from 'react';
+import { AgentPhase, AgentState } from '../types';
+import { Brain, Code, CheckCircle, Search, Beaker, Library, Eye, GitBranch, Wrench, ShieldAlert } from 'lucide-react';
+
+interface AgentStatusProps {
+  agentStates: Record<string, AgentState>;
+  globalPhase?: AgentPhase;
+  selectedAgentId: string | 'CONSOLIDATED' | null;
+  onSelectAgent: (id: string | 'CONSOLIDATED') => void;
+}
+
+export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPhase, selectedAgentId, onSelectAgent }) => {
+  const steps = [
+    { id: AgentPhase.UNDERSTAND, label: 'Scan', icon: Search },
+    { id: AgentPhase.TOOL_USE, label: 'Tool', icon: Wrench }, 
+    { id: AgentPhase.PLAN_APPROVAL, label: 'Auth', icon: ShieldAlert }, // New Step
+    { id: AgentPhase.IMPLEMENT, label: 'Fix', icon: Code },
+    { id: AgentPhase.VERIFY, label: 'Judge', icon: CheckCircle },
+    { id: AgentPhase.TESTING, label: 'Sandbox', icon: Beaker },
+  ];
+
+  const activeAgentKeys = Object.keys(agentStates);
+  
+  if (activeAgentKeys.length === 0) {
+      if (globalPhase === AgentPhase.IDLE) return <div className="text-slate-600 text-[10px] text-center uppercase tracking-widest py-2">System Idle</div>;
+      
+      return (
+          <div className="flex flex-col items-center justify-center py-2 animate-pulse">
+              <Library className="w-5 h-5 text-cyan-500 mb-2" />
+              <span className="text-cyan-400 text-xs font-mono uppercase">Initializing Context...</span>
+          </div>
+      );
+  }
+
+  return (
+    <div className="w-full space-y-3 px-2">
+      {/* Header Row */}
+      <div className="grid grid-cols-[80px_1fr_40px] gap-2 items-center text-[9px] font-mono text-slate-500 uppercase border-b border-slate-800 pb-1">
+          <div>Agent</div>
+          <div className="flex justify-between px-2">
+             {steps.map(s => <span key={s.id}>{s.label}</span>)}
+          </div>
+          <div className="text-center">Iter</div>
+      </div>
+
+      {/* Agent Rows */}
+      {Object.values(agentStates).map((agent: AgentState) => {
+          const isSuccess = agent.status === 'success';
+          const isFailed = agent.status === 'failed';
+          const isSelected = selectedAgentId === agent.groupId;
+          
+          return (
+            <div 
+                key={agent.groupId} 
+                onClick={() => onSelectAgent(agent.groupId)}
+                className={`grid grid-cols-[80px_1fr_40px] gap-2 items-center group cursor-pointer rounded p-1 transition-all ${
+                    isSelected ? 'bg-slate-800 ring-1 ring-cyan-500/50' : 'hover:bg-slate-900'
+                }`}
+            >
+                {/* Agent Name Badge */}
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-shadow ${
+                        isSuccess ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 
+                        isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' : 
+                        'bg-cyan-500 animate-pulse'
+                    }`} />
+                    <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`} title={agent.name}>
+                        {agent.name}
+                    </span>
+                </div>
+
+                {/* Progress Track */}
+                <div className="relative h-6 bg-slate-900/50 rounded-full border border-slate-800 flex items-center px-1">
+                    <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-slate-800 -z-0" />
+                    
+                    <div className="w-full flex justify-between z-10 relative">
+                        {steps.map((step, idx) => {
+                             const stepIndex = steps.findIndex(s => s.id === step.id);
+                             const currentIndex = steps.findIndex(s => s.id === agent.phase);
+                             
+                             let isPassed = false;
+                             if (isSuccess) isPassed = true;
+                             else if (isFailed && agent.phase === AgentPhase.FAILURE) isPassed = true; 
+                             else if (currentIndex > stepIndex) isPassed = true;
+                             // Special logic: Skip 'PLAN' if agent went straight to PLAN_APPROVAL
+                             if (step.id === AgentPhase.PLAN && agent.phase === AgentPhase.PLAN_APPROVAL) isPassed = true;
+
+                             const isCurrent = agent.phase === step.id;
+                             
+                             return (
+                                 <div key={step.id} className="flex flex-col items-center justify-center w-6 relative">
+                                     <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                                         isCurrent 
+                                            ? (isFailed ? 'bg-rose-500 scale-125' : 'bg-cyan-400 scale-125 shadow-[0_0_8px_#22d3ee]')
+                                            : isPassed 
+                                                ? 'bg-slate-600'
+                                                : 'bg-slate-800 border border-slate-700'
+                                     }`} />
+                                 </div>
+                             );
+                        })}
+                    </div>
+                </div>
+
+                {/* Iteration Count */}
+                <div className="text-center">
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                        agent.iteration > 0 ? 'bg-amber-950/40 text-amber-500 border border-amber-900/50' : 'text-slate-600'
+                    }`}>
+                        v{agent.iteration + 1}
+                    </span>
+                </div>
+            </div>
+          );
+      })}
+
+      {/* Merged View Button (Only appears if we have agents) */}
+      {activeAgentKeys.length > 0 && (
+          <div 
+            onClick={() => onSelectAgent('CONSOLIDATED')}
+            className={`flex items-center justify-center gap-2 p-2 mt-4 rounded border border-dashed cursor-pointer transition-all ${
+                selectedAgentId === 'CONSOLIDATED' 
+                ? 'bg-purple-900/20 border-purple-500/50 text-purple-300' 
+                : 'border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-600'
+            }`}
+          >
+              <GitBranch className="w-3 h-3" />
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                  {globalPhase === AgentPhase.CONSOLIDATE || globalPhase === AgentPhase.SUCCESS 
+                    ? "View Merged Master" 
+                    : "Wait for Consolidation..."}
+              </span>
+          </div>
+      )}
+    </div>
+  );
+};
