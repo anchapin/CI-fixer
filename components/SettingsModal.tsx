@@ -25,7 +25,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     searchProvider: 'gemini_grounding',
     tavilyApiKey: '',
     sandboxMode: 'simulation',
-    sandboxTimeoutMinutes: 5
+    sandboxTimeoutMinutes: 15,
+    logLevel: 'info'
   });
 
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
@@ -44,7 +45,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           searchProvider: currentConfig.searchProvider || 'gemini_grounding',
           tavilyApiKey: currentConfig.tavilyApiKey || '',
           sandboxMode: currentConfig.sandboxMode || 'simulation',
-          sandboxTimeoutMinutes: currentConfig.sandboxTimeoutMinutes || 5
+          sandboxTimeoutMinutes: currentConfig.sandboxTimeoutMinutes || 15,
+          logLevel: currentConfig.logLevel || 'info'
       });
       if (currentConfig.selectedRuns) {
           setFoundRuns(currentConfig.selectedRuns);
@@ -276,6 +278,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <option value="github_actions">GitHub Actions (Real / Cloud)</option>
                         </select>
                     </div>
+
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Log Verbosity</label>
+                        <select 
+                            value={formData.logLevel}
+                            onChange={e => setFormData({...formData, logLevel: e.target.value as any})}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-amber-500/50"
+                        >
+                            <option value="info">Info (Standard)</option>
+                            <option value="debug">Debug (Detailed)</option>
+                            <option value="verbose">Verbose (All)</option>
+                        </select>
+                    </div>
                     
                     {formData.sandboxMode === 'github_actions' && (
                         <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
@@ -287,7 +302,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                 min="1"
                                 max="30"
                                 value={formData.sandboxTimeoutMinutes}
-                                onChange={e => setFormData({...formData, sandboxTimeoutMinutes: parseInt(e.target.value) || 5})}
+                                onChange={e => setFormData({...formData, sandboxTimeoutMinutes: parseInt(e.target.value) || 15})}
                                 className="w-full bg-slate-900 border border-amber-900/50 rounded px-2 py-1.5 text-xs text-amber-100 focus:border-amber-500/50"
                             />
                             <p className="text-[9px] text-slate-500 leading-tight pt-1">

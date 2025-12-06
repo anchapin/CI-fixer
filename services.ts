@@ -120,6 +120,15 @@ export async function getFileContent(config: AppConfig, filePath: string, commit
     const res = await fetchWithAuth(url, githubToken);
     const data = await res.json();
     
+    // --- FIX START: Safety Check ---
+    if (!data || !data.name) {
+       if (Array.isArray(data)) {
+           throw new Error(`Path '${cleanPath}' is a directory, not a file.`);
+       }
+       throw new Error(`File path '${cleanPath}' returned invalid data (possibly a directory or submodule).`);
+    }
+    // --- FIX END ---
+    
     const cleanBase64 = (data.content || '').replace(/\s/g, '');
     const decodedContent = new TextDecoder().decode(
       Uint8Array.from(atob(cleanBase64), c => c.charCodeAt(0))
@@ -1080,6 +1089,7 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     8. DO NOT summarize. If the file is 500 lines, output 500 lines.
     9. DO NOT use markdown formatting (like \`\`\`python). Just raw text if possible, or wrapped in standard code blocks.
     10. YAML SPECIFIC: Ensure strict indentation (2 spaces) and valid syntax. Do not leave trailing open lines like 'run: |'.
+    11. DOCKER SPECIFIC: Do NOT use shell logic (||, &&) inside COPY or ADD instructions. If you need conditional logic, use a RUN command with bash.
     
     File Content:
     ${codeFile.content}
@@ -1285,24 +1295,24 @@ export async function runSandboxTest(
              if (result.conclusion === 'success') {
                  return {
                      passed: true,
-                     logs: `[SANDBOX] GitHub Actions Verification PASSED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
+                     logs: `[SANDBOX] GitHub Actions Verification PASSED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 20000)}...`
                  };
              } else {
                  // --- MENTAL WALKTHROUGH (Pro) ---
                  logCallback(`[SANDBOX] Analyzing failure cause (Mental Walkthrough)...`);
                  try {
                      const analysis = await unifiedGenerate(config, {
-                         contents: `Compare these new logs to the original error: "${errorSummary}". Did the error message change? If yes, we made progress. If no, why did the fix fail? Logs:\n${executionLogs.substring(0, 4000)}`,
+                         contents: `Compare these new logs to the original error: "${errorSummary}". Did the error message change? If yes, we made progress. If no, why did the fix fail? Logs:\n${executionLogs.substring(0, 50000)}`,
                          model: MODEL_SMART
                      });
                      return {
                         passed: false,
-                        logs: `[SANDBOX] GitHub Actions Verification FAILED.\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
+                        logs: `[SANDBOX] GitHub Actions Verification FAILED.\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 20000)}...`
                      };
                  } catch {
                      return {
                          passed: false,
-                         logs: `[SANDBOX] GitHub Actions Verification FAILED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 5000)}...`
+                         logs: `[SANDBOX] GitHub Actions Verification FAILED.\n[INFO] Remote logs retrieved and run deleted from history.\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 20000)}...`
                      };
                  }
              }

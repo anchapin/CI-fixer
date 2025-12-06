@@ -71,6 +71,9 @@ export interface AppConfig {
   // Sandbox / Verification Settings
   sandboxMode?: 'simulation' | 'github_actions';
   sandboxTimeoutMinutes?: number;
+
+  // Logging
+  logLevel?: 'info' | 'debug' | 'verbose';
 }
 
 export interface ChatMessage {
