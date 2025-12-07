@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { FileChange } from '../types';
 import { GitCommit, ChevronDown, ChevronRight, FileCode, MessageSquare, AlertCircle, X, ArrowUpToLine, ArrowDownToLine, GitBranch } from 'lucide-react';
@@ -56,11 +57,14 @@ export const DiffView: React.FC<DiffViewProps> = ({ files, selectedChunkIds, onT
 
   // Logic to hide unchanged lines
   const getContextualDiff = (original: string, modified: string) => {
-      const diff = Diff.diffLines(original, modified);
+      // Safe access to diffLines whether it's on default or root object
+      const differ = (Diff as any).diffLines || (Diff as any).default?.diffLines;
+      const diff = differ ? differ(original, modified) : [];
+      
       const CONTEXT = 3; 
       const result: { value: string, added?: boolean, removed?: boolean, isSpacer?: boolean, originalIndex: number }[] = [];
 
-      diff.forEach((part, index) => {
+      diff.forEach((part: Diff.Change, index: number) => {
           const partWithIndex = { ...part, originalIndex: index };
           if (part.added || part.removed) {
               result.push(partWithIndex);
@@ -157,9 +161,12 @@ export const DiffView: React.FC<DiffViewProps> = ({ files, selectedChunkIds, onT
   };
 
   const getStats = (original: string, modified: string) => {
-      const diff = Diff.diffLines(original, modified);
+      const differ = (Diff as any).diffLines || (Diff as any).default?.diffLines;
+      if (!differ) return { added: 0, removed: 0 };
+
+      const diff = differ(original, modified);
       let added = 0, removed = 0;
-      diff.forEach(part => {
+      diff.forEach((part: Diff.Change) => {
           if (part.added) added += part.count || 0;
           if (part.removed) removed += part.count || 0;
       });

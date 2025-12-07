@@ -16,8 +16,8 @@ import {
     pushMultipleFilesToGitHub, getAgentChatResponse, groupFailedRuns,
     judgeFix, runSandboxTest, searchRepoFile, findClosestFile, generateRepoSummary, generatePostMortem,
     toolCodeSearch, toolLintCheck, toolScanDependencies, toolWebSearch, toolFindReferences,
-    runIndependentAgentLoop
 } from './services';
+import { runIndependentAgentLoop } from './agent';
 
 const App: React.FC = () => {
   // Layout State
@@ -26,6 +26,9 @@ const App: React.FC = () => {
   const [isResizing, setIsResizing] = useState<number | null>(null); // Index of the resizer being dragged
   const containerRef = useRef<HTMLDivElement>(null);
   
+  // Ref to store drag start state for smooth resizing
+  const dragStartRef = useRef<{ x: number, initialWidths: number[] } | null>(null);
+
   // App State
   const [logs, setLogs] = useState(INITIAL_ERROR_LOG);
   const [globalPhase, setGlobalPhase] = useState<AgentPhase>(AgentPhase.IDLE); // Only used for init/success summarization
@@ -71,38 +74,39 @@ const App: React.FC = () => {
   const startResizing = (index: number) => (e: React.MouseEvent) => {
       e.preventDefault();
       setIsResizing(index);
+      dragStartRef.current = {
+          x: e.clientX,
+          initialWidths: [...colWidths]
+      };
   };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-        if (isResizing === null || !containerRef.current) return;
+        if (isResizing === null || !dragStartRef.current || !containerRef.current) return;
 
         const containerWidth = containerRef.current.clientWidth;
-        // Calculate movement in FR units (assuming total FR is approx 12)
-        // We use the container width to map pixel delta to FR delta
-        const totalFr = colWidths.reduce((a, b) => a + b, 0);
-        const pixelDelta = e.movementX;
+        const { x, initialWidths } = dragStartRef.current;
+        const pixelDelta = e.clientX - x;
+        const totalFr = initialWidths.reduce((a, b) => a + b, 0);
         const frDelta = (pixelDelta / containerWidth) * totalFr;
 
-        setColWidths(prev => {
-            const newWidths = [...prev];
-            // Resizing index i affects col[i] (expands) and col[i+1] (shrinks)
-            const leftColIdx = isResizing;
-            const rightColIdx = isResizing + 1;
+        const newWidths = [...initialWidths];
+        const leftColIdx = isResizing;
+        const rightColIdx = isResizing + 1;
 
-            // Constrain minimum width (0.5 fr)
-            if (newWidths[leftColIdx] + frDelta < 0.5 || newWidths[rightColIdx] - frDelta < 0.5) {
-                return prev;
-            }
+        // Apply constraints (min width 0.5fr)
+        if (newWidths[leftColIdx] + frDelta < 0.5 || newWidths[rightColIdx] - frDelta < 0.5) {
+            return;
+        }
 
-            newWidths[leftColIdx] += frDelta;
-            newWidths[rightColIdx] -= frDelta;
-            return newWidths;
-        });
+        newWidths[leftColIdx] += frDelta;
+        newWidths[rightColIdx] -= frDelta;
+        setColWidths(newWidths);
     };
 
     const handleMouseUp = () => {
         setIsResizing(null);
+        dragStartRef.current = null;
     };
 
     if (isResizing !== null) {
@@ -118,7 +122,7 @@ const App: React.FC = () => {
         document.removeEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = '';
     };
-  }, [isResizing, colWidths]);
+  }, [isResizing]);
 
   // Dynamic Grid Template
   const getGridTemplate = () => {
@@ -179,7 +183,7 @@ const App: React.FC = () => {
     // MOCK SIMULATION STATE UPDATE
     updateAgentState(mockAgentId, { 
         phase: step.phase, 
-        name: "Simulation Agent", 
+        name: "NeonArchitect",  // Updated name to fit style
         status: 'working', 
         iteration: 0,
         // In sim mode, we fake the file change appearing in the specific agent's state
@@ -217,6 +221,15 @@ const App: React.FC = () => {
     };
   }, [isSimulating, isRealMode, simStepIndex, runSimulationStep]);
 
+  const generateCoolAgentName = (idx: number) => {
+      const adjectives = ["Crimson", "Neon", "Zero", "Cyber", "Void", "Quantum", "Spectral", "Iron", "Obsidian"];
+      const nouns = ["Architect", "Weaver", "Operator", "Sentinel", "Runner", "Engineer", "Daemon", "Vanguard"];
+      
+      const adj = adjectives[idx % adjectives.length];
+      const noun = nouns[(idx + Math.floor(idx / adjectives.length)) % nouns.length];
+      return `${adj}${noun}`;
+  };
+
   const runMultiAgentPipeline = async () => {
     if (!appConfig) return;
     const cleanConfig = { ...appConfig, githubToken: appConfig.githubToken.trim() };
@@ -253,7 +266,13 @@ const App: React.FC = () => {
         setGlobalPhase(AgentPhase.UNDERSTAND);
         addLog('INFO', `Scanning ${cleanConfig.selectedRuns.length} failed workflows...`);
         
-        const initialGroups = await groupFailedRuns(cleanConfig, cleanConfig.selectedRuns);
+        // Enhance groups with cool names
+        const rawGroups = await groupFailedRuns(cleanConfig, cleanConfig.selectedRuns);
+        const initialGroups = rawGroups.map((g, idx) => ({
+            ...g,
+            name: generateCoolAgentName(idx)
+        }));
+        
         setActiveGroups(initialGroups);
 
         // Initialize UI states
@@ -265,14 +284,15 @@ const App: React.FC = () => {
                 phase: AgentPhase.IDLE, 
                 iteration: 0, 
                 status: 'waiting',
-                files: {} // Worktree start empty
+                files: {}, // Worktree start empty
+                fileReservations: []
             };
         });
         setAgentStates(initialStates);
         // Default to Consolidated view, which is empty initially
         setSelectedAgentId('CONSOLIDATED');
 
-        addLog('INFO', `Deploying ${initialGroups.length} autonomous agents...`);
+        addLog('INFO', `Deploying ${initialGroups.length} autonomous agents (Protocol: Concurrent)...`);
 
         // FIRE AND FORGET
         const finalResults = await Promise.all(initialGroups.map(group => 
@@ -496,7 +516,7 @@ const App: React.FC = () => {
           setSimStepIndex(0);
           setConsolidatedFileChanges({});
           setIsSimulating(true);
-          setActiveGroups([{id: 'GROUP-SIM', name: 'Simulated Agent', runIds: [1], mainRun: {} as any}]);
+          setActiveGroups([{id: 'GROUP-SIM', name: 'NeonArchitect', runIds: [1], mainRun: {} as any}]);
           setAgentStates({});
           addLog('INFO', 'Initializing Simulation...');
       }
@@ -555,7 +575,7 @@ const App: React.FC = () => {
                     <Zap className="w-3 h-3 mr-1" /> SIMULATION MODE
                 </span>
             )}
-            <p className="text-slate-500 font-mono text-sm">v6.0 (Gemini 3 Pro)</p>
+            <p className="text-slate-500 font-mono text-sm">v6.1 (Stable)</p>
           </div>
         </div>
         <div className="mt-4 md:mt-0 flex gap-4">
@@ -679,7 +699,11 @@ const App: React.FC = () => {
         >
             <div className="flex flex-col h-full gap-4">
                 <div className="flex-1 min-h-0 flex flex-col">
-                    <TerminalOutput lines={terminalLines} activeGroups={activeGroups} />
+                    <TerminalOutput 
+                        lines={terminalLines} 
+                        activeGroups={activeGroups}
+                        logLevel={appConfig?.logLevel || 'info'} 
+                    />
                 </div>
                 <div className="flex-1 min-h-0 flex flex-col">
                     <ChatConsole 

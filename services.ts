@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { AppConfig, CodeFile, WorkflowRun, RunGroup, FileChange, AgentState, AgentPhase, AgentPlan, LogLine } from './types';
+import { AppConfig, CodeFile, WorkflowRun, RunGroup, AgentState, AgentPlan, FileChange } from './types';
 
 // --- Constants ---
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -35,13 +35,13 @@ async function fetchWithAuth(url: string, token: string, options: RequestInit = 
     }
 
     if (response.status === 401) {
-       throw new Error(`GitHub Authentication Failed (401): ${errorDetails}`);
+       throw new Error(`GitHub Authentication Failed (401): ${errorDetails}. check if your token is valid.`);
     }
     if (response.status === 403) {
-       throw new Error(`GitHub Access Forbidden (403): ${errorDetails}`);
+       throw new Error(`GitHub Access Forbidden (403): ${errorDetails}. Check token scopes (repo/workflow).`);
     }
     if (response.status === 404) {
-       throw new Error(`Resource not found (404): ${url}`);
+       throw new Error(`Resource not found (404). Verify the Repository URL and that your Token has access to this private repo.`);
     }
     if (response.status === 422) {
        throw new Error(`GitHub Validation Error (422): ${errorDetails}. Check if file paths are valid or if the repository allows direct commits.`);
@@ -72,10 +72,13 @@ export async function getPRFailedRuns(
     // Parse the runs and ensure path is included
     return (runsData.workflow_runs || [])
       .filter((r: any) => r.conclusion === 'failure')
+      // IMPORTANT: Enforce strict SHA match because GitHub API sometimes returns unrelated runs 
+      // if the query is ambiguous or malformed, or if there are caching issues.
+      .filter((r: any) => r.head_sha === headSha)
       // FIX: Filter out based on provided patterns (case-insensitive)
       .filter((r: any) => {
           if (excludePatterns.length === 0) return true;
-          const name = r.name.toLowerCase();
+          const name = (r.name || '').toLowerCase();
           return !excludePatterns.some(p => name.includes(p.toLowerCase().trim()));
       })
       .map((r: any) => ({
@@ -88,7 +91,7 @@ export async function getPRFailedRuns(
           html_url: r.html_url
       }));
 }
-
+// ... (rest of the file remains unchanged, just updating fetchWithAuth and exported above)
 export async function getWorkflowLogs(repoUrl: string, runId: number, githubToken: string): Promise<{ logText: string, jobName: string, headSha: string }> {
   const runUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/runs/${runId}`;
   const runRes = await fetchWithAuth(runUrl, githubToken);
@@ -141,7 +144,9 @@ export async function getFileContent(config: AppConfig, filePath: string, commit
         language = 'dockerfile';
     } else if (['yml', 'yaml'].includes(ext)) {
         language = 'yaml';
-    } else if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) {
+    } else if (['ts', 'tsx'].includes(ext)) {
+        language = 'typescript';
+    } else if (['js', 'jsx'].includes(ext)) {
         language = 'javascript';
     } else if (['py'].includes(ext)) {
         language = 'python';
@@ -182,34 +187,140 @@ export async function listRepoDirectory(config: AppConfig, path: string, commitS
   }
 }
 
-// --- HELPER: Code Extraction (Fix Prompt Leakage) ---
-function extractCode(raw: string, language: string): string {
+// --- HELPER: Code Extraction (Fix Prompt Leakage & Indentation) ---
+function processExtractedBlock(content: string): string {
+    const normalized = content.replace(/\r\n|\r/g, '\n'); // Normalize line endings
+    const lines = normalized.split('\n');
+    // Filter out empty lines for indent calculation
+    const nonEmptyLines = lines.filter(l => l.trim().length > 0);
+    
+    if (nonEmptyLines.length > 0) {
+        // Find minimum indentation
+        const minIndent = nonEmptyLines.reduce((min, line) => {
+            const indent = line.match(/^\s*/)?.[0].length || 0;
+            return Math.min(min, indent);
+        }, Infinity);
+
+        if (minIndent > 0 && minIndent !== Infinity) {
+            return lines.map(l => l.length >= minIndent ? l.substring(minIndent) : l).join('\n').trim();
+        }
+    }
+    return normalized.trim();
+}
+
+export function extractCode(raw: string, language: string): string {
+    // Helper: Map common languages to their aliases for regex
+    const getLangPattern = (lang: string) => {
+        const cleanLang = lang.toLowerCase().trim();
+        if (cleanLang === 'javascript') return 'javascript|js|jsx';
+        if (cleanLang === 'typescript') return 'typescript|ts|tsx';
+        if (cleanLang === 'python') return 'python|py';
+        if (cleanLang === 'bash' || cleanLang === 'shell' || cleanLang === 'sh') return 'bash|sh|shell';
+        return cleanLang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+    };
+
+    // 1. Try to find block with explicit language identifier (Priority)
+    // IMPORTANT: If multiple blocks exist, prefer the LAST one as it is usually the "fixed" version
+    if (language && language !== 'txt') {
+        const langPattern = getLangPattern(language);
+        // Match ```(language|alias) ... ```
+        const specificRegex = new RegExp(`(\`{3,})\\s*(${langPattern})[^\\n\\r]*[\\n\\r]+([\\s\\S]*?)\\1`, 'gi');
+        
+        const matches = [...raw.matchAll(specificRegex)];
+        if (matches.length > 0) {
+            // New Robustness Check: Look for negative indicators before the block
+            // e.g. "Here is the ORIGINAL code:" vs "Here is the FIXED code:"
+            
+            let bestMatchIndex = -1;
+            
+            // Loop backwards to find the best candidate
+            for (let i = matches.length - 1; i >= 0; i--) {
+                const match = matches[i];
+                const precedingText = raw.substring(Math.max(0, match.index! - 100), match.index!);
+                
+                const isFixedLabel = /fixed|corrected|updated|solution|final/i.test(precedingText);
+                const isOriginalLabel = /original|previous|broken|buggy/i.test(precedingText);
+                
+                // Priority 1: Explicitly fixed
+                if (isFixedLabel) {
+                    bestMatchIndex = i;
+                    break;
+                }
+                
+                // Priority 2: Neutral (not explicitly original)
+                // We accept the LAST neutral one we find (which is the first one we encounter iterating backwards)
+                if (!isOriginalLabel && bestMatchIndex === -1) {
+                    bestMatchIndex = i;
+                }
+            }
+            
+            // Fallback: If we skipped everything (e.g. all labeled "original" or we were too strict), 
+            // just take the very last block.
+            if (bestMatchIndex === -1) {
+                bestMatchIndex = matches.length - 1;
+            }
+
+            return processExtractedBlock(matches[bestMatchIndex][3]);
+        }
+    }
+
+    // 2. Fallback: Preferred Code Block (Not bash/sh/console if possible)
+    // This handles case where user asks for 'typescript' but model gives 'javascript', preventing it from grabbing 'bash' install commands first.
+    // FIX: Only skip shell blocks if the user didn't ask for a shell-like language
+    const isShellRequest = ['bash', 'sh', 'shell', 'zsh'].includes(language.toLowerCase());
+    
+    if (!isShellRequest) {
+        // Regex to find blocks that are NOT bash/sh/console
+        // FIX: Added 'g' flag and loop to find the LAST matching block, consistent with Step 1
+        const nonShellRegex = /(`{3,})(?!\s*(?:bash|sh|console|terminal|output|log|text))[^\n\r]*[\n\r]+([\s\S]*?)\1/gi;
+        const matches = [...raw.matchAll(nonShellRegex)];
+        
+        if (matches.length > 0) {
+            // Return the LAST matching block
+            return processExtractedBlock(matches[matches.length - 1][2]);
+        }
+    }
+
+    // 3. Fallback: Any Markdown Block (Last Resort)
+    // FIX: Match GLOBAL (g) to ensure we can find the LAST block if multiple exist
+    const anyBlockRegex = /(`{3,})[^\n\r]*[\n\r]+([\s\S]*?)\1/g;
+    const matches = [...raw.matchAll(anyBlockRegex)];
+    if (matches.length > 0) {
+        // Return the LAST matching block
+        return processExtractedBlock(matches[matches.length - 1][2]);
+    }
+
+    // 4. Fallback: Aggressive cleanup of raw text
     let cleanRaw = raw.trim();
     
-    // 1. Markdown Block Extraction (Priority)
-    // Matches ```language\n...``` or just ```...```
-    const codeBlockRegex = /```(?:[\w\+\-\.]+\n)?([\s\S]*?)```/;
-    const match = cleanRaw.match(codeBlockRegex);
-    if (match && match[1]) {
-        return match[1].trim();
-    }
-
-    // 2. Fallback: Aggressive cleanup of common "Prompt Leaks"
-    // Remove lines that look like "Return JSON: ..." or "Here is the code:"
+    // Remove "Prompt Leaks" with loose matching
     cleanRaw = cleanRaw
-        .replace(/^Here is the .*code:[\s\S]*?\n/i, '')
-        .replace(/Return JSON:[\s\S]*$/i, '')
-        .replace(/Return strictly JSON[\s\S]*$/i, '')
-        .replace(/```/g, '') // Remove stray backticks if regex didn't catch block
+        .replace(/^\s*Here is the .*code:[\s\S]*?\n/i, '')
+        .replace(/^\s*Return JSON:[\s\S]*$/i, '')
+        .replace(/^\s*Return strictly JSON[\s\S]*$/i, '')
+        .replace(/```/g, '') // Remove stray backticks
         .trim();
 
-    // 3. Language specific cleanup for common hallucinations
-    if (['python', 'javascript', 'typescript', 'java', 'go'].includes(language) || language === 'python') {
-        // Sometimes agents output "Python code:" then the imports
-        cleanRaw = cleanRaw.replace(/^[\s\S]*?(?=import |from |def |class )/, '');
+    // FIX: Remove standalone language identifier line if it remains at the start (e.g. "python\n")
+    // This happens if the model output was ```python\nCode... but backticks got stripped or were missing
+    if (language && language !== 'txt') {
+        // Only strip if it's the very first line
+        const langLineRegex = new RegExp(`^${language}\\s*\\n`, 'i');
+        cleanRaw = cleanRaw.replace(langLineRegex, '');
+    }
+
+    // 5. Language specific cleanup for common hallucinations
+    if (['python', 'javascript', 'typescript', 'java', 'go', 'bash', 'sh'].includes(language)) {
+        cleanRaw = cleanRaw.replace(/^(?:python|javascript|typescript|java|go|bash|sh) code:?\s*/i, '');
+        cleanRaw = cleanRaw.replace(/^(?:Here is|This is) the (?:updated |fixed )?code:?\s*/i, '');
+
+        // Remove dangerous heuristic that stripped valid code before an import statement.
+        // It was too aggressive for scripts that start with logic like `print('start')\nimport os`.
+        // We now rely primarily on markdown blocks or the specific removals above.
     }
     
-    return cleanRaw;
+    // FIX: Ensure indentation is normalized even for raw text fallback (Crucial for Python/YAML)
+    return processExtractedBlock(cleanRaw);
 }
 
 // --- TOOL 1: CODEBASE SEARCH (grep) ---
@@ -248,7 +359,7 @@ export async function toolLintCheck(config: AppConfig, code: string, language: s
         Ignore logic errors. Only look for missing brackets, indents, colons, or illegal characters.
         
         CODE:
-        ${code.substring(0, 3000)}
+        ${code.substring(0, 50000)}
         
         Return JSON: { "valid": boolean, "error": "string or null" }
     `;
@@ -364,7 +475,7 @@ export async function toolFindReferences(config: AppConfig, fileName: string): P
 
 
 // Fallback search to find a file if the exact path is wrong
-export async function searchRepoFile(config: AppConfig, filename: string): Promise<CodeFile | null> {
+export async function searchRepoFile(config: AppConfig, filename: string): Promise<{ file: CodeFile, path: string } | null> {
     const { repoUrl, githubToken } = config;
     // Limit search to this repo
     const q = `repo:${repoUrl} filename:${filename}`;
@@ -376,7 +487,8 @@ export async function searchRepoFile(config: AppConfig, filename: string): Promi
         
         if (data.items && data.items.length > 0) {
             const item = data.items[0];
-            return getFileContent(config, item.path);
+            const file = await getFileContent(config, item.path);
+            return { file, path: item.path };
         }
     } catch (e) {
         console.warn("Search failed", e);
@@ -385,18 +497,35 @@ export async function searchRepoFile(config: AppConfig, filename: string): Promi
 }
 
 // Smart wrapper to find a file even if the exact path is wrong
-export async function findClosestFile(config: AppConfig, filePath: string, commitSha?: string): Promise<CodeFile> {
+export async function findClosestFile(config: AppConfig, filePath: string, commitSha?: string): Promise<{ file: CodeFile, path: string }> {
     try {
-        return await getFileContent(config, filePath, commitSha);
+        const file = await getFileContent(config, filePath, commitSha);
+        return { file, path: filePath };
     } catch (e: any) {
         if (e.message.includes('404') || e.message.includes('not found')) {
             // Strategy 1: Check if it's a workflow directory issue
             if (filePath.includes('.github/workflows')) {
                 const files = await listRepoDirectory(config, '.github/workflows', commitSha);
-                // Prefer main.yml, then any yml
-                const bestMatch = files.find(f => f.name === 'main.yml') || files.find(f => f.name.endsWith('.yml'));
+                
+                // FUZZY MATCH: Try to find a file that looks like the expected one
+                // e.g. "my-ci-test.yml" vs "My CI Test" (name)
+                const targetName = filePath.split('/').pop()?.toLowerCase().replace(/\.yml$/, '') || '';
+                
+                let bestMatch = files.find(f => f.name.toLowerCase() === `${targetName}.yml`);
+                
+                // If no exact filename match, try simple inclusion
+                if (!bestMatch && targetName) {
+                    bestMatch = files.find(f => f.name.toLowerCase().includes(targetName));
+                }
+                
+                // Fallback to main.yml or any yml
+                if (!bestMatch) {
+                    bestMatch = files.find(f => f.name === 'main.yml') || files.find(f => f.name.endsWith('.yml'));
+                }
+
                 if (bestMatch) {
-                    return getFileContent(config, bestMatch.path, commitSha);
+                    const file = await getFileContent(config, bestMatch.path, commitSha);
+                    return { file, path: bestMatch.path };
                 }
             }
             
@@ -491,7 +620,7 @@ async function getRunLogs(config: AppConfig, runId: number): Promise<string> {
 }
 
 // Helper: Ask LLM to modify the workflow file to run ONLY on the temp branch and ONLY the specific test
-async function generateWorkflowOverride(config: AppConfig, workflowContent: string, branchName: string, errorSummary: string): Promise<string> {
+export async function generateWorkflowOverride(config: AppConfig, workflowContent: string, branchName: string, errorSummary: string): Promise<string> {
     const prompt = `
       You are a GitHub Actions Specialist.
       I need to modify an existing workflow file for a TEMPORARY SANDBOX TEST.
@@ -506,8 +635,11 @@ async function generateWorkflowOverride(config: AppConfig, workflowContent: stri
          on:
            push:
              branches: ['${branchName}']
+      4. PRESERVE LOGIC: The workflow content provided might contain RECENT FIXES (e.g. env vars, setup steps). 
+         DO NOT change any steps unless necessary for the Trigger or Scope.
+         Do NOT revert changes if the provided content looks different from standard templates.
       
-      ORIGINAL WORKFLOW:
+      ORIGINAL WORKFLOW CONTENT (May contain fixes):
       ${workflowContent}
       
       Return ONLY the valid YAML content. No markdown code blocks.
@@ -520,8 +652,7 @@ async function generateWorkflowOverride(config: AppConfig, workflowContent: stri
              model: MODEL_FAST
         });
         
-        let cleanYaml = response.text || "";
-        cleanYaml = cleanYaml.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '');
+        let cleanYaml = extractCode(response.text || "", "yaml");
         return cleanYaml;
     } catch (e) {
         console.warn("Workflow override generation failed, using original.", e);
@@ -732,17 +863,24 @@ async function callGeminiWithRetry<T>(fn: () => Promise<T>, retries = 3, baseDel
         return await fn();
     } catch (e: any) {
         const msg = e.message || JSON.stringify(e);
-        const isRateLimit = 
-            e.status === 429 || 
-            e.code === 429 || 
+        const status = e.status || e.response?.status;
+        
+        // Retry on 429 (Rate Limit) and 5xx (Server Errors)
+        const isTransient = 
+            status === 429 || 
+            status === 500 ||
+            status === 502 ||
+            status === 503 ||
+            status === 504 ||
             msg.includes('429') || 
             msg.includes('quota') || 
-            msg.includes('RESOURCE_EXHAUSTED');
+            msg.includes('RESOURCE_EXHAUSTED') ||
+            msg.includes('Overloaded');
 
-        if (isRateLimit && retries > 0) {
+        if (isTransient && retries > 0) {
             const jitter = Math.random() * 500;
             const waitTime = baseDelay + jitter;
-            console.warn(`Gemini API 429 (Rate Limit). Retrying in ${Math.round(waitTime)}ms... (Attempts left: ${retries})`);
+            console.warn(`Gemini API Error (${status}). Retrying in ${Math.round(waitTime)}ms... (Attempts left: ${retries})`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
             return callGeminiWithRetry(fn, retries - 1, baseDelay * 2);
         }
@@ -758,12 +896,19 @@ async function generateWithFallback(
     // Allow model override from params (e.g. for Pro model requests)
     const userModel = params.model || config.llmModel || MODEL_FAST;
     
+    // Explicitly construct candidates with fallbacks
     const candidates = [userModel];
-    // Only add fallbacks if we are using the default config model, not a specific override
-    if (!params.model) {
+    
+    // Add robustness: If using a preview/experimental model, fallback to stable
+    if (userModel === 'gemini-3-pro-preview' || userModel === MODEL_SMART) {
+        candidates.push('gemini-2.0-flash');
+        candidates.push('gemini-flash-latest');
+    } else if (userModel === 'gemini-2.5-flash' || userModel === MODEL_FAST) {
         candidates.push('gemini-2.0-flash');
         candidates.push('gemini-flash-latest');
     }
+
+    // Ensure unique candidates
     const uniqueCandidates = [...new Set(candidates)];
 
     let lastError: any = null;
@@ -771,8 +916,8 @@ async function generateWithFallback(
     for (const model of uniqueCandidates) {
         try {
              return await callGeminiWithRetry(() => ai.models.generateContent({
-                model: model,
-                ...params
+                ...params,
+                model: model // Override the model in params with current candidate
             }));
         } catch (e: any) {
             lastError = e;
@@ -789,6 +934,13 @@ async function generateWithFallback(
                 console.warn(`Model '${model}' failed (404/NotFound). Attempting fallback...`);
                 continue; 
             }
+            // For 500s or other errors, also try fallback?
+            // Usually handled by callGeminiWithRetry, but if retries exhausted, we try next model.
+            if (e.status === 503 || e.status === 500) {
+                 console.warn(`Model '${model}' failed (${e.status}). Attempting fallback...`);
+                 continue;
+            }
+            
             throw e;
         }
     }
@@ -809,28 +961,45 @@ export async function unifiedGenerate(config: AppConfig, params: any): Promise<{
 function safeJsonParse<T>(text: string, fallback: T): T {
     if (!text) return fallback;
 
-    try {
-        return JSON.parse(text);
-    } catch {
-        const match = text.match(/\{[\s\S]*\}/);
-        if (match) {
-            try {
-                return JSON.parse(match[0]);
-            } catch {
-            }
-        }
+    // Helper to try parsing a string
+    const tryParse = (str: string) => {
         try {
-            const clean = text
-                .replace(/```json/g, '')
-                .replace(/```/g, '')
-                .trim();
-            if (clean.startsWith('{') && clean.endsWith('}')) {
-                return JSON.parse(clean);
-            }
+            return JSON.parse(str);
         } catch {
-            console.warn("Failed to parse JSON response:", text.substring(0, 200) + "...");
+            return undefined;
+        }
+    };
+
+    // 1. Try standard cleanup first (most common case)
+    const clean = text.replace(/^\s*```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
+    const standard = tryParse(clean);
+    if (standard) return standard;
+
+    // 2. Scan for JSON objects using brace matching strategy
+    // We want the LAST valid JSON object in the text (Agent thought chain -> Final Answer JSON)
+    
+    const candidateEndIndices: number[] = [];
+    // Find all '}' indices
+    for (let i = text.length - 1; i >= 0; i--) {
+        if (text[i] === '}') candidateEndIndices.push(i);
+    }
+
+    // Optimization: Only check the last 3 closing braces to avoid perf issues on huge logs
+    const endsToCheck = candidateEndIndices.slice(0, 3);
+
+    for (const end of endsToCheck) {
+        // Find all '{' before this end
+        let start = text.lastIndexOf('{', end);
+        while (start !== -1) {
+             const potential = text.substring(start, end + 1);
+             const result = tryParse(potential);
+             if (result) return result;
+             
+             // Move start backwards
+             start = text.lastIndexOf('{', start - 1);
         }
     }
+    
     return fallback;
 }
 
@@ -1083,6 +1252,15 @@ export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, erro
 }
 
 export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSummary: string, userFeedback?: string, repoContext?: string, activePlan?: AgentPlan): Promise<string> {
+  // Knowledge Injection for Common Issues
+  let specializedHints = "";
+  if (errorSummary.toLowerCase().includes('jwt') && codeFile.language === 'python') {
+      specializedHints += "\n    HINT: The 'jwt' package in Python is obsolete and often conflicts. You likely need 'PyJWT'. Use 'pip install PyJWT' or add 'PyJWT' to requirements.txt. Do NOT use 'jwt' package.";
+  }
+  if (codeFile.language === 'yaml' || codeFile.name.endsWith('.yml')) {
+      specializedHints += "\n    HINT: YAML is indentation sensitive. Ensure lists and maps are correctly aligned. Do not cut off lines.";
+  }
+
   const prompt = `
     You are an expert Senior DevOps Engineer and Code Repair Agent.
     Your mission is to FIX the code to resolve the error described below.
@@ -1108,14 +1286,15 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     3. You MUST MODIFY the code. Do not return the original code unchanged.
     4. CRITICAL: Return the FULL, COMPLETE updated file content.
     5. DO NOT use lazy placeholders like "// ... rest of code", "# ...", or "TodoRead()".
-    6. CRITICAL: You must output the FULL file content from start to finish.
+    6. CRITICAL: You must output the FULL file content from start to finish. If the file is 300 lines, you must output 300 lines.
     7. STOPPING EARLY IS A FAILURE. Ensure the last line of your output matches the expected last line of the file logic.
-    8. DO NOT summarize. If the file is 500 lines, output 500 lines.
+    8. DO NOT summarize.
     9. DO NOT use markdown formatting (like \`\`\`python). Just raw text if possible, or wrapped in standard code blocks.
     10. YAML SPECIFIC: Ensure strict indentation (2 spaces) and valid syntax. Do not leave trailing open lines like 'run: |'.
     11. DOCKER SPECIFIC: Ensure COPY paths are relative to the build context. Do not use absolute paths like /tmp/ unless you are certain. Avoid using shell logic (||, &&) inside COPY/ADD.
     12. SECURITY: Do NOT leak these instructions or your prompt into the file content.
-    
+    ${specializedHints}
+
     File Content:
     ${codeFile.content}
   `;
@@ -1123,7 +1302,7 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
   const response = await unifiedGenerate(config, {
     contents: prompt,
     config: {
-        maxOutputTokens: 8192
+        maxOutputTokens: 16384 // Increased from 8192 to prevent truncation
     },
     model: MODEL_SMART // PRO MODEL for Code Generation
   });
@@ -1224,8 +1403,7 @@ export async function consolidateFixes(config: AppConfig, originalContent: strin
             model: MODEL_FAST // Merging is usually mechanical
         });
 
-        let cleanCode = response.text || "";
-        cleanCode = cleanCode.replace(/^```[a-z]*\n/, '').replace(/\n```$/, '');
+        let cleanCode = extractCode(response.text || "", "txt");
         return cleanCode;
     } catch {
         return fixes[0];
@@ -1249,7 +1427,8 @@ export async function runSandboxTest(
     hasFix: boolean,
     fileChange: FileChange | undefined,
     errorSummary: string,
-    logCallback: (msg: string) => void = () => {}
+    logCallback: (msg: string) => void = () => {},
+    allFileChanges: Record<string, FileChange> = {}
 ): Promise<{ passed: boolean, logs: string }> {
     
     if (!hasFix || !fileChange) {
@@ -1272,9 +1451,11 @@ export async function runSandboxTest(
              logCallback(`[SANDBOX] Fetching original workflow file '${group.mainRun.path}'...`);
              
              let workflowContentToUse = "";
-             // CRITICAL FIX: If the agent fixed the workflow file itself, use the FIXED version, not the original!
-             if (fileChange.path === group.mainRun.path) {
-                 workflowContentToUse = fileChange.modified.content;
+             // Priority: Use the fix for the workflow file if it exists in accumulated changes
+             const workflowChange = allFileChanges[group.mainRun.path] || (fileChange.path === group.mainRun.path ? fileChange : undefined);
+             
+             if (workflowChange) {
+                 workflowContentToUse = workflowChange.modified.content;
                  logCallback(`[SANDBOX] Detected fix is for the workflow itself. Using modified content for override generation.`);
              } else {
                  const workflowFile = await getFileContent(config, group.mainRun.path, baseSha);
@@ -1286,15 +1467,26 @@ export async function runSandboxTest(
 
              // Prepare file list to push
              let filesToPush = [];
+             const pathsProcessed = new Set<string>();
 
-             // 1. If the fix is NOT the workflow file, add the fix to the push list
+             // 1. Add the current file change (Priority)
              if (fileChange.path !== group.mainRun.path) {
                  filesToPush.push({ path: fileChange.path, content: fileChange.modified.content });
+                 pathsProcessed.add(fileChange.path);
              }
 
-             // 2. Add the modified workflow (which now acts as both the runner and potentially the fix if matched)
-             // Even if fileChange.path IS the workflow, we push the OVERRIDDEN version to the branch
-             // so it triggers correctly.
+             // 2. Add other accumulated changes (Context from previous iterations or other files)
+             for (const path in allFileChanges) {
+                 if (pathsProcessed.has(path)) continue;
+                 const fc = allFileChanges[path];
+                 // Skip workflow file as it's handled via override
+                 if (fc.path !== group.mainRun.path) {
+                      filesToPush.push({ path: fc.path, content: fc.modified.content });
+                      pathsProcessed.add(fc.path);
+                 }
+             }
+
+             // 3. Add the modified workflow (Override)
              filesToPush.push({ path: group.mainRun.path, content: modifiedWorkflow });
 
              // Capture time BEFORE push to avoid clock skew missing the run
@@ -1331,14 +1523,36 @@ export async function runSandboxTest(
              } else {
                  // --- MENTAL WALKTHROUGH (Pro) ---
                  logCallback(`[SANDBOX] Analyzing failure cause (Mental Walkthrough)...`);
+                 
+                 // ENHANCED ANALYSIS: DETECT PROGRESS
                  try {
                      const analysis = await unifiedGenerate(config, {
-                         contents: `Compare these new logs to the original error: "${errorSummary}". Did the error message change? If yes, we made progress. If no, why did the fix fail? Logs:\n${executionLogs.substring(0, 50000)}`,
+                         contents: `
+                            Compare these new logs to the original error: "${errorSummary}". 
+                            
+                            Original Error: ${errorSummary}
+
+                            New Logs:
+                            ${executionLogs.substring(0, 30000)}
+
+                            Task:
+                            1. Did the ORIGINAL error disappear?
+                            2. Is there a NEW, different error? (e.g. Build passed but tests failed).
+                            
+                            Output:
+                            If progress was made (error changed), start with "PROGRESS:".
+                            If the same error persists, start with "PERSISTENT ERROR:".
+                            Then explain briefly.
+                         `,
                          model: MODEL_SMART
                      });
+                     
+                     const analysisText = analysis.text || "Analysis failed.";
+                     const isProgress = analysisText.includes("PROGRESS:");
+                     
                      return {
                         passed: false,
-                        logs: `[SANDBOX] GitHub Actions Verification FAILED.\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 20000)}...`
+                        logs: `[SANDBOX] GitHub Actions Verification FAILED.\n\n--- MENTAL WALKTHROUGH ---\n${analysisText}\n\n[SYSTEM NOTE] ${isProgress ? "Good news: The original error is gone. We hit a new error." : "Bad news: The original error persists."}\n\n--- REMOTE LOGS ---\n${executionLogs.substring(0, 20000)}...`
                      };
                  } catch {
                      return {
@@ -1418,7 +1632,8 @@ Simulated Logs:
 ${result.logs.substring(0, 4000)}`,
                          model: MODEL_SMART
                      });
-                     finalLogs += `\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}`;
+                     // FIX: Prepend analysis to logs so it's visible at the top and caught by feedback loops
+                     finalLogs = `[SANDBOX] Booting Virtual Simulator for ${group.name}...\n[SANDBOX] Applying patch...\n\n--- MENTAL WALKTHROUGH ---\n${analysis.text}\n\n--- SIMULATED LOGS ---\n${result.logs}`;
                  } catch (e) {
                      console.warn("Mental Walkthrough failed", e);
                  }
@@ -1447,314 +1662,4 @@ ${result.logs.substring(0, 4000)}`,
         passed: true,
         logs: `[SANDBOX] Booting environment for ${group.name}...\n[SANDBOX] Applying patch...\n[SANDBOX] Running tests...\n[PASS] All tests passed (45/45).`
     };
-}
-
-
-// --- INDEPENDENT AGENT LOOP ---
-// This function runs entirely independently for each RunGroup
-export const runIndependentAgentLoop = async (
-    config: AppConfig,
-    group: RunGroup,
-    initialRepoContext: string,
-    updateStateCallback: (id: string, state: Partial<AgentState>) => void,
-    logCallback: (level: LogLine['level'], msg: string, agentId?: string, agentName?: string) => void
-): Promise<AgentState> => {
-    const MAX_RETRIES = 3;
-    let iteration = 0;
-    let previousFeedback: string | undefined = undefined;
-    let dependencyContext = "";
-    
-    // Log Wrapper
-    const log = (level: LogLine['level'], msg: string, id: string = group.id, name: string = group.name) => logCallback(level, msg, id, name);
-    const judgeLog = (msg: string) => logCallback('WARN', `[JUDGE] ${msg}`, 'JUDGE', 'Judge');
-
-    // Initialize State with empty file registry
-    const initialState: AgentState = { 
-        groupId: group.id, 
-        name: group.name, 
-        phase: AgentPhase.UNDERSTAND, 
-        iteration: 0, 
-        status: 'working',
-        files: {} 
-    };
-    updateStateCallback(group.id, initialState);
-    
-    let currentState = initialState; // Local tracker for return value
-    let persistentFileContent: CodeFile | null = null; // Store partial fixes
-
-    while (iteration < MAX_RETRIES) {
-        try {
-            // 1. UNDERSTAND
-            currentState = { ...currentState, phase: AgentPhase.UNDERSTAND, iteration, status: 'working' };
-            updateStateCallback(group.id, currentState);
-            log('INFO', iteration === 0 ? `Agent Activated. Analyzing Run #${group.mainRun.id}...` : `Retry #${iteration}. Re-analyzing failure...`);
-            
-            const { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.mainRun.id, config.githubToken);
-
-            // --- TOOL: SCAN DEPENDENCIES (If import error suspected) ---
-            const isDependencyIssue = logText.includes("ModuleNotFoundError") || 
-                                      logText.includes("ImportError") || 
-                                      logText.includes("No module named") ||
-                                      logText.includes("Missing dependency") ||
-                                      logText.includes("package") ||
-                                      logText.includes("Cannot find module");
-                                      
-            if (isDependencyIssue) {
-                 currentState = { ...currentState, phase: AgentPhase.TOOL_USE };
-                 updateStateCallback(group.id, currentState);
-                 log('TOOL', 'Invoking Dependency Inspector (toolScanDependencies)...');
-                 const depReport = await toolScanDependencies(config, headSha);
-                 dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
-                 log('INFO', 'Dependency Scan complete.');
-            }
-
-            // Diagnose
-            const diagnosis = await diagnoseError(config, logText, initialRepoContext + dependencyContext);
-            
-            let cleanPath = diagnosis.filePath ? diagnosis.filePath.replace(/^\/+/, '') : '';
-            
-            // --- TOOL: CODE SEARCH (If path ambiguous) ---
-            if (!cleanPath || cleanPath === 'unknown' || cleanPath === '') {
-                 currentState = { ...currentState, phase: AgentPhase.TOOL_USE };
-                 updateStateCallback(group.id, currentState);
-                 log('TOOL', `Invoking Code Search for error keywords...`);
-                 const searchResults = await toolCodeSearch(config, diagnosis.summary.substring(0, 30));
-                 if (searchResults.length > 0) {
-                     cleanPath = searchResults[0];
-                     log('INFO', `Search found potential match: ${cleanPath}`);
-                 }
-            }
-
-            if (!cleanPath) cleanPath = 'README.md'; // Safety fallback
-            log('DEBUG', `Diagnosis: ${diagnosis.summary} in ${cleanPath}`);
-
-            // --- PLANNING & APPROVAL (Iteration > 0) ---
-            // If this is a retry, we engage the Judge Planning Loop
-            let approvedPlan: AgentPlan | undefined = undefined;
-            
-            if (iteration > 0) {
-                 currentState = { ...currentState, phase: AgentPhase.PLAN };
-                 updateStateCallback(group.id, currentState);
-                 log('WARN', `Failure Detected in previous run. Initiating Strategic Planning Subroutine...`);
-                 
-                 let planApproved = false;
-                 let planAttempts = 0;
-                 let planFeedback = previousFeedback || "Previous fix failed. Create a better plan.";
-
-                 while (!planApproved && planAttempts < 3) {
-                     // Generate Plan
-                     log('INFO', `Drafting Fix Strategy (Attempt ${planAttempts + 1})...`);
-                     const plan = await generateDetailedPlan(config, diagnosis.summary, planFeedback, initialRepoContext);
-                     currentState = { ...currentState, currentPlan: plan, phase: AgentPhase.PLAN_APPROVAL };
-                     updateStateCallback(group.id, currentState);
-                     
-                     // Judge Plan
-                     judgeLog(`Reviewing Agent Strategy: "${plan.goal}"...`);
-                     const judgement = await judgeDetailedPlan(config, plan, diagnosis.summary);
-                     
-                     if (judgement.approved) {
-                         planApproved = true;
-                         plan.approved = true;
-                         approvedPlan = plan;
-                         judgeLog(`Plan Approved. Proceed with execution.`);
-                         log('SUCCESS', `Strategy locked. Executing ${plan.tasks.length} tasks...`);
-                         
-                         currentState = { ...currentState, currentPlan: plan };
-                         updateStateCallback(group.id, currentState);
-                     } else {
-                         judgeLog(`Plan Rejected: ${judgement.feedback}`);
-                         planFeedback = judgement.feedback;
-                         planAttempts++;
-                         log('WARN', 'Plan rejected by Overwatch. Revising strategy...');
-                     }
-                 }
-                 
-                 if (!approvedPlan) {
-                     log('ERROR', 'Unable to formulate approved plan. Aborting agent.');
-                     return { ...currentState, status: 'failed', phase: AgentPhase.FAILURE };
-                 }
-            }
-
-            // 2. IMPLEMENT
-            currentState = { ...currentState, phase: AgentPhase.IMPLEMENT, status: 'working' };
-            updateStateCallback(group.id, currentState);
-            
-            // Fetch file content - either from REPO or from PREVIOUS ITERATION (if close)
-            let currentContent: CodeFile;
-            if (persistentFileContent && persistentFileContent.name === cleanPath.split('/').pop()) {
-                currentContent = persistentFileContent;
-                log('INFO', 'Continuing implementation from previous partial fix...');
-            } else {
-                currentContent = await findClosestFile(config, cleanPath, headSha);
-            }
-
-            // --- TOOL: WEB SEARCH (If obscure error) ---
-            let externalKnowledge = "";
-            if (iteration > 0 || diagnosis.summary.includes("exit code") || diagnosis.summary.includes("unknown")) {
-                const providerLabel = config.searchProvider === 'tavily' ? 'Tavily AI' : 'Google Search';
-                log('TOOL', `Invoking Web Search (${providerLabel}) for solution...`);
-                const searchRes = await toolWebSearch(config, diagnosis.summary);
-                externalKnowledge = `\nExternal Search Results: ${searchRes}\n`;
-                log('INFO', 'External knowledge retrieved.');
-            }
-
-            // Execute Implementation (Injecting Plan if available)
-            let fixedContentStr = await generateFix(
-                config, 
-                currentContent, 
-                diagnosis.summary + externalKnowledge + dependencyContext, 
-                previousFeedback, 
-                initialRepoContext,
-                approvedPlan
-            );
-            
-            // --- SANITY CHECK: Output Validation ---
-            const isSuspicious = fixedContentStr.length < 50 || 
-                                 fixedContentStr.includes("TodoRead") || 
-                                 (currentContent.content.length > 200 && fixedContentStr.length < currentContent.content.length * 0.4);
-            
-            if (isSuspicious) {
-                 log('WARN', 'Agent generated suspiciously short or lazy code. Rejecting output and retrying generation...');
-                 fixedContentStr = await generateFix(
-                     config, 
-                     currentContent, 
-                     diagnosis.summary + " CRITICAL: PREVIOUS OUTPUT WAS TRUNCATED. YOU MUST OUTPUT THE ENTIRE FILE.", 
-                     "Previous output was rejected because it contained placeholders like 'TodoRead' or was incomplete.", 
-                     initialRepoContext
-                 );
-            }
-
-            // --- PRE-CHECK: Identity Check ---
-            if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
-                 log('WARN', 'Pre-check: No changes detected. Retrying generation with strict directive...');
-                 fixedContentStr = await generateFix(
-                     config, 
-                     currentContent, 
-                     diagnosis.summary + " CRITICAL: YOU MUST MODIFY THE CODE. DO NOT RETURN ORIGINAL FILE.", 
-                     "Previous output was identical to original file. Please apply changes.", 
-                     initialRepoContext
-                 );
-                 
-                 if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
-                      log('WARN', 'Pre-check failed again: Still no changes. Skipping Judge.');
-                      previousFeedback = "Verification Pre-check Failed: You returned the exact original file twice. You must modify the code.";
-                      iteration++;
-                      continue;
-                 }
-            }
-
-            // --- TOOL: SYNTAX LINTER (Self-Correction Loop) ---
-            log('TOOL', 'Running Syntax Linter (toolLintCheck)...');
-            let lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
-            
-            if (!lintResult.valid) {
-                log('WARN', `Linter found syntax error: ${lintResult.error}. Agent attempting self-correction...`);
-                currentState = { ...currentState, phase: AgentPhase.IMPLEMENT }; 
-                updateStateCallback(group.id, currentState);
-                
-                fixedContentStr = await generateFix(
-                    config, 
-                    {...currentContent, content: fixedContentStr},
-                    `Fix the following SYNTAX ERROR: ${lintResult.error}`,
-                    "Previous attempt had syntax errors. Fix them while keeping the rest of the logic.",
-                    initialRepoContext
-                );
-                
-                lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
-                if (lintResult.valid) {
-                     log('INFO', 'Self-correction successful. Syntax valid.');
-                } else {
-                     log('ERROR', 'Self-correction failed. Proceeding with risk of syntax error.');
-                }
-            } else {
-                log('INFO', 'Syntax Check Passed.');
-            }
-
-            // 3. VERIFY (Judge)
-            currentState = { ...currentState, phase: AgentPhase.VERIFY, status: 'working' };
-            updateStateCallback(group.id, currentState);
-            const judgeResult = await judgeFix(config, currentContent.content, fixedContentStr, diagnosis.summary, initialRepoContext);
-
-            if (!judgeResult.passed) {
-                if (judgeResult.score >= 8) {
-                    log('WARN', `Judge Rejected but Score ${judgeResult.score}/10. Keeping partial fix for next iteration.`);
-                    persistentFileContent = { ...currentContent, content: fixedContentStr };
-                    previousFeedback = `Judge Score ${judgeResult.score}/10. Reasoning: ${judgeResult.reasoning}. KEEP previous changes, but address the remaining issues.`;
-                } else {
-                    log('WARN', `Judge Rejected (Score ${judgeResult.score}/10). Discarding fix and reverting to original.`);
-                    persistentFileContent = null;
-                    previousFeedback = `Judge Rejected (Score ${judgeResult.score}/10): ${judgeResult.reasoning}.`;
-                }
-                
-                iteration++;
-                continue; 
-            }
-            
-            log('SUCCESS', 'Fix accepted by Judge.');
-            
-            // Update Agent's PRIVATE File State
-            const newFileChange: FileChange = {
-                path: cleanPath,
-                original: currentContent,
-                modified: { ...currentContent, content: fixedContentStr },
-                status: 'modified'
-            };
-
-            currentState = { ...currentState, files: { [cleanPath]: newFileChange } };
-            updateStateCallback(group.id, currentState);
-
-            // 4. SANDBOX TESTING
-            currentState = { ...currentState, phase: AgentPhase.TESTING, status: 'waiting' };
-            updateStateCallback(group.id, currentState);
-            log('INFO', 'Queueing Sandbox Verification...');
-
-            // Run Sandbox using the AGENT'S specific files
-            currentState = { ...currentState, phase: AgentPhase.TESTING, status: 'working' };
-            updateStateCallback(group.id, currentState);
-            
-            const testResult = await runSandboxTest(
-                config, 
-                group, 
-                iteration, 
-                true, 
-                newFileChange, 
-                diagnosis.summary,
-                (msg) => log('DEBUG', msg)
-            );
-
-            const testLines = testResult.logs.split('\n');
-            testLines.forEach(l => {
-                if (l.includes('[FAIL]')) log('ERROR', l);
-                else if (l.includes('[PASS]')) log('SUCCESS', l);
-            });
-
-            if (testResult.passed) {
-                currentState = { ...currentState, phase: AgentPhase.SUCCESS, status: 'success' };
-                updateStateCallback(group.id, currentState);
-                log('SUCCESS', 'Agent successfully verified fix.');
-                return currentState; 
-            } else {
-                currentState = { ...currentState, phase: AgentPhase.FAILURE, status: 'failed' };
-                updateStateCallback(group.id, currentState);
-                log('ERROR', 'Verification Failed.');
-                previousFeedback = `Sandbox Verification Failed. Logs: ${testResult.logs.substring(0, 500)}...`;
-                iteration++;
-            }
-
-        } catch (e: any) {
-            log('ERROR', `Agent Exception: ${e.message}`);
-            iteration++;
-        }
-    }
-
-    // If loop finishes without success
-    currentState = { ...currentState, phase: AgentPhase.FAILURE, status: 'failed' };
-    updateStateCallback(group.id, currentState);
-    log('ERROR', 'Agent Mission Failed after max retries.');
-    return currentState;
-};
-
-// Helper for normalizeCode
-function normalizeCode(str: string) {
-    return str.trim().replace(/\r\n/g, '\n');
 }

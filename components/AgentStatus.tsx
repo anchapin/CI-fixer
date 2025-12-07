@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AgentPhase, AgentState } from '../types';
-import { Brain, Code, CheckCircle, Search, Beaker, Library, Eye, GitBranch, Wrench, ShieldAlert } from 'lucide-react';
+import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock } from 'lucide-react';
 
 interface AgentStatusProps {
   agentStates: Record<string, AgentState>;
@@ -13,11 +13,11 @@ interface AgentStatusProps {
 export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPhase, selectedAgentId, onSelectAgent }) => {
   const steps = [
     { id: AgentPhase.UNDERSTAND, label: 'Scan', icon: Search },
-    { id: AgentPhase.TOOL_USE, label: 'Tool', icon: Wrench }, 
-    { id: AgentPhase.PLAN_APPROVAL, label: 'Auth', icon: ShieldAlert }, // New Step
+    { id: AgentPhase.PLAN_APPROVAL, label: 'Auth', icon: ShieldAlert },
+    { id: AgentPhase.ACQUIRE_LOCK, label: 'Lock', icon: Lock }, // New Step
     { id: AgentPhase.IMPLEMENT, label: 'Fix', icon: Code },
     { id: AgentPhase.VERIFY, label: 'Judge', icon: CheckCircle },
-    { id: AgentPhase.TESTING, label: 'Sandbox', icon: Beaker },
+    { id: AgentPhase.TESTING, label: 'Box', icon: Beaker },
   ];
 
   const activeAgentKeys = Object.keys(agentStates);
@@ -49,6 +49,7 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
           const isSuccess = agent.status === 'success';
           const isFailed = agent.status === 'failed';
           const isSelected = selectedAgentId === agent.groupId;
+          const hasLocks = agent.fileReservations && agent.fileReservations.length > 0;
           
           return (
             <div 
@@ -59,15 +60,26 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                 }`}
             >
                 {/* Agent Name Badge */}
-                <div className="flex items-center gap-2 overflow-hidden">
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-shadow ${
-                        isSuccess ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 
-                        isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' : 
-                        'bg-cyan-500 animate-pulse'
-                    }`} />
-                    <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`} title={agent.name}>
-                        {agent.name}
-                    </span>
+                <div className="flex flex-col justify-center overflow-hidden">
+                    <div className="flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-shadow ${
+                            isSuccess ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 
+                            isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' : 
+                            'bg-cyan-500 animate-pulse'
+                        }`} />
+                        <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`} title={agent.name}>
+                            {agent.name}
+                        </span>
+                    </div>
+                    {/* File Lock Indicator */}
+                    {hasLocks && (
+                        <div className="flex items-center gap-1 mt-0.5 animate-[fadeIn_0.3s_ease-out]">
+                            <Lock className="w-2 h-2 text-amber-500" />
+                            <span className="text-[8px] font-mono text-amber-500 truncate max-w-[70px]">
+                                {agent.fileReservations![0].split('/').pop()}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Progress Track */}
@@ -83,8 +95,9 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                              if (isSuccess) isPassed = true;
                              else if (isFailed && agent.phase === AgentPhase.FAILURE) isPassed = true; 
                              else if (currentIndex > stepIndex) isPassed = true;
-                             // Special logic: Skip 'PLAN' if agent went straight to PLAN_APPROVAL
-                             if (step.id === AgentPhase.PLAN && agent.phase === AgentPhase.PLAN_APPROVAL) isPassed = true;
+                             
+                             // Visual logic for skipped steps
+                             if (step.id === AgentPhase.PLAN_APPROVAL && agent.phase === AgentPhase.ACQUIRE_LOCK) isPassed = true;
 
                              const isCurrent = agent.phase === step.id;
                              

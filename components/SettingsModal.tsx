@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
-import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Search, Filter, Sliders } from 'lucide-react';
+import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders } from 'lucide-react';
 import { getPRFailedRuns } from '../services';
 
 interface SettingsModalProps {
@@ -17,7 +17,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     repoUrl: '',
     prUrl: '',
     selectedRuns: [],
-    excludeWorkflowPatterns: ['ci act', 'ci simple'], // Default patterns
+    excludeWorkflowPatterns: [], // Default to empty to show all runs initially
     llmProvider: 'gemini',
     llmBaseUrl: '',
     llmModel: 'gemini-2.5-flash',
@@ -37,7 +37,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     if (isOpen && currentConfig) {
       setFormData({
           ...currentConfig,
-          excludeWorkflowPatterns: currentConfig.excludeWorkflowPatterns || ['ci act', 'ci simple'],
+          excludeWorkflowPatterns: currentConfig.excludeWorkflowPatterns || [],
           llmProvider: currentConfig.llmProvider || 'gemini',
           llmModel: currentConfig.llmModel || 'gemini-2.5-flash',
           llmBaseUrl: currentConfig.llmBaseUrl || '',
@@ -46,7 +46,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           tavilyApiKey: currentConfig.tavilyApiKey || '',
           sandboxMode: currentConfig.sandboxMode || 'simulation',
           sandboxTimeoutMinutes: currentConfig.sandboxTimeoutMinutes || 15,
-          logLevel: currentConfig.logLevel || 'info'
+          logLevel: currentConfig.logLevel || 'info',
+          // Ensure string fields are never undefined to keep inputs controlled
+          prUrl: currentConfig.prUrl || '',
+          githubToken: currentConfig.githubToken || '',
+          repoUrl: currentConfig.repoUrl || ''
       });
       if (currentConfig.selectedRuns) {
           setFoundRuns(currentConfig.selectedRuns);
@@ -112,10 +116,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               prNumber, 
               formData.excludeWorkflowPatterns || []
           );
+          
+          if (runs.length === 0) {
+              setValidationError("No failed workflow runs found for this PR.");
+          }
+          
           setFoundRuns(runs);
           // Default select all
           setFormData(prev => ({ ...prev, selectedRuns: runs }));
       } catch (e: any) {
+          console.error("Fetch Runs Error:", e);
           setValidationError(`Failed to fetch runs: ${e.message}`);
       } finally {
           setIsLoadingRuns(false);
@@ -195,10 +205,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 </label>
                 <input 
                    type="password" 
-                   value={formData.githubToken}
+                   value={formData.githubToken || ''}
                    onChange={e => setFormData({...formData, githubToken: e.target.value})}
                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-cyan-300 focus:border-cyan-500/50 font-mono"
                    placeholder="ghp_..."
+                   autoComplete="off"
                  />
             </div>
           </div>
@@ -215,7 +226,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Provider</label>
                         <select 
-                            value={formData.llmProvider}
+                            value={formData.llmProvider || 'gemini'}
                             onChange={handleProviderChange}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-purple-500/50"
                         >
@@ -229,7 +240,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Model Tier</label>
                         <select 
-                            value={formData.llmModel}
+                            value={formData.llmModel || 'gemini-2.5-flash'}
                             onChange={e => setFormData({...formData, llmModel: e.target.value})}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-purple-500/50"
                         >
@@ -251,7 +262,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <label className="text-[10px] font-bold text-emerald-500 uppercase">Custom API Key</label>
                             <input 
                                 type="password" 
-                                value={formData.customApiKey}
+                                value={formData.customApiKey || ''}
                                 onChange={e => setFormData({...formData, customApiKey: e.target.value})}
                                 className="w-full bg-slate-900 border border-emerald-900/50 rounded px-2 py-1.5 text-xs text-emerald-100 focus:border-emerald-500/50"
                                 placeholder="sk-..."
@@ -270,7 +281,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Verification Strategy</label>
                         <select 
-                            value={formData.sandboxMode}
+                            value={formData.sandboxMode || 'simulation'}
                             onChange={e => setFormData({...formData, sandboxMode: e.target.value as any})}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-amber-500/50"
                         >
@@ -288,7 +299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                 type="number" 
                                 min="1"
                                 max="30"
-                                value={formData.sandboxTimeoutMinutes}
+                                value={formData.sandboxTimeoutMinutes || 15}
                                 onChange={e => setFormData({...formData, sandboxTimeoutMinutes: parseInt(e.target.value) || 15})}
                                 className="w-full bg-slate-900 border border-amber-900/50 rounded px-2 py-1.5 text-xs text-amber-100 focus:border-amber-500/50"
                             />
@@ -311,7 +322,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Search Provider</label>
                       <select 
-                          value={formData.searchProvider}
+                          value={formData.searchProvider || 'gemini_grounding'}
                           onChange={e => setFormData({...formData, searchProvider: e.target.value as any})}
                           className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-cyan-500/50"
                       >
@@ -324,7 +335,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                           <label className="text-[10px] font-bold text-cyan-500 uppercase">Tavily API Key</label>
                           <input 
                               type="password" 
-                              value={formData.tavilyApiKey}
+                              value={formData.tavilyApiKey || ''}
                               onChange={e => setFormData({...formData, tavilyApiKey: e.target.value})}
                               className="w-full bg-slate-900 border border-cyan-900/50 rounded px-2 py-1.5 text-xs text-cyan-100 focus:border-cyan-500/50"
                               placeholder="tvly-..."
@@ -371,7 +382,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Log Verbosity</label>
                         <select 
-                            value={formData.logLevel}
+                            value={formData.logLevel || 'info'}
                             onChange={e => setFormData({...formData, logLevel: e.target.value as any})}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-slate-500/50"
                         >
@@ -394,12 +405,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
              <div className="flex gap-2">
                  <input 
                    type="text" 
-                   value={formData.prUrl}
+                   value={formData.prUrl || ''}
                    onChange={handlePrUrlChange}
                    placeholder="https://github.com/owner/repo/pull/123"
                    className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-slate-300 focus:border-cyan-500/50 font-mono"
                  />
                  <button 
+                    type="button"
                     onClick={handleFetchRuns}
                     disabled={isLoadingRuns}
                     className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded text-xs font-bold uppercase border border-slate-700 flex items-center gap-2 transition-all disabled:opacity-50"
@@ -452,7 +464,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               </div>
           )}
           
-          {foundRuns.length === 0 && !isLoadingRuns && formData.prUrl && (
+          {foundRuns.length === 0 && !isLoadingRuns && formData.prUrl && !validationError && (
               <div className="text-center text-slate-600 text-xs italic py-4">
                   No failed runs loaded. Click "Load Failed Runs" to fetch.
               </div>

@@ -1,14 +1,15 @@
 
-
 export enum AgentPhase {
   IDLE = 'IDLE',
   INIT_REPO = 'INIT_REPO',
   UNDERSTAND = 'UNDERSTAND',
   PLAN = 'PLAN',
   PLAN_APPROVAL = 'PLAN_APPROVAL', // New Phase: Judge reviewing plan
+  ACQUIRE_LOCK = 'ACQUIRE_LOCK', // New Phase: File Reservation
   TOOL_USE = 'TOOL_USE', 
   IMPLEMENT = 'IMPLEMENT',
   VERIFY = 'VERIFY',
+  RELEASE_LOCK = 'RELEASE_LOCK', // New Phase: Releasing Reservation
   CONSOLIDATE = 'CONSOLIDATE', 
   TESTING = 'TESTING',
   SUCCESS = 'SUCCESS',
@@ -121,4 +122,5 @@ export interface AgentState {
   recommendation?: string; 
   files: Record<string, FileChange>;
   currentPlan?: AgentPlan; // New: Store the active plan
+  fileReservations?: string[]; // New: Files currently locked by this agent
 }

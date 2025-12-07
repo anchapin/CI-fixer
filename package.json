@@ -13,7 +13,9 @@
     "react-dom": "^19.2.1",
     "lucide-react": "^0.556.0",
     "@google/genai": "latest",
-    "diff": "latest"
+    "diff": "latest",
+    "vitest": "^4.0.15",
+    "@playwright/test": "^1.57.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

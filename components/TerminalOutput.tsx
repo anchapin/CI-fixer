@@ -5,9 +5,10 @@ import { Terminal as TerminalIcon, ArrowUpToLine, ArrowDownToLine, Users, Gavel,
 interface TerminalOutputProps {
   lines: LogLine[];
   activeGroups: RunGroup[];
+  logLevel: 'info' | 'debug' | 'verbose';
 }
 
-export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGroups }) => {
+export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGroups, logLevel }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL'); // 'ALL', 'JUDGE', or group ID
@@ -45,9 +46,25 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGro
   };
 
   const filteredLines = useMemo(() => {
-      if (activeTab === 'ALL') return lines;
-      return lines.filter(l => l.agentId === activeTab);
-  }, [lines, activeTab]);
+      let result = lines;
+      
+      // Filter by Level
+      if (logLevel === 'info') {
+          // Hide DEBUG
+          result = result.filter(l => l.level !== 'DEBUG');
+      } else if (logLevel === 'debug') {
+          // Show debug, hide overly verbose tool outputs if any
+          // (Current implementation treats debug and verbose similarly, but structure allows expansion)
+      }
+      // verbose shows everything
+
+      // Filter by Tab
+      if (activeTab !== 'ALL') {
+          result = result.filter(l => l.agentId === activeTab);
+      }
+      
+      return result;
+  }, [lines, activeTab, logLevel]);
 
   const handleCopyLogs = async () => {
       const text = filteredLines.map(l => {
@@ -167,7 +184,8 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGro
                 line.level === 'INFO' ? 'text-cyan-600' :
                 line.level === 'WARN' ? 'text-amber-600' :
                 line.level === 'ERROR' ? 'text-rose-600' :
-                line.level === 'SUCCESS' ? 'text-emerald-500' : 'text-slate-500'
+                line.level === 'SUCCESS' ? 'text-emerald-500' : 
+                line.level === 'DEBUG' ? 'text-slate-600' : 'text-slate-500'
                 }`}>
                 [{line.level}]
                 </span>
