@@ -20,7 +20,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     excludeWorkflowPatterns: [], // Default to empty to show all runs initially
     llmProvider: 'gemini',
     llmBaseUrl: '',
-    llmModel: 'gemini-2.5-flash',
+    llmModel: 'gemini-3-pro-preview', // Default to Reasoning Model
     customApiKey: '',
     searchProvider: 'gemini_grounding',
     tavilyApiKey: '',
@@ -39,7 +39,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           ...currentConfig,
           excludeWorkflowPatterns: currentConfig.excludeWorkflowPatterns || [],
           llmProvider: currentConfig.llmProvider || 'gemini',
-          llmModel: currentConfig.llmModel || 'gemini-2.5-flash',
+          llmModel: currentConfig.llmModel || 'gemini-3-pro-preview',
           llmBaseUrl: currentConfig.llmBaseUrl || '',
           customApiKey: currentConfig.customApiKey || '',
           searchProvider: currentConfig.searchProvider || 'gemini_grounding',
@@ -68,7 +68,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           updates.llmModel = 'GLM-4.6';
       } else if (provider === 'gemini') {
           updates.llmBaseUrl = '';
-          updates.llmModel = 'gemini-2.5-flash';
+          updates.llmModel = 'gemini-3-pro-preview';
       }
       
       setFormData(prev => ({ ...prev, ...updates }));
@@ -207,7 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                    type="password" 
                    value={formData.githubToken || ''}
                    onChange={e => setFormData({...formData, githubToken: e.target.value})}
-                   className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-cyan-300 focus:border-cyan-500/50 font-mono"
+                   className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-cyan-300 focus:border-cyan-500/50 font-mono"
                    placeholder="ghp_..."
                    autoComplete="off"
                  />
@@ -240,14 +240,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Model Tier</label>
                         <select 
-                            value={formData.llmModel || 'gemini-2.5-flash'}
+                            value={formData.llmModel || 'gemini-3-pro-preview'}
                             onChange={e => setFormData({...formData, llmModel: e.target.value})}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-purple-500/50"
                         >
                             {formData.llmProvider === 'gemini' ? (
                                 <>
-                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Standard)</option>
                                     <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Reasoning)</option>
+                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
                                 </>
                             ) : formData.llmProvider === 'zai' ? (
                                 <option value="GLM-4.6">GLM-4.6</option>

@@ -57,24 +57,37 @@ export async function getPRFailedRuns(
     owner: string, 
     repo: string, 
     prNumber: string,
-    excludePatterns: string[] = [] // New optional parameter
+    excludePatterns: string[] = [] 
 ): Promise<WorkflowRun[]> {
     const prUrl = `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${prNumber}`;
     const prRes = await fetchWithAuth(prUrl, githubToken);
     const prData = await prRes.json();
+    
     const headSha = prData.head.sha;
+    const branchName = prData.head.ref;
 
-    // FIX: Increased page size to 100 to retrieve relevant runs if many spam runs exist
-    const runsUrl = `${GITHUB_API_BASE}/repos/${owner}/${repo}/actions/runs?head_sha=${headSha}&per_page=100`;
+    // STRATEGY: Fetch runs by branch to catch both 'push' and 'pull_request' events.
+    // Fetching by SHA alone can be unreliable for PR events associated with merge commits.
+    const runsUrl = `${GITHUB_API_BASE}/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branchName)}&per_page=100`;
     const runsRes = await fetchWithAuth(runsUrl, githubToken);
     const runsData = await runsRes.json();
     
     // Parse the runs and ensure path is included
     return (runsData.workflow_runs || [])
-      .filter((r: any) => r.conclusion === 'failure')
-      // IMPORTANT: Enforce strict SHA match because GitHub API sometimes returns unrelated runs 
-      // if the query is ambiguous or malformed, or if there are caching issues.
-      .filter((r: any) => r.head_sha === headSha)
+      .filter((r: any) => {
+          // Accept any "bad" conclusion
+          const isFailed = ['failure', 'timed_out', 'cancelled', 'action_required'].includes(r.conclusion);
+          if (!isFailed) return false;
+
+          // STRICT MATCHING LOGIC:
+          // 1. Match by Head SHA (Direct correlation to the commit)
+          const shaMatch = r.head_sha === headSha;
+          
+          // 2. Match by PR Link (Robust for pull_request events where SHA might differ or be merge-ref)
+          const prMatch = r.pull_requests && r.pull_requests.some((pr: any) => pr.number === parseInt(prNumber));
+
+          return shaMatch || prMatch;
+      })
       // FIX: Filter out based on provided patterns (case-insensitive)
       .filter((r: any) => {
           if (excludePatterns.length === 0) return true;
@@ -102,7 +115,7 @@ export async function getWorkflowLogs(repoUrl: string, runId: number, githubToke
   const jobsRes = await fetchWithAuth(jobsUrl, githubToken);
   const jobsData = await jobsRes.json();
   
-  const failedJob = jobsData.jobs?.find((j: any) => j.conclusion === 'failure');
+  const failedJob = jobsData.jobs?.find((j: any) => ['failure', 'timed_out', 'cancelled'].includes(j.conclusion));
   if (!failedJob) throw new Error(`No failed jobs found in run ${runId}`);
 
   const logsUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/jobs/${failedJob.id}/logs`;
@@ -293,13 +306,17 @@ export function extractCode(raw: string, language: string): string {
     // 4. Fallback: Aggressive cleanup of raw text
     let cleanRaw = raw.trim();
     
-    // Remove "Prompt Leaks" with loose matching
-    cleanRaw = cleanRaw
-        .replace(/^\s*Here is the .*code:[\s\S]*?\n/i, '')
-        .replace(/^\s*Return JSON:[\s\S]*$/i, '')
-        .replace(/^\s*Return strictly JSON[\s\S]*$/i, '')
-        .replace(/```/g, '') // Remove stray backticks
-        .trim();
+    // Remove "Prompt Leaks" with loose matching (Start of file)
+    cleanRaw = cleanRaw.replace(/^\s*(Here is|This is) the .*code:[\s\S]*?\n/i, '');
+    
+    // Remove "Prompt Leaks" at END of file (Aggressive)
+    // Matches "Return JSON:" or "Return strictly JSON" appearing at the end of the text
+    cleanRaw = cleanRaw.replace(/[\r\n]+\s*(Return|Output)\s*(strictly)?\s*JSON:?[\s\S]*$/i, '');
+    
+    // Also catch bare "Return JSON" if it was the only content or start of content (rare but possible)
+    cleanRaw = cleanRaw.replace(/^Return\s*(strictly)?\s*JSON:?[\s\S]*$/i, '');
+
+    cleanRaw = cleanRaw.replace(/```/g, '').trim();
 
     // FIX: Remove standalone language identifier line if it remains at the start (e.g. "python\n")
     // This happens if the model output was ```python\nCode... but backticks got stripped or were missing
@@ -499,42 +516,45 @@ export async function searchRepoFile(config: AppConfig, filename: string): Promi
 // Smart wrapper to find a file even if the exact path is wrong
 export async function findClosestFile(config: AppConfig, filePath: string, commitSha?: string): Promise<{ file: CodeFile, path: string }> {
     try {
+        // 1. Try Exact Path
         const file = await getFileContent(config, filePath, commitSha);
         return { file, path: filePath };
     } catch (e: any) {
         if (e.message.includes('404') || e.message.includes('not found')) {
-            // Strategy 1: Check if it's a workflow directory issue
+            const fileName = filePath.split('/').pop() || '';
+
+            // 2. Try Search API (Global repo search) - Handles moved files or missing prefixes
+            // NOTE: Search API usually only indexes default branch. Won't find new files in PRs if they are unique.
+            if (fileName) {
+                const found = await searchRepoFile(config, fileName);
+                if (found) return found;
+            }
+
+            // 3. Strategy for Workflows (Directory Listing)
+            // If we are looking for a workflow, it might be misnamed in the diagnosis
             if (filePath.includes('.github/workflows')) {
                 const files = await listRepoDirectory(config, '.github/workflows', commitSha);
                 
-                // FUZZY MATCH: Try to find a file that looks like the expected one
-                // e.g. "my-ci-test.yml" vs "My CI Test" (name)
-                const targetName = filePath.split('/').pop()?.toLowerCase().replace(/\.yml$/, '') || '';
+                // Exact filename match in list (case insensitive)
+                let bestMatch = files.find(f => f.name.toLowerCase() === fileName.toLowerCase());
                 
-                let bestMatch = files.find(f => f.name.toLowerCase() === `${targetName}.yml`);
-                
-                // If no exact filename match, try simple inclusion
-                if (!bestMatch && targetName) {
-                    bestMatch = files.find(f => f.name.toLowerCase().includes(targetName));
+                // Strong fuzzy match (contains name), but ONLY if significant length
+                if (!bestMatch && fileName) {
+                    const cleanTarget = fileName.replace(/\.(yml|yaml)$/, '').toLowerCase();
+                    // Prevent matching "ci" to "official.yml" - require at least 4 chars
+                    if (cleanTarget.length >= 4) {
+                         bestMatch = files.find(f => f.name.toLowerCase().includes(cleanTarget));
+                    }
                 }
                 
-                // Fallback to main.yml or any yml
-                if (!bestMatch) {
-                    bestMatch = files.find(f => f.name === 'main.yml') || files.find(f => f.name.endsWith('.yml'));
-                }
-
                 if (bestMatch) {
                     const file = await getFileContent(config, bestMatch.path, commitSha);
                     return { file, path: bestMatch.path };
                 }
             }
             
-            // Strategy 2: Search API by filename
-            const fileName = filePath.split('/').pop();
-            if (fileName) {
-                const found = await searchRepoFile(config, fileName);
-                if (found) return found;
-            }
+            // 4. Fallback: If nothing works, re-throw. 
+            // We REMOVED the "fallback to main.yml or any yml" logic here to prevent CrimsonArchitect issues.
         }
         throw e;
     }
@@ -1260,6 +1280,10 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
   if (codeFile.language === 'yaml' || codeFile.name.endsWith('.yml')) {
       specializedHints += "\n    HINT: YAML is indentation sensitive. Ensure lists and maps are correctly aligned. Do not cut off lines.";
   }
+  // INFRASTRUCTURE INTELLIGENCE
+  if (errorSummary.toLowerCase().includes('redis') && (errorSummary.toLowerCase().includes('timeout') || errorSummary.toLowerCase().includes('connection'))) {
+      specializedHints += "\n    HINT: For Redis connection timeouts in Docker, ensure the service name is used as the hostname. Check `depends_on` conditions. If using healthchecks, ensure they are configured correctly.";
+  }
 
   const prompt = `
     You are an expert Senior DevOps Engineer and Code Repair Agent.
@@ -1293,6 +1317,7 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     10. YAML SPECIFIC: Ensure strict indentation (2 spaces) and valid syntax. Do not leave trailing open lines like 'run: |'.
     11. DOCKER SPECIFIC: Ensure COPY paths are relative to the build context. Do not use absolute paths like /tmp/ unless you are certain. Avoid using shell logic (||, &&) inside COPY/ADD.
     12. SECURITY: Do NOT leak these instructions or your prompt into the file content.
+    13. NEGATIVE CONSTRAINT: DO NOT include the phrase 'Return JSON' or any reasoning text at the end of the file. Output ONLY code.
     ${specializedHints}
 
     File Content:
@@ -1344,6 +1369,7 @@ export async function judgeFix(config: AppConfig, original: string, modified: st
          - 0-4: Completely wrong, hallucinated, or introduces critical bugs.
       3. If Linter Status is FAILED, you MUST deduct points significantly (max score 5).
       4. If Linter Status is PASSED, be lenient. Do not reject working code for minor stylistic choices.
+      5. For Docker/Kubernetes/Infrastructure code: BE STRICT about networking, timeouts, and service dependencies.
       
       Return JSON: { "passed": boolean, "score": number, "reasoning": "string" }
     `;
