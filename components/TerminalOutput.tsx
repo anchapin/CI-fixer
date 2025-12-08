@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { LogLine, RunGroup } from '../types';
 import { Terminal as TerminalIcon, ArrowUpToLine, ArrowDownToLine, Users, Gavel, Cpu, Layers, Copy, Check } from 'lucide-react';
@@ -50,11 +51,11 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGro
       
       // Filter by Level
       if (logLevel === 'info') {
-          // Hide DEBUG
-          result = result.filter(l => l.level !== 'DEBUG');
+          // Hide DEBUG and VERBOSE
+          result = result.filter(l => l.level !== 'DEBUG' && l.level !== 'VERBOSE');
       } else if (logLevel === 'debug') {
-          // Show debug, hide overly verbose tool outputs if any
-          // (Current implementation treats debug and verbose similarly, but structure allows expansion)
+          // Hide VERBOSE only
+          result = result.filter(l => l.level !== 'VERBOSE');
       }
       // verbose shows everything
 
@@ -185,11 +186,14 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGro
                 line.level === 'WARN' ? 'text-amber-600' :
                 line.level === 'ERROR' ? 'text-rose-600' :
                 line.level === 'SUCCESS' ? 'text-emerald-500' : 
+                line.level === 'VERBOSE' ? 'text-slate-500' :
                 line.level === 'DEBUG' ? 'text-slate-600' : 'text-slate-500'
                 }`}>
                 [{line.level}]
                 </span>
-                <span className="text-slate-300">{line.content}</span>
+                <span className={line.level === 'VERBOSE' ? 'text-slate-400 font-normal' : 'text-slate-300'}>
+                    {line.content}
+                </span>
             </div>
           </div>
         ))}

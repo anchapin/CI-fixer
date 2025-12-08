@@ -20,7 +20,7 @@ export enum AgentPhase {
 export interface LogLine {
   id: string;
   timestamp: string;
-  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'SUCCESS' | 'TOOL';
+  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'SUCCESS' | 'TOOL' | 'VERBOSE';
   content: string;
   agentId?: string; 
   agentName?: string;

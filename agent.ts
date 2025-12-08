@@ -12,7 +12,8 @@ import {
     generateFix, 
     toolLintCheck, 
     judgeFix, 
-    runSandboxTest 
+    runSandboxTest,
+    compileContext // New Import
 } from './services';
 
 // Helper for normalizeCode
@@ -72,6 +73,8 @@ export const runIndependentAgentLoop = async (
                 const runData = await getWorkflowLogs(config.repoUrl, group.mainRun.id, config.githubToken);
                 currentLogText = runData.logText;
                 headSha = runData.headSha;
+                log('VERBOSE', `[CTX] Fetched logs (${currentLogText.length} chars). SHA: ${headSha}`);
+                log('VERBOSE', `[CTX] Log Snippet: ${currentLogText.substring(0, 200)}...`);
             } else if (isRetry) {
                 log('INFO', 'Adapting diagnosis based on latest sandbox execution logs...');
             }
@@ -90,13 +93,16 @@ export const runIndependentAgentLoop = async (
                  log('TOOL', 'Invoking Dependency Inspector (toolScanDependencies)...');
                  const depReport = await toolScanDependencies(config, headSha);
                  dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
+                 log('VERBOSE', `[CTX] Dependency Report:\n${depReport}`);
                  log('INFO', 'Dependency Scan complete.');
             }
 
             // Diagnose
+            log('DEBUG', 'Running diagnosis on log snippet...');
             const diagnosis = await diagnoseError(config, currentLogText, initialRepoContext + dependencyContext);
             if (!diagnosis) throw new Error("Diagnosis failed to return a valid object.");
             const safeSummary = diagnosis.summary || "Unknown Error";
+            log('VERBOSE', `[DIAGNOSIS] Raw: ${JSON.stringify(diagnosis)}`);
             
             // Fix: enhanced path cleaning to handle ./src prefix
             let cleanPath = diagnosis.filePath ? diagnosis.filePath.replace(/^(\.\/|\/)+/, '') : '';
@@ -107,9 +113,12 @@ export const runIndependentAgentLoop = async (
                  updateStateCallback(group.id, currentState);
                  log('TOOL', `Invoking Code Search for error keywords...`);
                  const searchResults = await toolCodeSearch(config, safeSummary.substring(0, 30));
+                 log('VERBOSE', `[TOOL:CodeSearch] Results: ${JSON.stringify(searchResults)}`);
                  if (searchResults.length > 0) {
                      cleanPath = searchResults[0];
                      log('INFO', `Search found potential match: ${cleanPath}`);
+                 } else {
+                     log('VERBOSE', `[TOOL:CodeSearch] No results found for query: "${safeSummary.substring(0, 30)}"`);
                  }
             }
 
@@ -132,13 +141,38 @@ export const runIndependentAgentLoop = async (
                  while (!planApproved && planAttempts < 3) {
                      // Generate Plan
                      log('INFO', `Drafting Fix Strategy (Attempt ${planAttempts + 1})...`);
-                     const plan = await generateDetailedPlan(config, safeSummary, planFeedback, initialRepoContext);
+                     
+                     // CONTEXT COMPILATION: Use strict scoping for planning
+                     const planningContext = compileContext(AgentPhase.PLAN, initialRepoContext, safeSummary, undefined, currentLogText);
+                     log('VERBOSE', `[CTX] Planning Context Preview:\n${planningContext.substring(0, 500)}...`);
+                     
+                     const plan = await generateDetailedPlan(config, safeSummary, planFeedback, planningContext);
+                     log('VERBOSE', `[PLAN] Generated Plan:\n${JSON.stringify(plan, null, 2)}`);
+                     
+                     // --- SAFEGUARD: Malformed Plan Check ---
+                     if (!plan || !Array.isArray(plan.tasks)) {
+                         log('WARN', 'LLM returned a malformed plan (missing tasks). Fallback to manual strategy.');
+                         // Fallback plan to prevent crash
+                         const fallbackPlan: AgentPlan = { 
+                             goal: "Manual Intervention (Plan Generation Failed)", 
+                             tasks: [{ id: 'fallback', description: "Check logs manually and retry", status: 'pending' }], 
+                             approved: false 
+                         };
+                         currentState = { ...currentState, currentPlan: fallbackPlan, phase: AgentPhase.PLAN_APPROVAL };
+                         updateStateCallback(group.id, currentState);
+                         
+                         planFeedback = "Previous plan was invalid JSON (missing tasks array). Retry.";
+                         planAttempts++;
+                         continue; 
+                     }
+
                      currentState = { ...currentState, currentPlan: plan, phase: AgentPhase.PLAN_APPROVAL };
                      updateStateCallback(group.id, currentState);
                      
                      // Judge Plan
                      judgeLog(`Reviewing Agent Strategy: "${plan.goal}"...`);
                      const judgement = await judgeDetailedPlan(config, plan, safeSummary);
+                     log('VERBOSE', `[JUDGE] Plan Review:\n${JSON.stringify(judgement, null, 2)}`);
                      
                      if (judgement.approved) {
                          planApproved = true;
@@ -196,6 +230,8 @@ export const runIndependentAgentLoop = async (
                 const found = await findClosestFile(config, cleanPath, headSha);
                 currentContent = found.file;
                 
+                log('VERBOSE', `[FILE] Read ${found.path} (SHA: ${found.file.sha || 'unknown'}). Size: ${found.file.content.length} chars.`);
+
                 // CRITICAL: Update cleanPath if the file was found at a different location (e.g. via fuzzy search)
                 // This ensures we verify and commit to the correct path.
                 if (found.path !== cleanPath) {
@@ -215,18 +251,33 @@ export const runIndependentAgentLoop = async (
                 log('TOOL', `Invoking Web Search (${providerLabel}) for solution...`);
                 const searchRes = await toolWebSearch(config, safeSummary);
                 externalKnowledge = `\nExternal Search Results: ${searchRes}\n`;
+                log('VERBOSE', `[SEARCH] Result:\n${searchRes}`);
                 log('INFO', 'External knowledge retrieved.');
             }
+
+            // CONTEXT COMPILATION: Create focused context for implementation
+            // Note: We deliberately exclude massive logs here to focus on the code artifact
+            const implementationContext = compileContext(
+                AgentPhase.IMPLEMENT, 
+                initialRepoContext + dependencyContext, 
+                safeSummary, 
+                currentContent
+            );
+            
+            log('VERBOSE', `[CTX] Implementation Context assembled (${implementationContext.length} chars).`);
+            log('VERBOSE', `[IMPLEMENT] Instructions: ${safeSummary.length} chars. External Knowledge: ${externalKnowledge.length} chars.`);
 
             // Execute Implementation (Injecting Plan if available)
             let fixedContentStr = await generateFix(
                 config, 
                 currentContent, 
-                safeSummary + externalKnowledge + dependencyContext, 
+                safeSummary + externalKnowledge, // Pass summary directly, context handled by compileContext
                 previousFeedback, 
-                initialRepoContext,
+                implementationContext,
                 approvedPlan
             );
+            
+            log('VERBOSE', `[LLM] Generated Code (First 200 chars):\n${fixedContentStr.substring(0, 200)}...`);
             
             // --- SANITY CHECK: Output Validation ---
             const isSuspicious = fixedContentStr.includes("TodoRead") || 
@@ -240,19 +291,20 @@ export const runIndependentAgentLoop = async (
                      currentContent, 
                      safeSummary + " CRITICAL: PREVIOUS OUTPUT WAS TRUNCATED. YOU MUST OUTPUT THE ENTIRE FILE.", 
                      "Previous output was rejected because it contained placeholders like 'TodoRead' or was incomplete.", 
-                     initialRepoContext
+                     implementationContext
                  );
             }
 
             // --- PRE-CHECK: Identity Check ---
             if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
+                 log('VERBOSE', `[PRE-CHECK] Content identity match detected. SHA(original)=${currentContent.sha} vs Generated.`);
                  log('WARN', 'Pre-check: No changes detected. Retrying generation with strict directive...');
                  fixedContentStr = await generateFix(
                      config, 
                      currentContent, 
                      safeSummary + " CRITICAL: YOU MUST MODIFY THE CODE. DO NOT RETURN ORIGINAL FILE.", 
                      "Previous output was identical to original file. Please apply changes.", 
-                     initialRepoContext
+                     implementationContext
                  );
                  
                  if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
@@ -270,9 +322,11 @@ export const runIndependentAgentLoop = async (
             // --- TOOL: SYNTAX LINTER (Self-Correction Loop) ---
             log('TOOL', 'Running Syntax Linter (toolLintCheck)...');
             let lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
+            log('VERBOSE', `[LINT] Valid: ${lintResult.valid}. Error: ${lintResult.error || 'None'}`);
             
             if (!lintResult.valid) {
                 log('WARN', `Linter found syntax error: ${lintResult.error || 'Unknown'}. Agent attempting self-correction...`);
+                log('VERBOSE', `[SELF-CORRECT] Triggering re-generation due to lint error.`);
                 currentState = { ...currentState, phase: AgentPhase.IMPLEMENT }; 
                 updateStateCallback(group.id, currentState);
                 
@@ -281,7 +335,7 @@ export const runIndependentAgentLoop = async (
                     {...currentContent, content: fixedContentStr},
                     `Fix the following SYNTAX ERROR: ${lintResult.error}`,
                     "Previous attempt had syntax errors. Fix them while keeping the rest of the logic.",
-                    initialRepoContext
+                    implementationContext
                 );
                 
                 lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
@@ -297,7 +351,13 @@ export const runIndependentAgentLoop = async (
             // 4. VERIFY (Judge)
             currentState = { ...currentState, phase: AgentPhase.VERIFY, status: 'working' };
             updateStateCallback(group.id, currentState);
-            const judgeResult = await judgeFix(config, currentContent.content, fixedContentStr, safeSummary, initialRepoContext);
+            
+            // CONTEXT COMPILATION: Judge needs verification context
+            const judgeContext = compileContext(AgentPhase.VERIFY, initialRepoContext, safeSummary);
+            log('VERBOSE', `[JUDGE] Context size: ${judgeContext.length}.`);
+            
+            const judgeResult = await judgeFix(config, currentContent.content, fixedContentStr, safeSummary, judgeContext);
+            log('VERBOSE', `[JUDGE] Code Review Result:\n${JSON.stringify(judgeResult, null, 2)}`);
 
             if (!judgeResult.passed) {
                 // RELEASE LOCK ON JUDGE FAILURE
@@ -354,6 +414,8 @@ export const runIndependentAgentLoop = async (
                 (msg) => log('DEBUG', msg),
                 currentState.files // NEW: Pass accumulated file changes
             );
+            
+            log('VERBOSE', `[SANDBOX] Full Result:\n${testResult.logs}`);
 
             // RELEASE LOCK after Sandbox
             currentState = { ...currentState, fileReservations: [] };

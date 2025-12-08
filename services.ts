@@ -1,11 +1,69 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { AppConfig, CodeFile, WorkflowRun, RunGroup, AgentState, AgentPlan, FileChange } from './types';
+import { AppConfig, CodeFile, WorkflowRun, RunGroup, AgentState, AgentPlan, FileChange, AgentPhase } from './types';
 
 // --- Constants ---
 const GITHUB_API_BASE = 'https://api.github.com';
 const MODEL_FAST = 'gemini-2.5-flash';
 const MODEL_SMART = 'gemini-3-pro-preview';
+
+// --- CONTEXT COMPILER (Architectural Pattern: Context Engineering) ---
+// Transforms raw state into a focused "Working Context" for specific phases.
+// This implements "Scope by Default" and "Artifact Separation".
+export function compileContext(
+    phase: AgentPhase,
+    repoSummary: string,
+    errorSummary: string,
+    activeFile?: CodeFile,
+    recentLogs?: string
+): string {
+    let context = `Current Phase: ${phase}\n`;
+
+    // Tier 1: Session Context (High Level)
+    // Always include the error summary as it is the "North Star"
+    context += `Active Error: "${errorSummary}"\n\n`;
+
+    // Tier 2: Phase-Specific Scoping
+    switch (phase) {
+        case AgentPhase.UNDERSTAND:
+        case AgentPhase.PLAN:
+        case AgentPhase.PLAN_APPROVAL:
+            // Planning needs high-level architecture, not line-by-line code.
+            context += `Repository Architecture:\n${repoSummary}\n`;
+            if (recentLogs) {
+                // Scope logs to the tail to prevent context bloat
+                const tailLogs = recentLogs.length > 5000 ? recentLogs.substring(recentLogs.length - 5000) : recentLogs;
+                context += `\nRecent Logs (Tail):\n${tailLogs}\n`;
+            }
+            break;
+
+        case AgentPhase.IMPLEMENT:
+        case AgentPhase.ACQUIRE_LOCK:
+            // Implementation needs the specific artifact (file), not the whole repo summary.
+            // "Artifact Separation": We treat the active file as the primary focus.
+            if (activeFile) {
+                context += `Target Artifact: ${activeFile.name}\n`;
+                // Note: The full content is usually injected by the tool function (generateFix), 
+                // but here we ensure the *context* surrounding it is minimal.
+                context += `Language: ${activeFile.language}\n`;
+            }
+            // Minimal repo hints
+            context += `\nContext Hints: ${repoSummary.substring(0, 500)}...\n`; 
+            break;
+
+        case AgentPhase.VERIFY:
+        case AgentPhase.TESTING:
+            // Verification needs the error and the specific change logic.
+            context += `Verification Target: Ensure fix resolves "${errorSummary}".\n`;
+            break;
+
+        default:
+            context += `Repository Summary:\n${repoSummary}\n`;
+            break;
+    }
+
+    return context;
+}
 
 // --- GitHub API Helpers ---
 
@@ -202,7 +260,19 @@ export async function listRepoDirectory(config: AppConfig, path: string, commitS
 
 // --- HELPER: Code Extraction (Fix Prompt Leakage & Indentation) ---
 function processExtractedBlock(content: string): string {
-    const normalized = content.replace(/\r\n|\r/g, '\n'); // Normalize line endings
+    let text = content;
+    
+    // --- FIX: Aggressive Prompt Leak Cleanup ---
+    // Remove "Return JSON" appearing at the end of the block
+    text = text.replace(/[\r\n]+\s*(Return|Output)\s*(strictly)?\s*JSON:?[\s\S]*$/i, '');
+    
+    // Remove "Note:" or reasoning at end
+    text = text.replace(/[\r\n]+Note:[\s\S]*$/i, '');
+    
+    // Remove "Here is the code" artifacts at start
+    text = text.replace(/^Here is the .*code:[\r\n]+/i, '');
+
+    const normalized = text.replace(/\r\n|\r/g, '\n'); // Normalize line endings
     const lines = normalized.split('\n');
     // Filter out empty lines for indent calculation
     const nonEmptyLines = lines.filter(l => l.trim().length > 0);
@@ -371,7 +441,6 @@ export async function toolCodeSearch(config: AppConfig, query: string): Promise<
 export async function toolLintCheck(config: AppConfig, code: string, language: string): Promise<{ valid: boolean, error?: string }> {
     // Since we don't have a backend linter, we use a lightweight LLM call as a "Linter Agent"
     const prompt = `
-        You are a strict code syntax validator.
         Check the following ${language} code for syntax errors.
         Ignore logic errors. Only look for missing brackets, indents, colons, or illegal characters.
         
@@ -384,7 +453,10 @@ export async function toolLintCheck(config: AppConfig, code: string, language: s
     try {
         const response = await unifiedGenerate(config, {
              contents: prompt,
-             config: { responseMimeType: "application/json" },
+             config: { 
+                 systemInstruction: "You are a strict code syntax validator.",
+                 responseMimeType: "application/json" 
+             },
              model: MODEL_FAST
         });
         return safeJsonParse(response.text || "{}", { valid: true });
@@ -641,10 +713,9 @@ async function getRunLogs(config: AppConfig, runId: number): Promise<string> {
 
 // Helper: Ask LLM to modify the workflow file to run ONLY on the temp branch and ONLY the specific test
 export async function generateWorkflowOverride(config: AppConfig, workflowContent: string, branchName: string, errorSummary: string): Promise<string> {
+    const systemInstruction = "You are a GitHub Actions Specialist. I need to modify an existing workflow file for a TEMPORARY SANDBOX TEST.";
+    
     const prompt = `
-      You are a GitHub Actions Specialist.
-      I need to modify an existing workflow file for a TEMPORARY SANDBOX TEST.
-      
       GOALS:
       1. Trigger: Ensure the workflow runs on 'push' to branch '${branchName}'.
       2. Scope: Attempt to modify the test command to run ONLY the failing test related to: "${errorSummary}".
@@ -668,7 +739,7 @@ export async function generateWorkflowOverride(config: AppConfig, workflowConten
     try {
         const response = await unifiedGenerate(config, {
              contents: prompt,
-             config: { maxOutputTokens: 8192 },
+             config: { systemInstruction, maxOutputTokens: 8192 },
              model: MODEL_FAST
         });
         
@@ -1068,7 +1139,6 @@ export async function generateRepoSummary(config: AppConfig): Promise<string> {
     }
 
     const prompt = `
-        You are a Repository Analysis Agent. 
         Review the file structure, dependency manifests, and documentation provided below.
         
         Create a concise summary (max 300 words) for an autonomous DevOps agent that needs to fix code in this repo.
@@ -1084,7 +1154,10 @@ export async function generateRepoSummary(config: AppConfig): Promise<string> {
     try {
         const response = await unifiedGenerate(config, {
             contents: prompt,
-            config: { maxOutputTokens: 1024 },
+            config: { 
+                systemInstruction: "You are a Repository Analysis Agent.",
+                maxOutputTokens: 1024 
+            },
             model: MODEL_FAST
         });
         return response.text || "No summary generated.";
@@ -1113,7 +1186,6 @@ export async function generatePostMortem(config: AppConfig, failedAgents: AgentS
     }
 
     const prompt = `
-        You are a Senior DevOps Architect. 
         Some automated repair agents failed to fix the build pipeline after multiple attempts.
         
         Analyze the situation and provide a concise set of manual recommendations for the human developer.
@@ -1134,7 +1206,10 @@ export async function generatePostMortem(config: AppConfig, failedAgents: AgentS
     try {
         const response = await unifiedGenerate(config, {
             contents: prompt,
-            config: { maxOutputTokens: 512 },
+            config: { 
+                systemInstruction: "You are a Senior DevOps Architect.",
+                maxOutputTokens: 512 
+            },
             model: MODEL_FAST
         });
         return response.text || "Manual intervention required. Please check logs.";
@@ -1149,11 +1224,10 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     ? logSnippet.substring(logSnippet.length - MAX_LOG_LENGTH) 
     : logSnippet;
 
+  // Optimized for Prefix Caching: Context at the end, Static instructions at the top (in config)
   const prompt = `
     Analyze this CI/CD build log. Identify the primary error and the source code file causing it.
     
-    ${repoContext ? `REPOSITORY CONTEXT (Use this to understand file structure): \n${repoContext}\n` : ''}
-
     Constraints:
     1. Output strictly valid JSON. No markdown formatting. No conversational text.
     2. SUMMARY should be actionable and explain WHAT is wrong (e.g. "Missing dependency 'jwt' in requirements.txt").
@@ -1165,12 +1239,15 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     
     Log Snippet (Last ${MAX_LOG_LENGTH} chars):
     ${truncatedLog}
+
+    ${repoContext ? `\nREPOSITORY CONTEXT (For file structure matching): \n${repoContext}\n` : ''}
   `;
 
   try {
       const response = await unifiedGenerate(config, {
         contents: prompt,
         config: {
+          systemInstruction: "You are an automated Error Diagnosis Agent.",
           maxOutputTokens: 1024,
           responseMimeType: "application/json",
           responseSchema: {
@@ -1206,7 +1283,7 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
 
 export async function generateDetailedPlan(config: AppConfig, errorSummary: string, feedback: string, repoContext: string): Promise<AgentPlan> {
     const prompt = `
-      You are a Lead DevOps Strategist. The previous attempt to fix a CI/CD error failed.
+      The previous attempt to fix a CI/CD error failed.
       Create a detailed, step-by-step plan to resolve the issue.
 
       Error: "${errorSummary}"
@@ -1227,6 +1304,7 @@ export async function generateDetailedPlan(config: AppConfig, errorSummary: stri
         const response = await unifiedGenerate(config, {
             contents: prompt,
             config: { 
+                systemInstruction: "You are a Lead DevOps Strategist.",
                 responseMimeType: "application/json",
                 maxOutputTokens: 1024
             },
@@ -1243,7 +1321,6 @@ export async function generateDetailedPlan(config: AppConfig, errorSummary: stri
 
 export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, errorSummary: string): Promise<{ approved: boolean, feedback: string }> {
     const prompt = `
-      You are the System Overwatch (Judge).
       Review this proposed fix plan for Error: "${errorSummary}".
       
       Plan:
@@ -1262,7 +1339,10 @@ export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, erro
     try {
         const response = await unifiedGenerate(config, {
              contents: prompt,
-             config: { responseMimeType: "application/json" },
+             config: { 
+                 systemInstruction: "You are the System Overwatch (Judge).",
+                 responseMimeType: "application/json" 
+             },
              model: MODEL_FAST // Judge can be fast usually, logic already in plan
         });
         return safeJsonParse(response.text || "{}", { approved: true, feedback: "Auto-approved due to judge error." });
@@ -1285,15 +1365,17 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
       specializedHints += "\n    HINT: For Redis connection timeouts in Docker, ensure the service name is used as the hostname. Check `depends_on` conditions. If using healthchecks, ensure they are configured correctly.";
   }
 
+  // Optimized Prompt for Prefix Caching:
+  // 1. Static System Instruction (Config)
+  // 2. Context (Dynamic but structured)
+  // 3. Artifact (The Code)
+  // 4. Task (The fix)
   const prompt = `
-    You are an expert Senior DevOps Engineer and Code Repair Agent.
-    Your mission is to FIX the code to resolve the error described below.
-
     ${repoContext ? `PROJECT GUIDELINES & CONTEXT: \n${repoContext}\n` : ''}
 
     Context:
     - Error: "${errorSummary}"
-    - File: ${codeFile.name}
+    - File Name: ${codeFile.name}
     ${userFeedback ? `- PREVIOUS ATTEMPT FAILED: ${userFeedback} \n    - CRITICAL: You MUST try a different approach than before.` : ''}
 
     ${activePlan ? `
@@ -1320,13 +1402,14 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
     13. NEGATIVE CONSTRAINT: DO NOT include the phrase 'Return JSON' or any reasoning text at the end of the file. Output ONLY code.
     ${specializedHints}
 
-    File Content:
+    --- ARTIFACT TO PATCH (${codeFile.name}) ---
     ${codeFile.content}
   `;
 
   const response = await unifiedGenerate(config, {
     contents: prompt,
     config: {
+        systemInstruction: "You are an expert Senior DevOps Engineer and Code Repair Agent.",
         maxOutputTokens: 16384 // Increased from 8192 to prevent truncation
     },
     model: MODEL_SMART // PRO MODEL for Code Generation
@@ -1346,7 +1429,6 @@ export async function judgeFix(config: AppConfig, original: string, modified: st
     const lintResult = await toolLintCheck(config, modified, "unknown");
 
     const prompt = `
-      You are a Senior QA Engineer.
       Review this code fix.
       Error to fix: "${errorSummary}"
       
@@ -1381,6 +1463,7 @@ export async function judgeFix(config: AppConfig, original: string, modified: st
         const response = await unifiedGenerate(config, {
             contents: prompt,
             config: { 
+                systemInstruction: "You are a Senior QA Engineer.",
                 // If using search tool, we cannot enforce JSON mime type directly, so we relax it
                 responseMimeType: useSearch ? undefined : "application/json",
                 responseSchema: useSearch ? undefined : {
@@ -1407,7 +1490,6 @@ export async function consolidateFixes(config: AppConfig, originalContent: strin
     if (fixes.length === 1) return fixes[0];
 
     const prompt = `
-      I have multiple agents who tried to fix the same file for different reasons.
       Please merge their changes into a single valid file.
       
       Original:
@@ -1425,7 +1507,10 @@ export async function consolidateFixes(config: AppConfig, originalContent: strin
     try {
         const response = await unifiedGenerate(config, {
             contents: prompt,
-            config: { maxOutputTokens: 8192 },
+            config: { 
+                systemInstruction: "I have multiple agents who tried to fix the same file for different reasons.",
+                maxOutputTokens: 8192 
+            },
             model: MODEL_FAST // Merging is usually mechanical
         });
 
@@ -1437,9 +1522,13 @@ export async function consolidateFixes(config: AppConfig, originalContent: strin
 }
 
 export async function getAgentChatResponse(config: AppConfig, message: string): Promise<string> {
-    const prompt = `You are a sci-fi DevOps Agent. User: "${message}". Respond briefly.`;
+    const prompt = `User: "${message}". Respond briefly.`;
     try {
-        const response = await unifiedGenerate(config, { contents: prompt, model: MODEL_FAST });
+        const response = await unifiedGenerate(config, { 
+            contents: prompt, 
+            config: { systemInstruction: "You are a sci-fi DevOps Agent." },
+            model: MODEL_FAST 
+        });
         return response.text || "Acknowledged.";
     } catch {
         return "System Warning: Uplink unstable (Rate Limit/Error).";
@@ -1601,8 +1690,6 @@ export async function runSandboxTest(
     
     if (config.githubToken || config.customApiKey) {
          const prompt = `
-            You are a Strict CI/CD Test Runner Simulator.
-            
             SCENARIO:
             A developer attempted to fix the following error: "${errorSummary}"
             File: ${fileChange.path}
@@ -1630,6 +1717,7 @@ export async function runSandboxTest(
              const response = await unifiedGenerate(config, {
                  contents: prompt,
                  config: { 
+                     systemInstruction: "You are a Strict CI/CD Test Runner Simulator.",
                      responseMimeType: "application/json",
                      responseSchema: {
                         type: Type.OBJECT,
