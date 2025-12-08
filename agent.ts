@@ -227,20 +227,45 @@ export const runIndependentAgentLoop = async (
                 cleanPath = persistentFilePath!;
                 log('INFO', `Continuing implementation from previous partial fix (Using persistent state for ${cleanPath})...`);
             } else {
-                const found = await findClosestFile(config, cleanPath, headSha);
-                currentContent = found.file;
-                
-                log('VERBOSE', `[FILE] Read ${found.path} (SHA: ${found.file.sha || 'unknown'}). Size: ${found.file.content.length} chars.`);
-
-                // CRITICAL: Update cleanPath if the file was found at a different location (e.g. via fuzzy search)
-                // This ensures we verify and commit to the correct path.
-                if (found.path !== cleanPath) {
-                    log('WARN', `Path correction: '${cleanPath}' -> '${found.path}'`);
-                    cleanPath = found.path;
+                try {
+                    const found = await findClosestFile(config, cleanPath, headSha);
+                    currentContent = found.file;
                     
-                    // Reset persistent state if path changed unexpectedly to avoid contamination
-                    persistentFileContent = null;
-                    persistentFilePath = null;
+                    log('VERBOSE', `[FILE] Read ${found.path} (SHA: ${found.file.sha || 'unknown'}). Size: ${found.file.content.length} chars.`);
+    
+                    // CRITICAL: Update cleanPath if the file was found at a different location (e.g. via fuzzy search)
+                    // This ensures we verify and commit to the correct path.
+                    if (found.path !== cleanPath) {
+                        log('WARN', `Path correction: '${cleanPath}' -> '${found.path}'`);
+                        cleanPath = found.path;
+                        
+                        // Reset persistent state if path changed unexpectedly to avoid contamination
+                        persistentFileContent = null;
+                        persistentFilePath = null;
+                    }
+                } catch (e: any) {
+                    // [FIX] Handle 404 by allowing file creation
+                    if (e.message.includes('404') || e.message.includes('not found')) {
+                        log('WARN', `File ${cleanPath} not found (404). Initializing empty file for creation.`);
+                        
+                        // Infer language from extension
+                        let inferredLang = 'txt';
+                        if (cleanPath.endsWith('.yml') || cleanPath.endsWith('.yaml')) inferredLang = 'yaml';
+                        else if (cleanPath.endsWith('.py')) inferredLang = 'python';
+                        else if (cleanPath.endsWith('.js')) inferredLang = 'javascript';
+                        else if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) inferredLang = 'typescript';
+                        else if (cleanPath.endsWith('.go')) inferredLang = 'go';
+                        else if (cleanPath.endsWith('.java')) inferredLang = 'java';
+
+                        currentContent = {
+                            name: cleanPath.split('/').pop() || 'new_file',
+                            language: inferredLang,
+                            content: "", // Empty content implies creation
+                            sha: undefined
+                        };
+                    } else {
+                        throw e; // Re-throw real errors (auth, rate limit, etc.)
+                    }
                 }
             }
 
@@ -446,6 +471,14 @@ export const runIndependentAgentLoop = async (
             }
 
         } catch (e: any) {
+            // FAIL FAST: If the Run ID is 404, do not retry.
+            if (currentState.phase === AgentPhase.UNDERSTAND && (e.message.includes('404') || e.message.includes('Resource not found'))) {
+                log('ERROR', `Fatal: Resource not found (404) during analysis. Run ID ${group.mainRun.id} or logs may be missing. Aborting.`);
+                currentState = { ...currentState, phase: AgentPhase.FAILURE, status: 'failed', fileReservations: [] };
+                updateStateCallback(group.id, currentState);
+                break; // Break the loop immediately
+            }
+
             log('ERROR', `Agent Exception: ${e.message}`);
             // RELEASE LOCK ON EXCEPTION
             currentState = { ...currentState, fileReservations: [] };

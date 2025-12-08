@@ -109,7 +109,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       setIsLoadingRuns(true);
       setValidationError(null);
       try {
-          const runs = await getPRFailedRuns(
+          const rawRuns = await getPRFailedRuns(
               formData.githubToken, 
               owner, 
               repo, 
@@ -117,13 +117,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               formData.excludeWorkflowPatterns || []
           );
           
-          if (runs.length === 0) {
+          // Deduplicate: Keep only the most recent run (highest ID) for each workflow name
+          const uniqueRuns: WorkflowRun[] = [];
+          const seenNames = new Set<string>();
+          
+          // Sort by ID descending to ensure we process latest first
+          const sortedRuns = [...rawRuns].sort((a, b) => b.id - a.id);
+          
+          for (const run of sortedRuns) {
+              if (!seenNames.has(run.name)) {
+                  uniqueRuns.push(run);
+                  seenNames.add(run.name);
+              }
+          }
+
+          if (uniqueRuns.length === 0) {
               setValidationError("No failed workflow runs found for this PR.");
           }
           
-          setFoundRuns(runs);
+          setFoundRuns(uniqueRuns);
           // Default select all
-          setFormData(prev => ({ ...prev, selectedRuns: runs }));
+          setFormData(prev => ({ ...prev, selectedRuns: uniqueRuns }));
       } catch (e: any) {
           console.error("Fetch Runs Error:", e);
           setValidationError(`Failed to fetch runs: ${e.message}`);
