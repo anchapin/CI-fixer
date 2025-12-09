@@ -301,22 +301,43 @@ export async function runDevShellCommand(config: AppConfig, command: string): Pr
     if (config.devEnv === 'e2b' && config.e2bApiKey) {
         try {
             console.log(`[E2B] Executing: ${command}`);
-            // Robust import handling for CDN environments to avoid named export syntax errors if bundle differs
-            const CI = (e2bModule as any).CodeInterpreter || 
-                       (e2bModule as any).default?.CodeInterpreter || 
-                       (e2bModule as any).default;
             
-            if (!CI || typeof CI.create !== 'function') {
+            // 1. Resolve the E2B Class (Support both 'Sandbox' and legacy 'CodeInterpreter')
+            const E2BClass = (e2bModule as any).Sandbox || 
+                             (e2bModule as any).default?.Sandbox || 
+                             (e2bModule as any).CodeInterpreter || 
+                             (e2bModule as any).default?.CodeInterpreter ||
+                             (e2bModule as any).default;
+            
+            if (!E2BClass || typeof E2BClass.create !== 'function') {
                 console.error("E2B Module Dump:", e2bModule);
-                return { output: "E2B Module Loading Error: CodeInterpreter class not found.", exitCode: 1 };
+                return { output: "E2B Module Loading Error: Sandbox/CodeInterpreter class not found.", exitCode: 1 };
             }
 
-            const sandbox = await CI.create({ apiKey: config.e2bApiKey });
-            const result = await sandbox.notebook.execCell(command);
+            const sandbox = await E2BClass.create({ apiKey: config.e2bApiKey });
+            
+            // 2. Execute Code (Support 'runCode' New API and 'execCell' Legacy API)
+            let result;
+            if (typeof sandbox.runCode === 'function') {
+                // New SDK API
+                result = await sandbox.runCode(command);
+            } else if (sandbox.notebook && typeof sandbox.notebook.execCell === 'function') {
+                // Legacy SDK API
+                result = await sandbox.notebook.execCell(command);
+            } else {
+                throw new Error("Execution method (runCode/execCell) not found on E2B instance.");
+            }
+
             await sandbox.close();
             
-            const logs = result.logs.stdout.join('\n') + result.logs.stderr.join('\n');
-            const output = result.text ? `${result.text}\n${logs}` : logs;
+            // 3. Format Output
+            // Ensure logs are arrays before joining (New SDK returns { stdout: [], stderr: [] })
+            const stdout = result.logs?.stdout && Array.isArray(result.logs.stdout) ? result.logs.stdout.join('\n') : "";
+            const stderr = result.logs?.stderr && Array.isArray(result.logs.stderr) ? result.logs.stderr.join('\n') : "";
+            
+            const combinedLogs = stdout + (stderr ? `\n[STDERR]\n${stderr}` : "");
+            const output = result.text ? `${result.text}\n${combinedLogs}` : combinedLogs;
+            
             return { output: output || "No Output", exitCode: result.error ? 1 : 0 };
         } catch (e: any) {
             return { output: `E2B Execution Failed: ${e.message}`, exitCode: 1 };
