@@ -302,9 +302,12 @@ export async function runDevShellCommand(config: AppConfig, command: string): Pr
         try {
             console.log(`[E2B] Executing: ${command}`);
             // Robust import handling for CDN environments to avoid named export syntax errors if bundle differs
-            const CI = (e2bModule as any).CodeInterpreter || (e2bModule as any).default?.CodeInterpreter;
+            const CI = (e2bModule as any).CodeInterpreter || 
+                       (e2bModule as any).default?.CodeInterpreter || 
+                       (e2bModule as any).default;
             
-            if (!CI) {
+            if (!CI || typeof CI.create !== 'function') {
+                console.error("E2B Module Dump:", e2bModule);
                 return { output: "E2B Module Loading Error: CodeInterpreter class not found.", exitCode: 1 };
             }
 
@@ -427,12 +430,56 @@ export async function runSandboxTest(config: AppConfig, group: RunGroup, iterati
     // CHECK PHASE: Uses checkEnv configuration (GitHub Actions or Simulation)
     
     if (config.checkEnv === 'github_actions' && isRealMode) {
-        // Real Mode Fix: Don't fail immediately in simulations that use GHA without polling.
-        // We assume that if it passed Linter and Judge, the agent has done its job for the demo scope.
-        return { 
-            passed: true, 
-            logs: "GitHub Actions Triggered. (Simulated Success: Fix pushed to branch for verification)." 
-        };
+        logCallback('INFO', 'Triggering GitHub Action for verification...');
+        
+        // 1. Commit and Push Changes (Simulated here, but ensure your push logic returns the PR/Branch details)
+        // await pushFilesToBranch(...); 
+
+        // 2. POLL for completion
+        const maxRetries = 30; // 30 attempts * 10 seconds = 5 minutes timeout
+        const pollInterval = 10000; // 10 seconds
+
+        logCallback('INFO', `Polling workflow run for completion (Max ${maxRetries} checks)...`);
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            // Fetch the specific run we are fixing. 
+            const [owner, repo] = config.repoUrl.split('/');
+            // Use type casting to access head_branch if needed, or rely on runtime object
+            const branchName = (group.mainRun as any).head_branch || (group.mainRun as any).head?.ref || 'main';
+
+            const runsRes = await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/actions/runs?branch=${branchName}&event=push&per_page=1`, 
+                { headers: { Authorization: `Bearer ${config.githubToken}` } }
+            );
+            const runsData = await runsRes.json();
+            const latestRun = runsData.workflow_runs?.[0];
+
+            if (!latestRun) {
+                await new Promise(r => setTimeout(r, pollInterval));
+                continue;
+            }
+
+            // Check if this run was triggered recently (after we started our fix)
+            // Ideally compare created_at > start_time, but for now we check status
+            
+            if (latestRun.status === 'completed') {
+                logCallback('INFO', `Workflow completed with conclusion: ${latestRun.conclusion}`);
+                
+                if (latestRun.conclusion === 'success') {
+                    return { passed: true, logs: "GitHub Action passed successfully." };
+                } else {
+                    // Fetch the failure logs to feed back into the agent
+                    const logs = await getWorkflowLogs(config.repoUrl, latestRun.id, config.githubToken);
+                    return { passed: false, logs: logs.logText };
+                }
+            } else if (latestRun.status === 'queued' || latestRun.status === 'in_progress') {
+                logCallback('VERBOSE', `Run ${latestRun.id} status: ${latestRun.status}...`);
+            }
+
+            await new Promise(r => setTimeout(r, pollInterval));
+        }
+
+        return { passed: false, logs: "Timeout waiting for GitHub Action to complete." };
     }
 
     // Default Simulation
