@@ -13,7 +13,8 @@ import {
     toolLintCheck, 
     judgeFix, 
     runSandboxTest,
-    compileContext // New Import
+    compileContext,
+    listRepoDirectory // Added import
 } from './services';
 
 // Helper for normalizeCode
@@ -122,7 +123,33 @@ export const runIndependentAgentLoop = async (
                  }
             }
 
-            if (!cleanPath) cleanPath = 'docker-compose.yml'; // Safety fallback (avoid README.md)
+            // --- LOGIC: Directory Resolution ---
+            // If the path is a directory (e.g. .github/workflows), find a file inside it
+            if (cleanPath.endsWith('/') || cleanPath === '.github/workflows' || cleanPath === '.github/workflows/') {
+                 log('INFO', `Path '${cleanPath}' is a directory. Resolving to specific workflow file...`);
+                 try {
+                     const dirFiles = await listRepoDirectory(config, cleanPath, headSha);
+                     const ymlFile = dirFiles.find(f => f.name.endsWith('.yml') || f.name.endsWith('.yaml'));
+                     if (ymlFile) {
+                         cleanPath = ymlFile.path;
+                         log('INFO', `Resolved directory to: ${cleanPath}`);
+                     } else if (dirFiles.length > 0) {
+                         cleanPath = dirFiles[0].path;
+                         log('WARN', `No YAML found in directory. Defaulting to first file: ${cleanPath}`);
+                     }
+                 } catch (e) {
+                     log('WARN', `Failed to list directory ${cleanPath}. Keeping original path.`);
+                 }
+            }
+
+            if (!cleanPath) {
+                // Context-aware fallback logic
+                if (safeSummary.toLowerCase().includes('workflow') || safeSummary.toLowerCase().includes('action') || safeSummary.toLowerCase().includes('yaml')) {
+                    cleanPath = '.github/workflows/main.yml'; // Better guess for CI errors
+                } else {
+                    cleanPath = 'docker-compose.yml'; 
+                }
+            }
             log('DEBUG', `Diagnosis: ${safeSummary} in ${cleanPath}`);
 
             // --- PLANNING & APPROVAL (Iteration > 0) ---

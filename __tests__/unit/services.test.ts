@@ -404,7 +404,7 @@ def main():
               text: JSON.stringify({ passed: true, logs: "Tests passed." }) 
           });
 
-          const result = await runSandboxTest(mockConfig, mockGroup, 0, true, mockFileChange, "Error 1");
+          const result = await runSandboxTest(mockConfig, mockGroup, 0, true, mockFileChange, "Error 1", () => {}, {});
           
           expect(result.passed).toBe(true);
           expect(result.logs).toContain("Tests passed");
@@ -423,7 +423,7 @@ def main():
               text: "PROGRESS: The error changed from SyntaxError to ReferenceError." 
           });
 
-          const result = await runSandboxTest(mockConfig, mockGroup, 0, true, mockFileChange, "SyntaxError");
+          const result = await runSandboxTest(mockConfig, mockGroup, 0, true, mockFileChange, "SyntaxError", () => {}, {});
           
           expect(result.passed).toBe(false);
           // Crucial: Analysis must be at the TOP (prepended)
