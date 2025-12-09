@@ -122,7 +122,7 @@ export const runIndependentAgentLoop = async (
                  }
             }
 
-            if (!cleanPath) cleanPath = 'README.md'; // Safety fallback
+            if (!cleanPath) cleanPath = 'docker-compose.yml'; // Safety fallback (avoid README.md)
             log('DEBUG', `Diagnosis: ${safeSummary} in ${cleanPath}`);
 
             // --- PLANNING & APPROVAL (Iteration > 0) ---

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { AppConfig, CodeFile, WorkflowRun, RunGroup, AgentState, AgentPlan, FileChange, AgentPhase } from './types';
 
@@ -162,7 +161,7 @@ export async function getPRFailedRuns(
           html_url: r.html_url
       }));
 }
-// ... (rest of the file remains unchanged, just updating fetchWithAuth and exported above)
+
 export async function getWorkflowLogs(repoUrl: string, runId: number, githubToken: string): Promise<{ logText: string, jobName: string, headSha: string }> {
   const runUrl = `${GITHUB_API_BASE}/repos/${repoUrl}/actions/runs/${runId}`;
   const runRes = await fetchWithAuth(runUrl, githubToken);
@@ -427,8 +426,16 @@ export async function toolCodeSearch(config: AppConfig, query: string): Promise<
         const data = await res.json();
         
         if (data.items && data.items.length > 0) {
+            // FILTER: Exclude docs and markdown files to prevent agents from editing documentation
+            // instead of code.
+            const filteredItems = data.items.filter((item: any) => 
+                !item.path.includes('docs/') && 
+                !item.path.endsWith('.md') &&
+                !item.path.endsWith('.txt')
+            );
+
             // Return top 3 matches
-            return data.items.slice(0, 3).map((item: any) => item.path);
+            return filteredItems.slice(0, 3).map((item: any) => item.path);
         }
         return [];
     } catch (e) {
@@ -459,7 +466,13 @@ export async function toolLintCheck(config: AppConfig, code: string, language: s
              },
              model: MODEL_FAST
         });
-        return safeJsonParse(response.text || "{}", { valid: true });
+        
+        // FIX: Ensure boolean type safety to prevent "undefined" loop
+        const rawResult = safeJsonParse<{ valid: boolean; error?: string }>(response.text || "{}", { valid: true });
+        return { 
+            valid: typeof rawResult.valid === 'boolean' ? rawResult.valid : true, 
+            error: rawResult.error || undefined
+        };
     } catch {
         return { valid: true }; // Fail open if API fails
     }
@@ -1235,7 +1248,9 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
        - If "ModuleNotFoundError" or "ImportError": Return the dependency file (e.g. requirements.txt, package.json, go.mod, setup.py).
        - If "Permission denied", "Command not found", or "Timeout": Return the workflow file (.github/workflows/...).
        - Do NOT start with /.
-    4. IMPORTANT: You MUST provide a filePath. If you are unsure, provide the most likely configuration file (e.g. main.py, package.json, .github/workflows/main.yml) that controls the failing process.
+    4. IMPORTANT: Return the filePath if clearly identified. If the file path is unknown or ambiguous, return an empty string ("") for filePath. Do NOT guess generic files like 'main.py' or 'setup.py' unless explicitly mentioned in the error stack trace.
+    5. RULE: Do not edit documentation. Do NOT return .md or .txt files unless the error is explicitly a markdown lint error.
+    6. RULE: If logs end abruptly without an error message, assume "Resource Exhaustion" or "OOM" and return the workflow file (.github/workflows/...) to optimize resources.
     
     Log Snippet (Last ${MAX_LOG_LENGTH} chars):
     ${truncatedLog}
@@ -1266,7 +1281,10 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
       
       const parsed = normalizeDiagnosis(parsedRaw);
 
-      if (!parsed.summary || parsed.summary.includes("Unknown Error")) {
+      // FIX: Ensure summary is a string to avoid TypeError
+      const safeSummaryStr = String(parsed.summary || ""); 
+
+      if (!safeSummaryStr || safeSummaryStr.includes("Unknown Error")) {
           parsed.summary = `Parse Error. Raw Output: ${text.substring(0, 150)}...`;
       }
       if (!parsed.filePath) parsed.filePath = ""; 
@@ -1363,6 +1381,10 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
   // INFRASTRUCTURE INTELLIGENCE
   if (errorSummary.toLowerCase().includes('redis') && (errorSummary.toLowerCase().includes('timeout') || errorSummary.toLowerCase().includes('connection'))) {
       specializedHints += "\n    HINT: For Redis connection timeouts in Docker, ensure the service name is used as the hostname. Check `depends_on` conditions. If using healthchecks, ensure they are configured correctly.";
+  }
+  // NEW: Disk Space / OOM Hints
+  if (errorSummary.toLowerCase().includes('no space left') || errorSummary.toLowerCase().includes('errno 28') || errorSummary.toLowerCase().includes('out of memory')) {
+      specializedHints += "\n    HINT: Infrastructure Resource Exhaustion detected. 1) If 'No space left': Add 'uses: jlumbroso/free-disk-space@main' step to workflow or clean up. Use 'pip install --no-cache-dir'. 2) If OOM: Increase runner size or optimize memory usage.";
   }
 
   // Optimized Prompt for Prefix Caching:
