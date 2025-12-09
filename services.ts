@@ -340,7 +340,12 @@ export async function runDevShellCommand(config: AppConfig, command: string): Pr
             
             return { output: output || "No Output", exitCode: result.error ? 1 : 0 };
         } catch (e: any) {
-            return { output: `E2B Execution Failed: ${e.message}`, exitCode: 1 };
+            console.error("Full E2B Error Details:", e);
+            let msg = e.message;
+            if (msg === 'Failed to fetch') {
+                msg += " (Check Ad Blockers, Network, or API Key)";
+            }
+            return { output: `E2B Execution Failed: ${msg}`, exitCode: 1 };
         }
     }
     // Simulation
