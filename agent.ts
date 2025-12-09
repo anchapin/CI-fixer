@@ -3,7 +3,8 @@ import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange } from
 import { 
     getWorkflowLogs, toolScanDependencies, diagnoseError, 
     findClosestFile, toolCodeSearch, generateDetailedPlan, 
-    toolWebSearch, generateFix, toolLintCheck, judgeFix, runSandboxTest
+    toolWebSearch, generateFix, toolLintCheck, judgeFix, runSandboxTest,
+    runDevShellCommand
 } from './services';
 
 export async function runIndependentAgentLoop(
@@ -58,66 +59,69 @@ export async function runIndependentAgentLoop(
         updateStateCallback(group.id, currentState);
         
         let diagnosis = await diagnoseError(config, currentLogText, initialRepoContext + dependencyContext);
+        log('INFO', `Diagnosis: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
+
+        let targetFile = null;
         
-        // Handle ambiguous diagnosis that might cause crashes later
-        if (!diagnosis.filePath && diagnosis.summary.includes("Unknown")) {
-             log('WARN', 'Diagnosis ambiguous. Attempting heuristic search...');
-             diagnosis.filePath = ""; // Reset to allow search
-        }
-        
-        log('INFO', `Diagnosis: ${diagnosis.summary} in ${diagnosis.filePath}`);
+        // Only attempt file discovery if the action is EDIT
+        if (diagnosis.fixAction === 'edit') {
+            currentState.phase = AgentPhase.EXPLORE;
+            updateStateCallback(group.id, currentState);
 
-        currentState.phase = AgentPhase.EXPLORE;
-        updateStateCallback(group.id, currentState);
-
-        let targetFile = await findClosestFile(config, diagnosis.filePath);
-        if (!targetFile) {
-            log('WARN', `File '${diagnosis.filePath}' not found. Searching repo...`);
-            
-            // Fallback: If filePath is empty (from bad diagnosis) or just not found, 
-            // search using the Summary keywords, ensuring we don't pass null/empty
-            const query = (diagnosis.filePath && diagnosis.filePath.length > 2) ? diagnosis.filePath : diagnosis.summary;
-            const searchResults = await toolCodeSearch(config, query);
-            
-            if (searchResults.length > 0) {
-                 log('INFO', `Search found potential match: ${searchResults[0]}`);
-                 targetFile = await findClosestFile(config, searchResults[0]);
-            }
-        }
-
-        if (!targetFile) {
-            // "Create File" Fallback (CrimsonArchitect fix)
-            // If we still don't have a file, and the error implies it's missing, create a virtual one.
-            if (diagnosis.summary.toLowerCase().includes("no such file") || 
-                diagnosis.summary.toLowerCase().includes("not found") ||
-                diagnosis.summary.toLowerCase().includes("missing")) {
+            targetFile = await findClosestFile(config, diagnosis.filePath);
+            if (!targetFile) {
+                log('WARN', `File '${diagnosis.filePath}' not found. Searching repo...`);
                 
-                log('INFO', `Target file missing. Initializing CREATE mode for: ${diagnosis.filePath || 'new_file'}`);
-                targetFile = {
-                    path: diagnosis.filePath || 'new_file.txt',
-                    file: {
-                        name: diagnosis.filePath?.split('/').pop() || 'new_file.txt',
-                        language: 'text', // Agent can refine this later
-                        content: "" // Empty content for new file
-                    }
-                };
-            } else {
-                throw new Error(`Could not locate source file for error: ${diagnosis.summary}`);
+                // Fallback: If filePath is empty (from bad diagnosis) or just not found, 
+                // search using the Summary keywords, ensuring we don't pass null/empty
+                const query = (diagnosis.filePath && diagnosis.filePath.length > 2) ? diagnosis.filePath : diagnosis.summary.substring(0, 100);
+                const searchResults = await toolCodeSearch(config, query);
+                
+                if (searchResults.length > 0) {
+                     log('INFO', `Search found potential match: ${searchResults[0]}`);
+                     targetFile = await findClosestFile(config, searchResults[0]);
+                }
             }
+
+            if (!targetFile) {
+                // "Create File" Fallback
+                if (diagnosis.summary.toLowerCase().includes("no such file") || 
+                    diagnosis.summary.toLowerCase().includes("not found") ||
+                    diagnosis.summary.toLowerCase().includes("missing")) {
+                    
+                    log('INFO', `Target file missing. Initializing CREATE mode for: ${diagnosis.filePath || 'new_file'}`);
+                    targetFile = {
+                        path: diagnosis.filePath || 'new_file.txt',
+                        file: {
+                            name: diagnosis.filePath?.split('/').pop() || 'new_file.txt',
+                            language: 'text', 
+                            content: "" 
+                        }
+                    };
+                } else {
+                    // Graceful failure instead of crash
+                    log('ERROR', `Could not locate source file for error: ${diagnosis.summary}`);
+                    return { ...currentState, status: 'failed', message: "Target file not found." };
+                }
+            }
+            
+            currentState.phase = AgentPhase.ACQUIRE_LOCK;
+            currentState.fileReservations = [targetFile.path];
+            updateStateCallback(group.id, currentState);
+            log('INFO', `Acquired lock on ${targetFile.path}`);
+        } else {
+            log('INFO', `Strategy: Run Shell Command (${diagnosis.suggestedCommand || 'Automatic'})`);
         }
         
         currentState.phase = AgentPhase.PLAN;
         updateStateCallback(group.id, currentState);
         
-        // Just gen plan, ignoring result for simplicity in this flow, assuming automatic approval
-        await generateDetailedPlan(config, diagnosis.summary, targetFile.path);
-        
-        currentState.phase = AgentPhase.ACQUIRE_LOCK;
-        currentState.fileReservations = [targetFile.path];
-        updateStateCallback(group.id, currentState);
-        log('INFO', `Acquired lock on ${targetFile.path}`);
+        // Gen plan (skipped in logic but kept for phase structure)
+        if (targetFile) {
+             await generateDetailedPlan(config, diagnosis.summary, targetFile.path);
+        }
 
-        // --- FIX: Track previous feedback to prevent loops ---
+        // --- FIX LOOP ---
         const feedbackHistory: string[] = [];
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -127,70 +131,94 @@ export async function runIndependentAgentLoop(
             currentState.phase = AgentPhase.IMPLEMENT;
             updateStateCallback(group.id, currentState);
 
-            let extraContext = "";
-            
-            // Inject feedback from previous failures
-            if (feedbackHistory.length > 0) {
-                extraContext += `\n\nPREVIOUS ATTEMPTS FAILED. REVIEW FEEDBACK:\n${feedbackHistory.join('\n')}\n`;
-                extraContext += `IMPORTANT: You MUST modify the code. If you return the exact same code, the fix will fail again.\n`;
-            }
+            let lastCommandSuccess = false;
 
-            if (i > 0) {
-                log('TOOL', 'Searching web for solutions...');
-                const webResult = await toolWebSearch(config, diagnosis.summary);
-                extraContext += `\nWEB SEARCH RESULTS:\n${webResult}`;
-            }
-
-            const fixCode = await generateFix(config, { 
-                code: targetFile.file.content, 
-                error: diagnosis.summary, 
-                language: targetFile.file.language,
-                extraContext 
-            });
-
-            const lintResult = await toolLintCheck(config, fixCode, targetFile.file.language);
-            if (!lintResult.valid) {
-                log('WARN', `Lint check failed: ${lintResult.error}. Attempting self-correction...`);
-            }
-
-            const fileChange: FileChange = {
-                path: targetFile.path,
-                original: targetFile.file,
-                modified: { ...targetFile.file, content: fixCode },
-                status: 'modified'
-            };
-            currentState.files[targetFile.path] = fileChange;
-            updateStateCallback(group.id, currentState);
-
-            currentState.phase = AgentPhase.VERIFY;
-            updateStateCallback(group.id, currentState);
-
-            const judgeResult = await judgeFix(config, targetFile.file.content, fixCode, diagnosis.summary);
-            log('INFO', `Judge Score: ${judgeResult.score}/10. ${judgeResult.reasoning}`);
-
-            if (judgeResult.passed) {
-                currentState.phase = AgentPhase.TESTING;
-                updateStateCallback(group.id, currentState);
+            if (diagnosis.fixAction === 'command') {
+                // COMMAND EXECUTION PATH
+                const cmd = diagnosis.suggestedCommand || "echo 'No command suggested'";
+                log('TOOL', `Executing Shell Command: ${cmd}`);
                 
-                const testResult = await runSandboxTest(config, group, i, true, fileChange, diagnosis.summary, logCallback, currentState.files);
+                const cmdResult = await runDevShellCommand(config, cmd);
                 
-                if (testResult.passed) {
-                    currentState.status = 'success';
-                    currentState.phase = AgentPhase.SUCCESS;
-                    currentState.message = "Fix verified successfully.";
-                    currentState.fileReservations = []; 
-                    updateStateCallback(group.id, currentState);
-                    log('SUCCESS', `Agent ${group.name} succeeded.`);
-                    return currentState;
+                if (cmdResult.exitCode !== 0) {
+                    log('WARN', `Command failed: ${cmdResult.output}`);
+                    feedbackHistory.push(`Command '${cmd}' failed: ${cmdResult.output}`);
                 } else {
-                    log('WARN', `Sandbox Test Failed: ${testResult.logs.substring(0, 100)}...`);
-                    feedbackHistory.push(`Sandbox Test Failed: ${testResult.logs.substring(0, 200)}`);
+                    log('SUCCESS', `Command executed successfully.`);
+                    lastCommandSuccess = true;
                 }
-            } else {
-                feedbackHistory.push(`Judge Rejected: ${judgeResult.reasoning}`);
+                
+            } else if (targetFile) {
+                // CODE EDIT PATH
+                let extraContext = "";
+                if (feedbackHistory.length > 0) {
+                    extraContext += `\n\nPREVIOUS ATTEMPTS FAILED. REVIEW FEEDBACK:\n${feedbackHistory.join('\n')}\n`;
+                    extraContext += `IMPORTANT: You MUST modify the code. If you return the exact same code, the fix will fail again.\n`;
+                }
+
+                if (i > 0) {
+                    log('TOOL', 'Searching web for solutions...');
+                    const webResult = await toolWebSearch(config, diagnosis.summary);
+                    extraContext += `\nWEB SEARCH RESULTS:\n${webResult}`;
+                }
+
+                const fixCode = await generateFix(config, { 
+                    code: targetFile.file.content, 
+                    error: diagnosis.summary, 
+                    language: targetFile.file.language,
+                    extraContext 
+                });
+
+                const lintResult = await toolLintCheck(config, fixCode, targetFile.file.language);
+                if (!lintResult.valid) {
+                    log('WARN', `Lint check failed: ${lintResult.error}. Attempting self-correction...`);
+                }
+
+                const fileChange: FileChange = {
+                    path: targetFile.path,
+                    original: targetFile.file,
+                    modified: { ...targetFile.file, content: fixCode },
+                    status: 'modified'
+                };
+                currentState.files[targetFile.path] = fileChange;
+                updateStateCallback(group.id, currentState);
+
+                currentState.phase = AgentPhase.VERIFY;
+                updateStateCallback(group.id, currentState);
+
+                const judgeResult = await judgeFix(config, targetFile.file.content, fixCode, diagnosis.summary);
+                log('INFO', `Judge Score: ${judgeResult.score}/10. ${judgeResult.reasoning}`);
+                
+                if (!judgeResult.passed) {
+                     feedbackHistory.push(`Judge Rejected: ${judgeResult.reasoning}`);
+                     log('WARN', `Iteration ${i} failed. Retrying...`);
+                     continue;
+                }
             }
+
+            // SHARED VERIFICATION PHASE
+            currentState.phase = AgentPhase.TESTING;
+            updateStateCallback(group.id, currentState);
             
-            log('WARN', `Iteration ${i} failed. Retrying...`);
+            // For command path, we pass a dummy file change since no file is actively tracked
+            const testFileChange = diagnosis.fixAction === 'edit' && targetFile 
+                ? currentState.files[targetFile.path] 
+                : { path: 'SHELL', original: {name:'sh', language:'sh', content:''}, modified: {name:'sh', language:'sh', content: diagnosis.suggestedCommand || ''}, status: 'modified' as const };
+
+            const testResult = await runSandboxTest(config, group, i, true, testFileChange, diagnosis.summary, logCallback, currentState.files);
+            
+            if (testResult.passed) {
+                currentState.status = 'success';
+                currentState.phase = AgentPhase.SUCCESS;
+                currentState.message = "Fix verified successfully.";
+                currentState.fileReservations = []; 
+                updateStateCallback(group.id, currentState);
+                log('SUCCESS', `Agent ${group.name} succeeded.`);
+                return currentState;
+            } else {
+                log('WARN', `Sandbox Test Failed: ${testResult.logs.substring(0, 100)}...`);
+                feedbackHistory.push(`Sandbox Test Failed: ${testResult.logs.substring(0, 200)}`);
+            }
         }
 
         currentState.status = 'failed';

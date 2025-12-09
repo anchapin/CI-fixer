@@ -230,18 +230,31 @@ export async function groupFailedRuns(config: AppConfig, runs: WorkflowRun[]): P
 
 // Logic & Analysis Services
 
-export async function diagnoseError(config: AppConfig, logSnippet: string, repoContext?: string): Promise<{ summary: string, filePath: string }> {
+export interface DiagnosisResult {
+  summary: string;
+  filePath: string;
+  fixAction: 'edit' | 'command'; // New: Support shell commands
+  suggestedCommand?: string;
+}
+
+export async function diagnoseError(config: AppConfig, logSnippet: string, repoContext?: string): Promise<DiagnosisResult> {
+  // Use tail of logs for better context on recent failures
+  const cleanLogs = logSnippet.slice(-20000); 
+  
   const prompt = `
-    Analyze this CI/CD build log. Identify the primary error and the source code file causing it.
+    Analyze this CI/CD build log. Identify the primary error.
     
-    Constraints:
-    1. Output strictly valid JSON.
-    2. DO NOT nest the JSON. Return a flat object: { "summary": "...", "filePath": "..." }
-    3. If a file is MISSING (e.g. "No such file", "not found"), put that missing file path in "filePath".
-    4. FILEPATH must be relative to repo root. Do NOT return directory paths. Guess the specific .yml file if it is a workflow error.
+    Determine if the fix requires EDITING a code file or RUNNING a shell command (like 'npm install', 'chmod', 'pip install', 'mvn install', etc).
+    
+    Output JSON: { 
+      "summary": "string", 
+      "filePath": "string (relative path, or empty if unknown)", 
+      "fixAction": "edit" | "command",
+      "suggestedCommand": "string (only if action is command)"
+    }
     
     Log Snippet:
-    ${logSnippet.substring(0, 20000)}
+    ${cleanLogs}
     ${repoContext ? `\nREPO CONTEXT: \n${repoContext}\n` : ''}
   `;
 
@@ -249,36 +262,17 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
       const response = await unifiedGenerate(config, {
         contents: prompt,
         config: { systemInstruction: "You are an automated Error Diagnosis Agent.", maxOutputTokens: 1024, responseMimeType: "application/json" },
-        model: MODEL_FAST
+        model: "gemini-3-pro-preview" // FORCE SMART MODEL for higher accuracy
       });
       
-      let parsed: any = safeJsonParse(response.text || "{}", { summary: "", filePath: "" });
-
-      // Unwrap nested objects if LLM ignored instructions
-      if (parsed.answer) {
-          if (typeof parsed.answer === 'object') {
-              parsed = {
-                  summary: parsed.answer.primaryError || parsed.answer.summary || parsed.answer.error || "",
-                  filePath: parsed.answer.filePath || ""
-              };
-          } else if (typeof parsed.answer === 'string') {
-              // Handle string answer (CyberSentinel case)
-              parsed.summary = parsed.answer;
-          }
-      } else if (parsed.result && typeof parsed.result === 'object') {
-          parsed = parsed.result;
-      }
-
-      // Map fields if keys mismatch (Hallucination Guard)
-      if (!parsed.summary && parsed.primaryError) parsed.summary = parsed.primaryError;
-      if (!parsed.summary && parsed.error) parsed.summary = parsed.error;
-      
-      if (!parsed.filePath) parsed.filePath = "";
-      // Fallback summary if empty
-      if (!parsed.summary) parsed.summary = "Unknown Error";
-
-      return { summary: parsed.summary, filePath: parsed.filePath };
-  } catch { return { summary: "Diagnosis Failed", filePath: "" }; }
+      return safeJsonParse(response.text || "{}", { 
+          summary: "Unknown Error", 
+          filePath: "", 
+          fixAction: "edit" 
+      } as DiagnosisResult);
+  } catch { 
+      return { summary: "Diagnosis Failed", filePath: "", fixAction: "edit" }; 
+  }
 }
 
 export async function generateRepoSummary(config: AppConfig): Promise<string> {
