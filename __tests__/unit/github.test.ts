@@ -1,25 +1,28 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { getPRFailedRuns, getFileContent, getWorkflowLogs } from '../../services';
 
-// Mock fetch globally
-globalThis.fetch = vi.fn();
-
 describe('GitHub API Helpers', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
     beforeEach(() => {
-        vi.clearAllMocks();
+        fetchSpy.mockReset();
+    });
+
+    afterAll(() => {
+        fetchSpy.mockRestore();
     });
 
     describe('getPRFailedRuns', () => {
         it('should fetch and filter failed runs', async () => {
             // Mock PR response
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ head: { sha: 'head-sha' } })
             } as Response);
 
             // Mock Runs response
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({
                     workflow_runs: [
@@ -34,11 +37,11 @@ describe('GitHub API Helpers', () => {
 
             expect(runs).toHaveLength(1);
             expect(runs[0].id).toBe(1);
-            expect(fetch).toHaveBeenCalledTimes(2);
+            expect(fetchSpy).toHaveBeenCalledTimes(2);
         });
 
         it('should throw error on 401', async () => {
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: false,
                 status: 401,
                 statusText: 'Unauthorized',
@@ -50,11 +53,11 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should fallback to constructed path if API path is missing', async () => {
-             vi.mocked(fetch).mockResolvedValueOnce({
+             fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ head: { sha: 'sha' } })
             } as Response);
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({
                     workflow_runs: [{ id: 1, name: 'Test', conclusion: 'failure', path: null }]
@@ -73,7 +76,7 @@ describe('GitHub API Helpers', () => {
             const content = "hello world";
             const base64 = btoa(content);
 
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({
                     name: 'test.txt',
@@ -88,7 +91,7 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should detect python language extension', async () => {
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ name: 'script.py', content: '' })
             } as Response);
@@ -97,7 +100,7 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should detect Dockerfile', async () => {
-             vi.mocked(fetch).mockResolvedValueOnce({
+             fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ name: 'Dockerfile.dev', content: '' })
             } as Response);
@@ -106,7 +109,7 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should throw proper error for directories', async () => {
-             vi.mocked(fetch).mockResolvedValueOnce({
+             fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ([ { name: 'child' } ]) // Array implies directory
             } as Response);
@@ -116,7 +119,7 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should handle 404', async () => {
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: false,
                 status: 404,
                 statusText: 'Not Found',
@@ -130,13 +133,13 @@ describe('GitHub API Helpers', () => {
     describe('getWorkflowLogs', () => {
         it('should retrieve text logs from failed job', async () => {
              // 1. Get Run (head_sha)
-             vi.mocked(fetch).mockResolvedValueOnce({
+             fetchSpy.mockResolvedValueOnce({
                  ok: true,
                  json: async () => ({ head_sha: 'abc' })
              } as Response);
 
              // 2. Get Jobs
-             vi.mocked(fetch).mockResolvedValueOnce({
+             fetchSpy.mockResolvedValueOnce({
                  ok: true,
                  json: async () => ({
                      jobs: [{ id: 99, name: 'build', conclusion: 'failure' }]
@@ -144,7 +147,7 @@ describe('GitHub API Helpers', () => {
              } as Response);
 
              // 3. Get Logs
-             vi.mocked(fetch).mockResolvedValueOnce({
+             fetchSpy.mockResolvedValueOnce({
                  ok: true,
                  text: async () => "Error Log Content"
              } as Response);

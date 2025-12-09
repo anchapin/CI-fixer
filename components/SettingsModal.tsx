@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
-import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal } from 'lucide-react';
+import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal, Download } from 'lucide-react';
 import { getPRFailedRuns } from '../services';
 
 interface SettingsModalProps {
@@ -9,9 +9,10 @@ interface SettingsModalProps {
   onClose: () => void;
   onSave: (config: AppConfig) => void;
   currentConfig: AppConfig | null;
+  onExportLogs: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, currentConfig }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, currentConfig, onExportLogs }) => {
   const [formData, setFormData] = useState<Partial<AppConfig>>(currentConfig || {
     githubToken: '',
     repoUrl: '',
@@ -519,21 +520,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800 flex justify-end gap-3">
-            <button 
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors uppercase"
+        <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800 flex justify-between items-center">
+            
+            {/* NEW: Export Button aligned to the left */}
+            <button
+                type="button"
+                onClick={onExportLogs}
+                className="text-xs font-bold text-slate-500 hover:text-cyan-400 transition-colors flex items-center gap-2 border border-slate-800 hover:border-cyan-500/30 px-3 py-2 rounded bg-slate-900"
+                title="Download sanitized logs and state for debugging"
             >
-                Cancel
+                <Download className="w-3 h-3" />
+                Export Diagnostics
             </button>
-            <button 
-                onClick={handleSave}
-                disabled={!formData.selectedRuns?.length}
-                className="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2 rounded text-xs font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                <Check className="w-4 h-4" />
-                Initialize Link
-            </button>
+
+            <div className="flex gap-3">
+                <button 
+                    onClick={onClose}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors uppercase"
+                >
+                    Cancel
+                </button>
+                <button 
+                    onClick={handleSave}
+                    disabled={!formData.selectedRuns?.length}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2 rounded text-xs font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <Check className="w-4 h-4" />
+                    Initialize Link
+                </button>
+            </div>
         </div>
       </div>
     </div>

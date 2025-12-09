@@ -466,20 +466,26 @@ const App: React.FC = () => {
       }
   };
   
-  const handleReevaluate = () => {
-     addChatMessage('agent', 'Please select specific change chunks in the Diff View to re-evaluate.');
-  };
-
   const handleUserChat = async (msg: string) => {
       addChatMessage('user', msg);
-      if (true) {
-          setIsProcessing(true);
-          try {
-             const resp = await getAgentChatResponse(appConfig, msg);
-             addChatMessage('agent', resp);
-          } finally {
-             setIsProcessing(false);
-          }
+      setIsProcessing(true);
+      try {
+         let context = "Global Command View.";
+         if (selectedAgentId && selectedAgentId !== 'CONSOLIDATED') {
+             const agent = agentStates[selectedAgentId];
+             if (agent) {
+                 context = `Agent: ${agent.name}\nStatus: ${agent.status}\nPhase: ${agent.phase}\nLog Summary: ${agent.activeLog?.slice(-500) || 'None'}`;
+             }
+         } else {
+             context = "Consolidated View. Managing all agents.";
+         }
+         
+         const resp = await getAgentChatResponse(appConfig, msg, context);
+         addChatMessage('agent', resp);
+      } catch (e) {
+         addChatMessage('agent', "Comms Link Unstable. (LLM Error)");
+      } finally {
+         setIsProcessing(false);
       }
   };
 
@@ -539,6 +545,37 @@ const App: React.FC = () => {
       }
   };
 
+  const handleExportLogs = () => {
+      const exportData = {
+          timestamp: new Date().toISOString(),
+          // Sanitize secrets before exporting
+          config: appConfig ? {
+              ...appConfig,
+              githubToken: appConfig.githubToken ? '***REDACTED***' : '',
+              customApiKey: appConfig.customApiKey ? '***REDACTED***' : '',
+              e2bApiKey: appConfig.e2bApiKey ? '***REDACTED***' : '',
+              tavilyApiKey: appConfig.tavilyApiKey ? '***REDACTED***' : '',
+          } : null,
+          traceback: logs,
+          terminal: terminalLines,
+          agents: agentStates,
+          chat: chatMessages,
+          consolidatedFiles: consolidatedFileChanges
+      };
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ci_fixer_debug_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      addLog('INFO', 'Diagnostics data exported successfully.');
+  };
+
   // Helper to determine what files to show in DiffView
   const getActiveFiles = (): FileChange[] => {
       if (selectedAgentId === 'CONSOLIDATED' || !selectedAgentId) {
@@ -573,6 +610,7 @@ const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)} 
         onSave={handleConfigSave}
         currentConfig={appConfig}
+        onExportLogs={handleExportLogs}
       />
 
       {/* Header */}
@@ -726,9 +764,10 @@ const App: React.FC = () => {
                     <ChatConsole 
                         messages={chatMessages}
                         onSendMessage={handleUserChat}
-                        onReevaluate={handleReevaluate}
+                        onReevaluate={handleReevaluateSelected}
                         isProcessing={isProcessing}
-                        canReevaluate={Object.values(agentStates).some((a: AgentState) => a.status === 'success')}
+                        hasSelectedChunks={selectedChunkIds.size > 0}
+                        selectedAgentName={selectedAgentId === 'CONSOLIDATED' ? 'Swarm Overseer' : agentStates[selectedAgentId]?.name}
                     />
                 </div>
             </div>

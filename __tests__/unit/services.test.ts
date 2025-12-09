@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { 
   extractCode, 
   diagnoseError, 
@@ -17,9 +17,6 @@ const mocks = vi.hoisted(() => ({
   e2bClose: vi.fn(),
   e2bCreate: vi.fn()
 }));
-
-// Mock global fetch
-globalThis.fetch = vi.fn();
 
 // Mock GoogleGenAI
 vi.mock('@google/genai', () => {
@@ -48,6 +45,7 @@ vi.mock('@e2b/code-interpreter', () => {
 });
 
 describe('Service Utility Unit Tests', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
   const mockConfig: AppConfig = {
     githubToken: 'token',
@@ -59,6 +57,11 @@ describe('Service Utility Unit Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchSpy.mockReset();
+  });
+
+  afterAll(() => {
+    fetchSpy.mockRestore();
   });
 
   describe('extractCode', () => {

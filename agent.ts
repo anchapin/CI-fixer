@@ -1,3 +1,4 @@
+
 import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange } from './types';
 import { 
     getWorkflowLogs, toolScanDependencies, diagnoseError, 
@@ -57,6 +58,13 @@ export async function runIndependentAgentLoop(
         updateStateCallback(group.id, currentState);
         
         let diagnosis = await diagnoseError(config, currentLogText, initialRepoContext + dependencyContext);
+        
+        // Handle ambiguous diagnosis that might cause crashes later
+        if (!diagnosis.filePath && diagnosis.summary.includes("Unknown")) {
+             log('WARN', 'Diagnosis ambiguous. Attempting heuristic search...');
+             diagnosis.filePath = ""; // Reset to allow search
+        }
+        
         log('INFO', `Diagnosis: ${diagnosis.summary} in ${diagnosis.filePath}`);
 
         currentState.phase = AgentPhase.EXPLORE;
@@ -67,8 +75,8 @@ export async function runIndependentAgentLoop(
             log('WARN', `File '${diagnosis.filePath}' not found. Searching repo...`);
             
             // Fallback: If filePath is empty (from bad diagnosis) or just not found, 
-            // search using the Summary keywords
-            const query = diagnosis.filePath || diagnosis.summary;
+            // search using the Summary keywords, ensuring we don't pass null/empty
+            const query = (diagnosis.filePath && diagnosis.filePath.length > 2) ? diagnosis.filePath : diagnosis.summary;
             const searchResults = await toolCodeSearch(config, query);
             
             if (searchResults.length > 0) {
@@ -78,8 +86,24 @@ export async function runIndependentAgentLoop(
         }
 
         if (!targetFile) {
-            // Last ditch: If we still don't have a file, try searching for common entry points if error is generic
-            throw new Error(`Could not locate source file for error: ${diagnosis.summary}`);
+            // "Create File" Fallback (CrimsonArchitect fix)
+            // If we still don't have a file, and the error implies it's missing, create a virtual one.
+            if (diagnosis.summary.toLowerCase().includes("no such file") || 
+                diagnosis.summary.toLowerCase().includes("not found") ||
+                diagnosis.summary.toLowerCase().includes("missing")) {
+                
+                log('INFO', `Target file missing. Initializing CREATE mode for: ${diagnosis.filePath || 'new_file'}`);
+                targetFile = {
+                    path: diagnosis.filePath || 'new_file.txt',
+                    file: {
+                        name: diagnosis.filePath?.split('/').pop() || 'new_file.txt',
+                        language: 'text', // Agent can refine this later
+                        content: "" // Empty content for new file
+                    }
+                };
+            } else {
+                throw new Error(`Could not locate source file for error: ${diagnosis.summary}`);
+            }
         }
         
         currentState.phase = AgentPhase.PLAN;

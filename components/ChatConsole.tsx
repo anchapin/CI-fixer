@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, RotateCcw, Zap, ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
 import { ChatMessage } from '../types';
@@ -7,10 +8,11 @@ interface ChatConsoleProps {
   onSendMessage: (msg: string) => void;
   onReevaluate: () => void;
   isProcessing: boolean;
-  canReevaluate: boolean;
+  hasSelectedChunks: boolean;
+  selectedAgentName?: string;
 }
 
-export const ChatConsole: React.FC<ChatConsoleProps> = ({ messages, onSendMessage, onReevaluate, isProcessing, canReevaluate }) => {
+export const ChatConsole: React.FC<ChatConsoleProps> = ({ messages, onSendMessage, onReevaluate, isProcessing, hasSelectedChunks, selectedAgentName }) => {
   const [input, setInput] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -44,27 +46,31 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({ messages, onSendMessag
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700 flex-none">
         <div className="flex items-center">
             <Bot className="w-4 h-4 text-purple-400 mr-2" />
-            <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Operator Comms</span>
+            <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">
+                {selectedAgentName ? `Comms: ${selectedAgentName}` : 'Command Console'}
+            </span>
         </div>
-        {canReevaluate && (
-            <button 
-                onClick={onReevaluate}
-                disabled={isProcessing}
-                className="flex items-center text-[10px] bg-amber-950/50 hover:bg-amber-900 text-amber-500 border border-amber-800 rounded px-2 py-1 transition-all disabled:opacity-50"
-                title="Force Agent to try a different solution"
-            >
-                <RotateCcw className={`w-3 h-3 mr-1 ${isProcessing ? 'animate-spin' : ''}`} />
-                {isProcessing ? 'THINKING...' : 'RE-EVALUATE FIX'}
-            </button>
-        )}
+        <button
+            onClick={onReevaluate}
+            disabled={isProcessing || !hasSelectedChunks}
+            className={`flex items-center text-[10px] border rounded px-2 py-1 transition-all ${
+                hasSelectedChunks 
+                ? 'bg-amber-950/50 hover:bg-amber-900 text-amber-500 border-amber-800 cursor-pointer' 
+                : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
+            }`}
+            title={hasSelectedChunks ? "Refine the selected code chunks" : "Select lines in Diff View to refine"}
+        >
+            <RotateCcw className={`w-3 h-3 mr-1 ${isProcessing ? 'animate-spin' : ''}`} />
+            {isProcessing ? 'THINKING...' : 'REFINE SELECTION'}
+        </button>
       </div>
 
       {/* Messages Area */}
       <div ref={containerRef} className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950 min-h-0 custom-scrollbar">
         {messages.length === 0 && (
             <div className="text-slate-600 italic text-xs text-center mt-4">
-                Secure channel established.<br/>
-                Type to guide the agent or request changes.
+                Channel Secure.<br/>
+                Chat is for Q&A only. To modify code, use the Diff View.
             </div>
         )}
         {messages.map((msg) => (
@@ -113,7 +119,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({ messages, onSendMessag
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isProcessing}
-            placeholder={canReevaluate ? "Feedback / Instructions..." : "Enter command..."}
+            placeholder={hasSelectedChunks ? "Instruction for refinement..." : "Ask a question about the build..."}
             className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 font-mono placeholder-slate-600"
         />
         <button 

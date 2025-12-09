@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { unifiedGenerate, toolLintCheck } from '../../services';
 import { AppConfig } from '../../types';
 
@@ -15,11 +15,16 @@ vi.mock('@google/genai', () => ({
     Type: { OBJECT: 'OBJECT', STRING: 'STRING', BOOLEAN: 'BOOLEAN' }
 }));
 
-globalThis.fetch = vi.fn();
-
 describe('LLM Provider & Tools', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
     beforeEach(() => {
         vi.clearAllMocks();
+        fetchSpy.mockReset();
+    });
+
+    afterAll(() => {
+        fetchSpy.mockRestore();
     });
 
     describe('unifiedGenerate', () => {
@@ -35,7 +40,7 @@ describe('LLM Provider & Tools', () => {
         it('should call Z.AI (via fetch) when provider is zai', async () => {
             const config: AppConfig = { llmProvider: 'zai', customApiKey: 'key', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation', llmModel: 'GLM-4.6' };
             
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ choices: [{ message: { content: 'zai response' } }] })
             } as Response);
@@ -44,7 +49,7 @@ describe('LLM Provider & Tools', () => {
             expect(res.text).toBe('zai response');
             
             // Check that fetch was called with the Z.AI model
-            const callArgs = vi.mocked(fetch).mock.calls[0];
+            const callArgs = fetchSpy.mock.calls[0];
             const body = JSON.parse(callArgs[1]?.body as string);
             expect(body.model).toBe('GLM-4.6');
         });
@@ -62,7 +67,7 @@ describe('LLM Provider & Tools', () => {
                 checkEnv: 'simulation' 
             };
             
-            vi.mocked(fetch).mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ choices: [{ message: { content: 'ok' } }] })
             } as Response);
@@ -70,7 +75,7 @@ describe('LLM Provider & Tools', () => {
             // Pass Gemini model as `model` param
             await unifiedGenerate(config, { contents: 'prompt', model: 'gemini-2.5-flash' });
 
-            const callArgs = vi.mocked(fetch).mock.calls[0];
+            const callArgs = fetchSpy.mock.calls[0];
             const body = JSON.parse(callArgs[1]?.body as string);
             
             // Expect it to override 'gemini-2.5-flash' with 'GLM-4.6'
