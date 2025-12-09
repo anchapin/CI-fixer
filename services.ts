@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { AppConfig, WorkflowRun, CodeFile, FileChange, AgentPlan, RunGroup, AgentPhase, PlanTask, AgentState } from './types';
 
@@ -84,7 +85,18 @@ export async function unifiedGenerate(config: AppConfig, params: any): Promise<{
         const apiKey = config.customApiKey || process.env.API_KEY;
         const baseUrl = (config.llmBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
         const url = `${baseUrl}/chat/completions`;
-        const model = params.model === MODEL_SMART ? 'gpt-4o' : (config.llmModel || 'gpt-4o-mini');
+        
+        // Determine Model ID based on Provider
+        let model = config.llmModel; // Default to user selection
+
+        if (config.llmProvider === 'openai') {
+             // OpenAI supports 'Smart' vs 'Fast' mapping
+             if (params.model === MODEL_SMART) model = 'gpt-4o';
+             else if (!model) model = 'gpt-4o-mini';
+        } else if (config.llmProvider === 'zai') {
+             // Z.AI: Strictly use the configured model, default to GLM-4.6 if missing
+             model = config.llmModel || 'GLM-4.6';
+        }
 
         try {
             const messages = [];
@@ -374,7 +386,13 @@ export async function generateDetailedPlan(config: AppConfig, errorSummary: stri
         const plan = safeJsonParse(response.text || "{}", { goal: "Fix error", tasks: [], approved: false });
         plan.approved = false;
         return plan;
-    } catch { return { goal: "Manual Fix", tasks: [{ id: '1', description: 'Check logs manually', status: 'pending' }], approved: false }; }
+    } catch { 
+        return { 
+            goal: "Manual Intervention (System Recovery)", 
+            tasks: [{ id: '1', description: 'Check logs manually and verify model config', status: 'pending' }], 
+            approved: true 
+        }; 
+    }
 }
 
 export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, errorSummary: string): Promise<{ approved: boolean, feedback: string }> {

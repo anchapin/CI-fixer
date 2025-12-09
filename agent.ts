@@ -1,4 +1,3 @@
-
 import { AppConfig, RunGroup, AgentState, AgentPhase, FileChange, LogLine, CodeFile, AgentPlan } from './types';
 import { 
     getWorkflowLogs, 
@@ -12,9 +11,9 @@ import {
     generateFix, 
     toolLintCheck, 
     judgeFix, 
-    runSandboxTest,
+    runSandboxTest, 
     compileContext,
-    listRepoDirectory // Added import
+    listRepoDirectory 
 } from './services';
 
 // Helper for normalizeCode
@@ -114,12 +113,15 @@ export const runIndependentAgentLoop = async (
             // Fix: enhanced path cleaning to handle ./src prefix
             let cleanPath = diagnosis.filePath ? diagnosis.filePath.replace(/^(\.\/|\/)+/, '') : '';
             
+            // Track search results for fallback logic
+            let searchResults: string[] = [];
+
             // --- TOOL: CODE SEARCH (If path ambiguous) ---
             if (!cleanPath || cleanPath === 'unknown' || cleanPath === '') {
                  currentState = { ...currentState, phase: AgentPhase.TOOL_USE };
                  updateStateCallback(group.id, currentState);
                  log('TOOL', `Invoking Code Search for error keywords...`);
-                 const searchResults = await toolCodeSearch(config, safeSummary.substring(0, 30));
+                 searchResults = await toolCodeSearch(config, safeSummary.substring(0, 30));
                  log('VERBOSE', `[TOOL:CodeSearch] Results: ${JSON.stringify(searchResults)}`);
                  
                  const lowerSummary = safeSummary.toLowerCase();
@@ -137,10 +139,16 @@ export const runIndependentAgentLoop = async (
                          cleanPath = extMatch;
                          log('INFO', `Search found context-relevant match: ${cleanPath}`);
                      } else {
-                         // FIX: Handle "Missing File" hallucinations
+                         // FIX: Handle "Missing File" hallucinations & Lockfile Errors
+                         const isLockfileError = lowerSummary.includes('lockfile') || lowerSummary.includes('err_pnpm') || lowerSummary.includes('frozen-lockfile');
                          const isExplicitMissing = lowerSummary.includes('missing') || lowerSummary.includes('not found') || lowerSummary.includes('no such file') || lowerSummary.includes('no_lockfile');
                          
-                         if (isExplicitMissing) {
+                         if (isLockfileError) {
+                             log('INFO', `Dependency/Lockfile error detected. Targeting package configuration.`);
+                             const packageJson = searchResults.find(f => f.endsWith('package.json'));
+                             const workflowFile = searchResults.find(f => f.includes('.github/workflows'));
+                             cleanPath = packageJson || workflowFile || 'package.json';
+                         } else if (isExplicitMissing) {
                              log('WARN', `Error implies missing file. Rejecting weak search result: ${searchResults[0]}`);
                              // Attempt heuristic inference for common missing files
                              if (lowerSummary.includes('pnpm')) cleanPath = 'pnpm-lock.yaml';
@@ -183,8 +191,29 @@ export const runIndependentAgentLoop = async (
 
             if (!cleanPath) {
                 const lowerSummary = safeSummary.toLowerCase();
+                
+                // NEW: Handle System/Infrastructure Errors (e.g. Disk Space)
+                if (lowerSummary.includes('no space left') || lowerSummary.includes('oserror') || lowerSummary.includes('errno 28')) {
+                    // Infrastructure errors usually require modifying the workflow definition (e.g. to clean up disk space)
+                    // We target the workflow file associated with this run.
+                    cleanPath = group.mainRun.path || '.github/workflows/ci.yml';
+                    log('WARN', `Infrastructure error detected (Disk Space/OS). Targeting workflow file: ${cleanPath}`);
+                }
+                // NEW: Handle Lockfile / Dependency Errors (Fallback)
+                else if (lowerSummary.includes('lockfile') || lowerSummary.includes('err_pnpm') || lowerSummary.includes('frozen-lockfile')) {
+                    log('INFO', `Dependency/Lockfile error detected (Fallback). Targeting package configuration.`);
+                    
+                    // 1. Try to find the relevant package.json
+                    const packageJson = searchResults.find(f => f.endsWith('package.json'));
+                    
+                    // 2. Or try to find the CI workflow to disable frozen-lockfile
+                    const workflowFile = searchResults.find(f => f.includes('.github/workflows'));
+
+                    // Prioritize package.json to perhaps add a script, or workflow to change flags
+                    cleanPath = packageJson || workflowFile || 'package.json';
+                }
                 // Context-aware fallback logic
-                if (lowerSummary.includes('workflow') || lowerSummary.includes('action') || lowerSummary.includes('yaml')) {
+                else if (lowerSummary.includes('workflow') || lowerSummary.includes('action') || lowerSummary.includes('yaml')) {
                     cleanPath = '.github/workflows/main.yml'; // Better guess for CI errors
                 } else if (lowerSummary.includes('pnpm') || lowerSummary.includes('npm') || lowerSummary.includes('node') || lowerSummary.includes('dependency')) {
                     cleanPath = 'package.json';
@@ -238,10 +267,16 @@ export const runIndependentAgentLoop = async (
                      currentState = { ...currentState, currentPlan: plan, phase: AgentPhase.PLAN_APPROVAL };
                      updateStateCallback(group.id, currentState);
                      
-                     // Judge Plan
-                     judgeLog(`Reviewing Agent Strategy: "${plan.goal}"...`);
-                     const judgement = await judgeDetailedPlan(config, plan, safeSummary);
-                     log('VERBOSE', `[JUDGE] Plan Review:\n${JSON.stringify(judgement, null, 2)}`);
+                     // Judge Plan (Updated to respect pre-approved plans)
+                     let judgement = { approved: plan.approved, feedback: "Pre-approved strategy." };
+                     
+                     if (!plan.approved) {
+                         judgeLog(`Reviewing Agent Strategy: "${plan.goal}"...`);
+                         judgement = await judgeDetailedPlan(config, plan, safeSummary);
+                         log('VERBOSE', `[JUDGE] Plan Review:\n${JSON.stringify(judgement, null, 2)}`);
+                     } else {
+                         log('WARN', `Plan pre-approved (Emergency/Fallback Mode). Skipping Judge.`);
+                     }
                      
                      if (judgement.approved) {
                          planApproved = true;

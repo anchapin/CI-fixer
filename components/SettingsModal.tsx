@@ -64,6 +64,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       
       // Auto-configure defaults based on provider documentation
       if (provider === 'zai') {
+          // GLM Coding Plan Endpoint
           updates.llmBaseUrl = 'https://api.z.ai/api/coding/paas/v4';
           updates.llmModel = 'GLM-4.6';
       } else if (provider === 'gemini') {
@@ -245,7 +246,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-purple-500/50"
                         >
                             <option value="gemini">Google Gemini</option>
-                            <option value="zai">Z.AI (GLM-4)</option>
+                            <option value="zai">Z.AI (GLM Coding Plan)</option>
                             <option value="openai">OpenAI Compatible</option>
                         </select>
                     </div>
@@ -264,7 +265,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                     <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
                                 </>
                             ) : formData.llmProvider === 'zai' ? (
-                                <option value="GLM-4.6">GLM-4.6</option>
+                                <>
+                                    <option value="GLM-4.6">GLM-4.6</option>
+                                    <option value="GLM-4.5">GLM-4.5</option>
+                                    <option value="GLM-4.5-air">GLM-4.5 Air</option>
+                                </>
                             ) : (
                                 <option value="gpt-4o">GPT-4o</option>
                             )}
