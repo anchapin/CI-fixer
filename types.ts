@@ -70,10 +70,12 @@ export interface AppConfig {
   searchProvider?: 'gemini_grounding' | 'tavily';
   tavilyApiKey?: string;
 
-  // Sandbox / Verification Settings
-  sandboxMode?: 'simulation' | 'github_actions' | 'e2b';
+  // Execution Environments (Re-Architected)
+  devEnv: 'simulation' | 'e2b';           // For Agent Loop: Linting, Exploration
+  checkEnv: 'simulation' | 'github_actions'; // For Test Phase: Final Verification
+  
   e2bApiKey?: string;
-  sandboxTimeoutMinutes?: number;
+  sandboxTimeoutMinutes?: number; // Applies to GHA
 
   // Logging
   logLevel?: 'info' | 'debug' | 'verbose';

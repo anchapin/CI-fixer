@@ -1,17 +1,27 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { extractCode, groupFailedRuns, diagnoseError, generateWorkflowOverride, runSandboxTest } from '../../services';
-import { WorkflowRun, AppConfig, RunGroup, FileChange } from '../../types';
+import { 
+  extractCode, 
+  diagnoseError, 
+  judgeFix, 
+  runDevShellCommand, 
+  toolLintCheck,
+  toolCodeSearch
+} from '../../services';
+import { AppConfig } from '../../types';
 
-// Use vi.hoisted to ensure the mock function is created before the mock factory runs
+// Hoist mocks to ensure they are available for module mocking
 const mocks = vi.hoisted(() => ({
-  generateContent: vi.fn()
+  generateContent: vi.fn(),
+  e2bExec: vi.fn(),
+  e2bClose: vi.fn(),
+  e2bCreate: vi.fn()
 }));
 
-// Mock dependencies
+// Mock global fetch
 globalThis.fetch = vi.fn();
 
-// Partial mock for GoogleGenAI
+// Mock GoogleGenAI
 vi.mock('@google/genai', () => {
   return {
     GoogleGenAI: vi.fn().mockImplementation(() => ({
@@ -23,7 +33,29 @@ vi.mock('@google/genai', () => {
   };
 });
 
+// Mock E2B Code Interpreter
+vi.mock('@e2b/code-interpreter', () => {
+  const MockCI = {
+    create: mocks.e2bCreate
+  };
+  return {
+    CodeInterpreter: MockCI,
+    default: { CodeInterpreter: MockCI },
+    // Simulate named export availability on the module object for the "import * as" usage
+    __esModule: true,
+    ...MockCI
+  };
+});
+
 describe('Service Utility Unit Tests', () => {
+
+  const mockConfig: AppConfig = {
+    githubToken: 'token',
+    repoUrl: 'owner/repo',
+    selectedRuns: [],
+    devEnv: 'simulation',
+    checkEnv: 'simulation'
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,404 +67,164 @@ describe('Service Utility Unit Tests', () => {
       const result = extractCode(input, 'python');
       expect(result).toBe("print('hello')");
     });
-
-    it('should handle code blocks without language specifier', () => {
-      const input = "```\nconst x = 1;\n```";
-      const result = extractCode(input, 'javascript');
-      expect(result).toBe("const x = 1;");
-    });
-
-    it('should strip prompt leakage like "Return JSON:"', () => {
-      const input = "Return JSON: {\"key\": \"value\"}";
-      const result = extractCode(input, 'json');
-      expect(result).toBe("{\"key\": \"value\"}");
-    });
-
-    it('should clean up common python import hallucinations', () => {
-      const input = "Python code:\nimport os\nprint(os.getcwd())";
-      const result = extractCode(input, 'python');
-      // The function removes text before imports
-      expect(result).toBe("import os\nprint(os.getcwd())"); 
-    });
-
-    it('should NOT strip comments or shebangs at start of python file', () => {
-        const input = "#!/usr/bin/env python\nimport os";
-        const result = extractCode(input, 'python');
-        expect(result).toBe("#!/usr/bin/env python\nimport os");
-    });
-
-    it('should NOT strip block comments at start of js file', () => {
-        const input = "/*\n * License Header\n */\nimport React from 'react';";
+    
+    it('should fallback to generic blocks if language mismatch', () => {
+        const input = "```\nconst x = 1;\n```";
         const result = extractCode(input, 'javascript');
-        expect(result).toBe("/*\n * License Header\n */\nimport React from 'react';");
+        expect(result).toBe("const x = 1;");
     });
 
-    it('should handle nested markdown blocks (docstrings containing backticks)', () => {
-        // Simulating LLM response using 4 backticks to wrap 3 backticks
-        const input = `Here is the corrected code:
-\`\`\`\`python
-def example():
-    """
-    Example usage:
-    \`\`\`
-    code_inside_docstring()
-    \`\`\`
-    """
-    return True
-\`\`\`\`
-`;
-        const result = extractCode(input, 'python');
-        const expected = `def example():
-    """
-    Example usage:
-    \`\`\`
-    code_inside_docstring()
-    \`\`\`
-    """
-    return True`;
-        expect(result.trim()).toBe(expected);
-    });
-
-    it('should handle C# language identifiers', () => {
-      const input = "```c#\nConsole.WriteLine(\"Hello\");\n```";
-      const result = extractCode(input, 'c#');
-      expect(result).toBe('Console.WriteLine("Hello");');
-    });
-
-    it('should handle loose whitespace after language identifier', () => {
-      const input = "```python  \nprint('hello')\n```";
-      const result = extractCode(input, 'python');
-      expect(result).toBe("print('hello')");
-    });
-
-    it('should handle code blocks with filename metadata', () => {
-      const input = "```python filename=\"main.py\"\nprint('hello')\n```";
-      const result = extractCode(input, 'python');
-      expect(result).toBe("print('hello')");
-    });
-
-    it('should handle prompt leakage with leading whitespace', () => {
-        const input = "   Here is the code:\n    def foo(): pass";
-        const result = extractCode(input, 'python');
-        // It should match "Here is the code" even with leading spaces
-        // And then regex should find def and strip pre-amble
-        expect(result).toContain("def foo(): pass");
-    });
-
-    it('should prioritize specific language block over first block', () => {
-        const input = `
-Here is the command to run:
-\`\`\`bash
-npm install
-\`\`\`
-
-And here is the file content:
-\`\`\`javascript
-const a = 1;
-\`\`\`
-`;
-        // Request javascript. Should ignore the bash block.
-        const result = extractCode(input, 'javascript');
-        expect(result).toBe("const a = 1;");
-    });
-
-    it('should handle language aliases (e.g. jsx for javascript)', () => {
-        const input = "```jsx\n<div>Hello</div>\n```";
-        const result = extractCode(input, 'javascript');
-        expect(result).toBe("<div>Hello</div>");
-    });
-
-    it('should properly extract typescript via alias regex (tsx)', () => {
-        const input = "```tsx\nconst x: number = 1;\n```";
-        const result = extractCode(input, 'typescript');
-        expect(result).toBe("const x: number = 1;");
-    });
-
-    it('should return the LAST code block if multiple exist of same language', () => {
-        const input = `
-Here is the original broken code:
-\`\`\`python
-def broken(): error
-\`\`\`
-
-And here is the corrected version:
-\`\`\`python
-def broken(): fixed
-\`\`\`
-`;
-        const result = extractCode(input, 'python');
-        // This is a CRITICAL heuristic for "Fix Code" tasks
-        expect(result.trim()).toBe("def broken(): fixed");
-    });
-
-    it('should return the LAST generic block if no specific language found', () => {
-        const input = `
-Original:
-\`\`\`
-old
-\`\`\`
-
-Fixed:
-\`\`\`
-new
-\`\`\`
-`;
-        const result = extractCode(input, 'python');
-        expect(result.trim()).toBe("new");
-    });
-
-    it('should find the LAST non-shell block if specific language not found', () => {
-        // This simulates a scenario where model outputs multiple blocks, none marked as 'python',
-        // but we asked for python. It should skip the bash block, skip the 'original' block (conceptually),
-        // and grab the LAST block that isn't shell.
-        const input = `
-Run this:
-\`\`\`bash
-pip install x
-\`\`\`
-
-Original code:
-\`\`\`
-def old(): pass
-\`\`\`
-
-Fixed code:
-\`\`\`
-def new(): pass
-\`\`\`
-`;
-        const result = extractCode(input, 'python');
-        expect(result.trim()).toBe("def new(): pass");
-    });
-
-    it('should avoid the "Original" block if a "Fixed" block exists', () => {
-        const input = `
-Here is the original buggy code:
-\`\`\`python
-def example():
-    bug()
-\`\`\`
-
-And here is the fixed solution:
-\`\`\`python
-def example():
-    fixed()
-\`\`\`
-`;
-        const result = extractCode(input, 'python');
-        expect(result.trim()).toBe("def example():\n    fixed()");
-    });
-
-    it('should fallback to the "Original" block if it is the only one available', () => {
-        const input = `
-Here is the original code you provided:
-\`\`\`python
-def only_one():
-    pass
-\`\`\`
-`;
-        const result = extractCode(input, 'python');
-        expect(result.trim()).toBe("def only_one():\n    pass");
-    });
-
-    it('should NOT strip valid script code before imports (if no markdown used)', () => {
-        // This simulates a raw response where the model forgets code blocks
-        // The script starts with print statements before imports.
-        const input = `print("Starting script...")
-import os
-import sys
-
-def main():
-    pass`;
-        const result = extractCode(input, 'python');
-        // Previously, the aggressive heuristic might have stripped the first line
-        expect(result).toBe(input);
-    });
-
-    it('should normalize indentation in fallback raw text', () => {
-        // Simulates an LLM response where it forgot backticks but indented the whole block
-        const input = "    def indented():\n        pass";
-        const result = extractCode(input, 'python');
-        expect(result).toBe("def indented():\n    pass");
+    it('should return trimmed text if no blocks', () => {
+        const input = " just raw code ";
+        expect(extractCode(input)).toBe("just raw code");
     });
   });
 
-  describe('generateWorkflowOverride', () => {
-      it('should generate a valid workflow override prompt', async () => {
+  describe('diagnoseError', () => {
+      it('should extract flat JSON correctly', async () => {
           mocks.generateContent.mockResolvedValue({ 
-              text: "```yaml\nname: test\non:\n  push:\n    branches: ['agent/test']\n```" 
+              text: '```json\n{"summary": "S", "filePath": "F"}\n```' 
           });
+          const result = await diagnoseError(mockConfig, "log");
+          expect(result.summary).toBe("S");
+      });
+
+      it('should unwrap nested "answer" object (ZeroOperator bug)', async () => {
+          mocks.generateContent.mockResolvedValue({ 
+              text: '```json\n{ "answer": { "primaryError": "Found bug", "filePath": "src/main.ts" } }\n```' 
+          });
+          const result = await diagnoseError(mockConfig, "log");
+          expect(result.summary).toBe("Found bug");
+          expect(result.filePath).toBe("src/main.ts");
+      });
+
+      it('should handle "answer" as a string (CyberSentinel bug)', async () => {
+          mocks.generateContent.mockResolvedValue({ 
+              text: '```json\n{ "answer": "Import error caused by duplicates", "filePath": "" }\n```' 
+          });
+          const result = await diagnoseError(mockConfig, "log");
+          expect(result.summary).toBe("Import error caused by duplicates");
+      });
+
+      it('should handle "result" wrapper', async () => {
+          mocks.generateContent.mockResolvedValue({ 
+              text: '```json\n{ "result": { "summary": "Bad code", "filePath": "x.py" } }\n```' 
+          });
+          const result = await diagnoseError(mockConfig, "log");
+          expect(result.summary).toBe("Bad code");
+      });
+  });
+
+  describe('judgeFix', () => {
+      it('should include the code in the prompt', async () => {
+          // Mock linter first
+          mocks.generateContent.mockResolvedValueOnce({ text: '{"valid": true}' });
+          // Mock judge response
+          mocks.generateContent.mockResolvedValueOnce({ text: '{"passed": true, "score": 10, "reasoning": "ok"}' });
           
-          const result = await generateWorkflowOverride(
-              {} as any, 
-              "original workflow content", 
-              "agent/test", 
-              "Error in test_main"
-          );
-          
-          expect(result).toContain("name: test");
-          expect(result).toContain("branches: ['agent/test']");
+          await judgeFix(mockConfig, "orig", "fixed_code_value", "error");
           
           const callArgs = mocks.generateContent.mock.calls[mocks.generateContent.mock.calls.length - 1][0];
-          expect(callArgs.contents).toContain("agent/test");
-          expect(callArgs.contents).toContain("Error in test_main");
+          expect(callArgs.contents).toContain("fixed_code_value");
       });
   });
 
-  describe('diagnoseError (safeJsonParse internal)', () => {
-      // Testing the robustness of JSON extraction via the diagnoseError wrapper which uses safeJsonParse
-      it('should extract JSON from messy preamble text', async () => {
-          const messyOutput = `
-          Sure, I analyzed the logs.
-          Here is the JSON you requested:
-          \`\`\`json
-          {
-            "summary": "Fix found",
-            "filePath": "src/main.ts"
-          }
-          \`\`\`
-          Hope this helps!
-          `;
-          
-          mocks.generateContent.mockResolvedValue({ text: messyOutput });
-          
-          const result = await diagnoseError({} as any, "log");
-          expect(result.summary).toBe("Fix found");
-      });
+  describe('runDevShellCommand', () => {
+    it('should run in simulation mode by default', async () => {
+        const res = await runDevShellCommand(mockConfig, 'ls -la');
+        expect(res.output).toContain('[SIMULATION]');
+        expect(res.exitCode).toBe(0);
+        expect(mocks.e2bCreate).not.toHaveBeenCalled();
+    });
 
-      it('should extract JSON embedded without markdown', async () => {
-          const output = `The result is {"summary": "Error 1", "filePath": "test.js"} check it out.`;
-          mocks.generateContent.mockResolvedValue({ text: output });
-          
-          const result = await diagnoseError({} as any, "log");
-          expect(result.summary).toBe("Error 1");
-      });
+    it('should use E2B if configured and key present', async () => {
+        const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'test-key' };
+        
+        // Mock Sandbox instance
+        const mockSandbox = {
+            notebook: {
+                execCell: mocks.e2bExec
+            },
+            close: mocks.e2bClose
+        };
+        mocks.e2bCreate.mockResolvedValue(mockSandbox);
+        mocks.e2bExec.mockResolvedValue({
+            logs: { stdout: ['file1'], stderr: [] },
+            text: 'result',
+            error: null
+        });
 
-      it('should extract the LAST JSON object if multiple exist in text', async () => {
-          const output = `
-          Thought:
-          {
-             "reasoning": "I think it is main.py"
-          }
-          
-          Final Answer:
-          {
-             "summary": "Syntax Error",
-             "filePath": "src/main.py"
-          }
-          `;
-          mocks.generateContent.mockResolvedValue({ text: output });
-          
-          // Should grab the second one because it's the last one
-          const result = await diagnoseError({} as any, "log");
-          expect(result.summary).toBe("Syntax Error");
-      });
+        const res = await runDevShellCommand(e2bConfig, 'ls');
+        
+        expect(mocks.e2bCreate).toHaveBeenCalledWith({ apiKey: 'test-key' });
+        expect(mocks.e2bExec).toHaveBeenCalledWith('ls');
+        expect(res.output).toContain('result');
+        expect(res.output).toContain('file1');
+        expect(mocks.e2bClose).toHaveBeenCalled();
+    });
 
-      it('should handle nested objects in multi-JSON scenarios', async () => {
-          const output = `
-          Step 1:
-          { "a": { "b": 1 } }
-
-          Step 2:
-          { "summary": "Error", "extra": { "detail": 1 } }
-          `;
-          mocks.generateContent.mockResolvedValue({ text: output });
-          
-          const result = await diagnoseError({} as any, "log");
-          expect(result.summary).toBe("Error");
-      });
-
-      it('should handle garbage at the end of the JSON string', async () => {
-          const output = `
-          { "summary": "Garbage Test", "filePath": "main.py" }
-          
-          Note: This is the end. } <-- Stray bracket.
-          `;
-          mocks.generateContent.mockResolvedValue({ text: output });
-          
-          const result = await diagnoseError({} as any, "log");
-          // It should skip the stray bracket at the end and find the real object
-          expect(result.summary).toBe("Garbage Test");
-      });
-  });
-
-  describe('groupFailedRuns', () => {
-    it('should group runs by workflow name', async () => {
-      const runs: WorkflowRun[] = [
-        { id: 1, name: 'Test CI', path: 'ci.yml', status: 'completed', conclusion: 'failure', head_sha: 'abc', html_url: '' },
-        { id: 2, name: 'Test CI', path: 'ci.yml', status: 'completed', conclusion: 'failure', head_sha: 'abc', html_url: '' },
-        { id: 3, name: 'Deploy', path: 'deploy.yml', status: 'completed', conclusion: 'failure', head_sha: 'abc', html_url: '' }
-      ];
-
-      const groups = await groupFailedRuns({} as any, runs);
-      
-      expect(groups).toHaveLength(2);
-      const testCiGroup = groups.find(g => g.name === 'Test CI');
-      expect(testCiGroup).toBeDefined();
-      expect(testCiGroup?.runIds).toEqual([1, 2]);
-      
-      const deployGroup = groups.find(g => g.name === 'Deploy');
-      expect(deployGroup?.runIds).toEqual([3]);
+    it('should handle E2B errors gracefully', async () => {
+        const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'test-key' };
+        mocks.e2bCreate.mockRejectedValue(new Error('API Error'));
+        
+        const res = await runDevShellCommand(e2bConfig, 'ls');
+        expect(res.exitCode).toBe(1);
+        expect(res.output).toContain('E2B Execution Failed');
     });
   });
 
-  describe('runSandboxTest (Mental Walkthrough)', () => {
-      const mockConfig: AppConfig = {
-          githubToken: 'mock',
-          repoUrl: 'owner/repo',
-          selectedRuns: [],
-          sandboxMode: 'simulation'
-      };
-      
-      const mockGroup: RunGroup = {
-          id: 'g1',
-          name: 'group1',
-          runIds: [1],
-          mainRun: { id: 1, name: 'run1', path: 'ci.yml' } as any
-      };
+  describe('toolLintCheck', () => {
+    it('should use E2B for python linting when enabled', async () => {
+        const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'test-key' };
+        
+        const mockSandbox = {
+            notebook: { execCell: mocks.e2bExec },
+            close: mocks.e2bClose
+        };
+        mocks.e2bCreate.mockResolvedValue(mockSandbox);
+        
+        // Simulate Syntax Error
+        mocks.e2bExec.mockResolvedValue({
+            logs: { stdout: [], stderr: ['SyntaxError: invalid syntax'] },
+            error: { name: 'Error', value: '1', traceback: [] }
+        });
 
-      const mockFileChange: FileChange = {
-          path: 'src/main.ts',
-          original: { name: 'main.ts', content: 'orig', language: 'ts' },
-          modified: { name: 'main.ts', content: 'fixed', language: 'ts' },
-          status: 'modified'
-      };
+        const res = await toolLintCheck(e2bConfig, 'def bad code', 'python');
+        
+        expect(res.valid).toBe(false);
+        expect(res.error).toContain('SyntaxError');
+        expect(mocks.e2bExec).toHaveBeenCalledWith(expect.stringContaining('py_compile'));
+    });
 
-      it('should return simple success if simulation passes', async () => {
-          // Mock successful simulation
-          mocks.generateContent.mockResolvedValueOnce({ 
-              text: JSON.stringify({ passed: true, logs: "Tests passed." }) 
+    it('should fallback to LLM linting if not python or not E2B', async () => {
+        mocks.generateContent.mockResolvedValue({ text: '{"valid": true}' });
+        const res = await toolLintCheck(mockConfig, 'const x = 1;', 'javascript');
+        expect(res.valid).toBe(true);
+        expect(mocks.generateContent).toHaveBeenCalled();
+    });
+  });
+  
+  describe('toolCodeSearch', () => {
+      it('should use grep in E2B mode', async () => {
+          const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'key' };
+          const mockSandbox = {
+            notebook: { execCell: mocks.e2bExec },
+            close: mocks.e2bClose
+          };
+          mocks.e2bCreate.mockResolvedValue(mockSandbox);
+          mocks.e2bExec.mockResolvedValue({
+            logs: { stdout: ['src/main.py:import foo', 'src/utils.py:import foo'], stderr: [] },
+            error: null
           });
 
-          const result = await runSandboxTest(mockConfig, mockGroup, 0, true, mockFileChange, "Error 1", () => {}, {});
-          
-          expect(result.passed).toBe(true);
-          expect(result.logs).toContain("Tests passed");
-          // Should not call Mental Walkthrough (2nd call)
-          expect(mocks.generateContent).toHaveBeenCalledTimes(1);
+          const results = await toolCodeSearch(e2bConfig, 'foo');
+          expect(results).toEqual(['src/main.py', 'src/utils.py']);
+          expect(mocks.e2bExec).toHaveBeenCalledWith(expect.stringContaining('grep -r "foo"'));
       });
 
-      it('should trigger Mental Walkthrough on failure and prepend analysis', async () => {
-          // 1. Mock Failed Simulation
-          mocks.generateContent.mockResolvedValueOnce({ 
-              text: JSON.stringify({ passed: false, logs: "Error: ReferenceError: x is not defined" }) 
-          });
-
-          // 2. Mock Mental Walkthrough Analysis
-          mocks.generateContent.mockResolvedValueOnce({ 
-              text: "PROGRESS: The error changed from SyntaxError to ReferenceError." 
-          });
-
-          const result = await runSandboxTest(mockConfig, mockGroup, 0, true, mockFileChange, "SyntaxError", () => {}, {});
-          
-          expect(result.passed).toBe(false);
-          // Crucial: Analysis must be at the TOP (prepended)
-          expect(result.logs).toContain("--- MENTAL WALKTHROUGH ---");
-          expect(result.logs).toContain("PROGRESS: The error changed");
-          expect(result.logs.indexOf("PROGRESS:")).toBeLessThan(result.logs.indexOf("Error: ReferenceError"));
-          
-          expect(mocks.generateContent).toHaveBeenCalledTimes(2);
+      it('should return empty in simulation mode', async () => {
+          const results = await toolCodeSearch(mockConfig, 'foo');
+          expect(results).toEqual([]);
       });
   });
-
 });

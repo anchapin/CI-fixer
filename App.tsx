@@ -501,7 +501,8 @@ const App: React.FC = () => {
         ...config,
         llmProvider: config.llmProvider || 'gemini',
         llmModel: config.llmModel || 'gemini-2.5-flash',
-        sandboxMode: config.sandboxMode || 'simulation'
+        devEnv: config.devEnv || 'simulation',
+        checkEnv: config.checkEnv || 'simulation'
     };
     setAppConfig(finalConfig);
     setIsSettingsOpen(false);
@@ -509,11 +510,16 @@ const App: React.FC = () => {
     addLog('SUCCESS', `Uplink Configured. Target: ${config.prUrl}`);
     addLog('INFO', `LLM Initialized: ${finalConfig.llmProvider} / ${finalConfig.llmModel}`);
     
-    if (finalConfig.sandboxMode === 'github_actions') {
-        addLog('WARN', 'REAL CLOUD EXECUTION ENABLED. Agent will create branches and trigger workflows.');
-        addLog('WARN', 'Ensure your workflows trigger on push to "agent/*" branches.');
+    if (finalConfig.checkEnv === 'github_actions') {
+        addLog('WARN', 'CHECK ENV: GitHub Actions Enabled. Commits will be pushed.');
     } else {
-        addLog('INFO', 'Sandbox Mode: Virtual Simulation (Safe)');
+        addLog('INFO', 'CHECK ENV: Simulation');
+    }
+
+    if (finalConfig.devEnv === 'e2b') {
+        addLog('INFO', 'DEV ENV: E2B Cloud Sandbox Active.');
+    } else {
+         addLog('INFO', 'DEV ENV: Simulation');
     }
     
     addLog('INFO', 'Ready to engage Multi-Agent Pipeline.');

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
-import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box } from 'lucide-react';
+import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal } from 'lucide-react';
 import { getPRFailedRuns } from '../services';
 
 interface SettingsModalProps {
@@ -17,14 +17,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     repoUrl: '',
     prUrl: '',
     selectedRuns: [],
-    excludeWorkflowPatterns: [], // Default to empty to show all runs initially
+    excludeWorkflowPatterns: [], 
     llmProvider: 'gemini',
     llmBaseUrl: '',
-    llmModel: 'gemini-3-pro-preview', // Default to Reasoning Model
+    llmModel: 'gemini-3-pro-preview', 
     customApiKey: '',
     searchProvider: 'gemini_grounding',
     tavilyApiKey: '',
-    sandboxMode: 'simulation',
+    devEnv: 'simulation',
+    checkEnv: 'simulation',
     e2bApiKey: '',
     sandboxTimeoutMinutes: 15,
     logLevel: 'info'
@@ -45,11 +46,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           customApiKey: currentConfig.customApiKey || '',
           searchProvider: currentConfig.searchProvider || 'gemini_grounding',
           tavilyApiKey: currentConfig.tavilyApiKey || '',
-          sandboxMode: currentConfig.sandboxMode || 'simulation',
+          devEnv: currentConfig.devEnv || 'simulation',
+          checkEnv: currentConfig.checkEnv || 'simulation',
           e2bApiKey: currentConfig.e2bApiKey || '',
           sandboxTimeoutMinutes: currentConfig.sandboxTimeoutMinutes || 15,
           logLevel: currentConfig.logLevel || 'info',
-          // Ensure string fields are never undefined to keep inputs controlled
           prUrl: currentConfig.prUrl || '',
           githubToken: currentConfig.githubToken || '',
           repoUrl: currentConfig.repoUrl || ''
@@ -64,9 +65,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       const provider = e.target.value;
       let updates: Partial<AppConfig> = { llmProvider: provider };
       
-      // Auto-configure defaults based on provider documentation
       if (provider === 'zai') {
-          // GLM Coding Plan Endpoint
           updates.llmBaseUrl = 'https://api.z.ai/api/coding/paas/v4';
           updates.llmModel = 'GLM-4.6';
       } else if (provider === 'gemini') {
@@ -79,13 +78,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const handlePrUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newUrl = e.target.value;
-      // If URL changes, clear runs to force re-fetch and ensure repoUrl consistency
       if (newUrl !== formData.prUrl) {
           setFormData(prev => ({ 
               ...prev, 
               prUrl: newUrl, 
               selectedRuns: [], 
-              repoUrl: '' // Clear repoUrl so it must be regenerated
+              repoUrl: '' 
           }));
           setFoundRuns([]);
       }
@@ -97,8 +95,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           return;
       }
       
-      // Parse PR URL
-      // Expected: https://github.com/OWNER/REPO/pull/NUMBER
       const match = formData.prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
       if (!match) {
           setValidationError("Invalid PR URL format. Use https://github.com/owner/repo/pull/123");
@@ -120,11 +116,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               formData.excludeWorkflowPatterns || []
           );
           
-          // Deduplicate: Keep only the most recent run (highest ID) for each workflow name
           const uniqueRuns: WorkflowRun[] = [];
           const seenNames = new Set<string>();
-          
-          // Sort by ID descending to ensure we process latest first
           const sortedRuns = [...rawRuns].sort((a, b) => b.id - a.id);
           
           for (const run of sortedRuns) {
@@ -139,7 +132,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           }
           
           setFoundRuns(uniqueRuns);
-          // Default select all
           setFormData(prev => ({ ...prev, selectedRuns: uniqueRuns }));
       } catch (e: any) {
           console.error("Fetch Runs Error:", e);
@@ -172,10 +164,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   const handleSave = () => {
     if (!formData.githubToken?.trim()) { setValidationError("GitHub Token required."); return; }
-    // API Key validation removed - handled by process.env.API_KEY check at runtime/compile time
     if (!formData.selectedRuns || formData.selectedRuns.length === 0) { setValidationError("Please select at least one failed run to fix."); return; }
     
-    // Safety check: ensure repoUrl is set (should be set by handleFetchRuns, but if runs were manually manipulated...)
     if (!formData.repoUrl && formData.prUrl) {
         const match = formData.prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
         if (match) {
@@ -184,7 +174,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         }
     }
 
-    if (formData.sandboxMode === 'e2b' && !formData.e2bApiKey?.trim()) {
+    if (formData.devEnv === 'e2b' && !formData.e2bApiKey?.trim()) {
         setValidationError("E2B API Key is required for Cloud Sandbox mode.");
         return;
     }
@@ -258,7 +248,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                         </select>
                     </div>
 
-                    {/* NEW: Model Selection */}
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Model Tier</label>
                         <select 
@@ -298,26 +287,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 </div>
             </div>
 
-            {/* Sandbox Configuration */}
+            {/* Sandbox Configuration (SPLIT ARCHITECTURE) */}
             <div className="border border-slate-800 rounded bg-slate-950/50 p-3">
                 <h3 className="text-xs font-bold text-slate-300 uppercase mb-3 flex items-center gap-2">
-                    <CloudLightning className="w-3 h-3 text-amber-400" /> Sandbox Execution
+                    <CloudLightning className="w-3 h-3 text-amber-400" /> Execution Environment
                 </h3>
                 <div className="space-y-3">
+                    
+                    {/* Dev Environment */}
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Verification Strategy</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                           <Terminal className="w-3 h-3" /> Agent Loop (Dev)
+                        </label>
                         <select 
-                            value={formData.sandboxMode || 'simulation'}
-                            onChange={e => setFormData({...formData, sandboxMode: e.target.value as any})}
+                            value={formData.devEnv || 'simulation'}
+                            onChange={e => setFormData({...formData, devEnv: e.target.value as any})}
                             className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-amber-500/50"
                         >
-                            <option value="simulation">Virtual Simulator (Fast / LLM)</option>
-                            <option value="github_actions">GitHub Actions (Real / Cloud)</option>
-                            <option value="e2b">E2B Cloud Sandbox (Real / Container)</option>
+                            <option value="simulation">Virtual Simulator (Mock)</option>
+                            <option value="e2b">E2B Cloud Sandbox (Real)</option>
+                        </select>
+                    </div>
+
+                    {/* Check Environment */}
+                    <div className="space-y-1">
+                         <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                           <Check className="w-3 h-3" /> Test Phase (Verify)
+                        </label>
+                        <select 
+                            value={formData.checkEnv || 'simulation'}
+                            onChange={e => setFormData({...formData, checkEnv: e.target.value as any})}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-emerald-500/50"
+                        >
+                            <option value="simulation">Virtual Simulator (Mock)</option>
+                            <option value="github_actions">GitHub Actions (Real)</option>
                         </select>
                     </div>
                     
-                    {formData.sandboxMode === 'e2b' && (
+                    {formData.devEnv === 'e2b' && (
                         <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
                             <label className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
                                 <Box className="w-3 h-3" /> E2B API Key
@@ -332,9 +339,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                         </div>
                     )}
 
-                    {formData.sandboxMode === 'github_actions' && (
+                    {formData.checkEnv === 'github_actions' && (
                         <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
-                            <label className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
+                            <label className="text-[10px] font-bold text-emerald-500 uppercase flex items-center gap-1">
                                 <Timer className="w-3 h-3" /> Max Wait Time (Minutes)
                             </label>
                             <input 
@@ -343,11 +350,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                 max="30"
                                 value={formData.sandboxTimeoutMinutes || 15}
                                 onChange={e => setFormData({...formData, sandboxTimeoutMinutes: parseInt(e.target.value) || 15})}
-                                className="w-full bg-slate-900 border border-amber-900/50 rounded px-2 py-1.5 text-xs text-amber-100 focus:border-amber-500/50"
+                                className="w-full bg-slate-900 border border-emerald-900/50 rounded px-2 py-1.5 text-xs text-emerald-100 focus:border-emerald-500/50"
                             />
-                            <p className="text-[9px] text-slate-500 leading-tight pt-1">
-                                Agent will create a branch, push the fix, trigger a workflow, and poll for results.
-                            </p>
                         </div>
                     )}
                 </div>

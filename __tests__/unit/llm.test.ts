@@ -24,7 +24,7 @@ describe('LLM Provider & Tools', () => {
 
     describe('unifiedGenerate', () => {
         it('should call Gemini when provider is gemini', async () => {
-            const config: AppConfig = { llmProvider: 'gemini', githubToken: '', repoUrl: '', selectedRuns: [] };
+            const config: AppConfig = { llmProvider: 'gemini', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation' };
             mocks.generateContent.mockResolvedValue({ text: 'gemini response' });
 
             const res = await unifiedGenerate(config, { contents: 'prompt' });
@@ -33,7 +33,7 @@ describe('LLM Provider & Tools', () => {
         });
 
         it('should call Z.AI (via fetch) when provider is zai', async () => {
-            const config: AppConfig = { llmProvider: 'zai', customApiKey: 'key', githubToken: '', repoUrl: '', selectedRuns: [] };
+            const config: AppConfig = { llmProvider: 'zai', customApiKey: 'key', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation', llmModel: 'GLM-4.6' };
             
             vi.mocked(fetch).mockResolvedValueOnce({
                 ok: true,
@@ -42,11 +42,43 @@ describe('LLM Provider & Tools', () => {
 
             const res = await unifiedGenerate(config, { contents: 'prompt' });
             expect(res.text).toBe('zai response');
-            expect(fetch).toHaveBeenCalledWith(expect.stringContaining('api.z.ai'), expect.anything());
+            
+            // Check that fetch was called with the Z.AI model
+            const callArgs = vi.mocked(fetch).mock.calls[0];
+            const body = JSON.parse(callArgs[1]?.body as string);
+            expect(body.model).toBe('GLM-4.6');
+        });
+
+        it('should ignore Gemini model constant and use configured model if provider is Z.AI', async () => {
+            // Case: Internal function passes 'gemini-2.5-flash' but user selected Z.AI / GLM-4.6
+            const config: AppConfig = { 
+                llmProvider: 'zai', 
+                customApiKey: 'key', 
+                llmModel: 'GLM-4.6', 
+                githubToken: '', 
+                repoUrl: '', 
+                selectedRuns: [], 
+                devEnv: 'simulation', 
+                checkEnv: 'simulation' 
+            };
+            
+            vi.mocked(fetch).mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ choices: [{ message: { content: 'ok' } }] })
+            } as Response);
+
+            // Pass Gemini model as `model` param
+            await unifiedGenerate(config, { contents: 'prompt', model: 'gemini-2.5-flash' });
+
+            const callArgs = vi.mocked(fetch).mock.calls[0];
+            const body = JSON.parse(callArgs[1]?.body as string);
+            
+            // Expect it to override 'gemini-2.5-flash' with 'GLM-4.6'
+            expect(body.model).toBe('GLM-4.6');
         });
         
         it('should retry Gemini calls on 429/503 errors', async () => {
-            const config: AppConfig = { llmProvider: 'gemini', githubToken: '', repoUrl: '', selectedRuns: [] };
+            const config: AppConfig = { llmProvider: 'gemini', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation' };
             
             // Fail once with 503, then succeed
             mocks.generateContent
@@ -59,7 +91,7 @@ describe('LLM Provider & Tools', () => {
         });
 
         it('should try fallback models if primary model returns 404', async () => {
-             const config: AppConfig = { llmProvider: 'gemini', llmModel: 'gemini-non-existent', githubToken: '', repoUrl: '', selectedRuns: [] };
+             const config: AppConfig = { llmProvider: 'gemini', llmModel: 'gemini-non-existent', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation' };
 
              // First call fails with 404 (Not Found)
              mocks.generateContent.mockRejectedValueOnce({ status: 404, message: 'Model not found' });

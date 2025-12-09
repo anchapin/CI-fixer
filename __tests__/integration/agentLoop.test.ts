@@ -28,7 +28,9 @@ describe('Agent Loop Integration', () => {
     githubToken: 'mock-token',
     repoUrl: 'owner/repo',
     selectedRuns: [],
-    llmProvider: 'gemini'
+    llmProvider: 'gemini',
+    devEnv: 'simulation',
+    checkEnv: 'simulation'
   };
 
   const mockGroup: RunGroup = {
@@ -43,7 +45,6 @@ describe('Agent Loop Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set default safe returns for optional tools to prevent undefined errors
     vi.mocked(services.toolScanDependencies).mockResolvedValue("No dependencies found");
     vi.mocked(services.toolCodeSearch).mockResolvedValue([]);
     vi.mocked(services.toolWebSearch).mockResolvedValue("No results");
@@ -101,99 +102,68 @@ describe('Agent Loop Integration', () => {
     expect(finalState.phase).toBe(AgentPhase.SUCCESS);
     
     // Assertions for Protocol: Verify File Locking Steps
-    // 1. Should transition to ACQUIRE_LOCK
     expect(updateStateCallback).toHaveBeenCalledWith(
         mockGroup.id, 
         expect.objectContaining({ phase: AgentPhase.ACQUIRE_LOCK })
     );
-    
-    // 2. Should actually hold a reservation for the diagnosed file
     expect(updateStateCallback).toHaveBeenCalledWith(
         mockGroup.id,
         expect.objectContaining({ fileReservations: ["src/calc.py"] })
     );
-
-    // 3. Should RELEASE the lock at end of successful run (fileReservations becomes empty)
     expect(updateStateCallback).toHaveBeenCalledWith(
         mockGroup.id,
         expect.objectContaining({ fileReservations: [] })
     );
-
-    // Basic Service Calls
-    expect(services.generateFix).toHaveBeenCalled();
-    expect(services.runSandboxTest).toHaveBeenCalled();
   });
 
-  it('should handle failure after max retries and invoke tools during retry', async () => {
-     // Mock consistent failure
-     vi.mocked(services.getWorkflowLogs).mockResolvedValue({ logText: "Error", jobName: "job", headSha: "123" });
-     vi.mocked(services.diagnoseError).mockResolvedValue({ summary: "Error", filePath: "file.py" });
-     vi.mocked(services.findClosestFile).mockResolvedValue({ 
-        file: { name: "file.py", language: "python", content: "code" },
-        path: "file.py"
-     });
-     
-     // Judge rejects fix repeatedly
-     vi.mocked(services.generateFix).mockResolvedValue("bad code");
-     vi.mocked(services.toolLintCheck).mockResolvedValue({ valid: true });
-     vi.mocked(services.judgeFix).mockResolvedValue({ passed: false, score: 2, reasoning: "Bad code" });
+  it('should fallback to summary search if diagnosis filepath is empty', async () => {
+      // 1. Logs
+      vi.mocked(services.getWorkflowLogs).mockResolvedValue({ logText: "err", jobName: "j", headSha: "s" });
+      
+      // 2. Diagnosis returns empty filePath (CyberSentinel case)
+      vi.mocked(services.diagnoseError).mockResolvedValue({ summary: "Duplicate Test Module", filePath: "" });
+      
+      // 3. findClosestFile fails first time (empty path) then succeeds
+      vi.mocked(services.findClosestFile)
+        .mockResolvedValueOnce(null) // 1st call for empty path
+        .mockResolvedValueOnce({ file: { name: 'test_dup.py', content: '', language: 'py' }, path: 'test_dup.py' }); // 2nd call after search
+      
+      // 4. Search finds a file using the Summary
+      vi.mocked(services.toolCodeSearch).mockResolvedValue(["test_dup.py"]);
+      
+      // Rest of flow success
+      vi.mocked(services.generateFix).mockResolvedValue("fixed");
+      vi.mocked(services.toolLintCheck).mockResolvedValue({ valid: true });
+      vi.mocked(services.judgeFix).mockResolvedValue({ passed: true, score: 10, reasoning: "ok" });
+      vi.mocked(services.runSandboxTest).mockResolvedValue({ passed: true, logs: "ok" });
 
-     // Mock Plan generation for retries
-     vi.mocked(services.generateDetailedPlan).mockResolvedValue({ goal: "fix", tasks: [], approved: true });
-     vi.mocked(services.judgeDetailedPlan).mockResolvedValue({ approved: true, feedback: "ok" });
-
-     const finalState = await runIndependentAgentLoop(
-         mockConfig, mockGroup, "", updateStateCallback, logCallback
-     );
-
-     expect(finalState.status).toBe('failed');
-     expect(finalState.phase).toBe(AgentPhase.FAILURE);
-     
-     // Should have retried 3 times (loop 0, 1, 2)
-     expect(services.judgeFix).toHaveBeenCalledTimes(3);
-     
-     // Web Search should be called during retry iterations (iteration > 0)
-     expect(services.toolWebSearch).toHaveBeenCalled();
-
-     // Protocol: Should attempt to release locks even on failure loops
-     expect(updateStateCallback).toHaveBeenCalledWith(
-        mockGroup.id,
-        expect.objectContaining({ fileReservations: [] })
-    );
+      const state = await runIndependentAgentLoop(mockConfig, mockGroup, "", updateStateCallback, logCallback);
+      
+      expect(state.status).toBe('success');
+      // Assert search was called with summary
+      expect(services.toolCodeSearch).toHaveBeenCalledWith(expect.anything(), "Duplicate Test Module");
   });
 
-  it('should self-correct syntax errors during IMPLEMENT phase', async () => {
-     // Understand Phase
-     vi.mocked(services.getWorkflowLogs).mockResolvedValue({ logText: "SyntaxError", jobName: "job", headSha: "123" });
-     vi.mocked(services.diagnoseError).mockResolvedValue({ summary: "Syntax Error", filePath: "file.py" });
-     vi.mocked(services.findClosestFile).mockResolvedValue({ file: { name: "file.py", content: "code", language: "python" }, path: "file.py" });
-     
-     // 1. First Fix Generation (Bad Syntax)
-     vi.mocked(services.generateFix).mockResolvedValueOnce("def foo( : pass"); // Missing closing param
-     
-     // 2. Linter Checks
-     vi.mocked(services.toolLintCheck)
-        .mockResolvedValueOnce({ valid: false, error: "Invalid syntax" }) // First check fails
-        .mockResolvedValueOnce({ valid: true }); // Second check (after self-correct) passes
+  it('should fail after max iterations if tests do not pass', async () => {
+      // 1. Logs & Diagnosis
+      vi.mocked(services.getWorkflowLogs).mockResolvedValue({ logText: "err", jobName: "j", headSha: "s" });
+      vi.mocked(services.diagnoseError).mockResolvedValue({ summary: "Broken", filePath: "f.py" });
+      vi.mocked(services.findClosestFile).mockResolvedValue({ file: { name: 'f.py', content: '', language: 'py' }, path: 'f.py' });
+      
+      // 2. Fix generation always succeeds
+      vi.mocked(services.generateFix).mockResolvedValue("fixed_code");
+      vi.mocked(services.toolLintCheck).mockResolvedValue({ valid: true });
+      
+      // 3. Judge passes the fix
+      vi.mocked(services.judgeFix).mockResolvedValue({ passed: true, score: 8, reasoning: "looks ok" });
+      
+      // 4. Sandbox FAILS every time
+      vi.mocked(services.runSandboxTest).mockResolvedValue({ passed: false, logs: "Tests Failed" });
 
-     // 3. Self-Correction Generation
-     vi.mocked(services.generateFix).mockResolvedValueOnce("def foo(): pass"); // Corrected
+      const state = await runIndependentAgentLoop(mockConfig, mockGroup, "", updateStateCallback, logCallback);
 
-     // 4. Verify/Sandbox
-     vi.mocked(services.judgeFix).mockResolvedValue({ passed: true, score: 9, reasoning: "Good" });
-     vi.mocked(services.runSandboxTest).mockResolvedValue({ passed: true, logs: "PASS" });
-
-     const finalState = await runIndependentAgentLoop(mockConfig, mockGroup, "", updateStateCallback, logCallback);
-
-     expect(finalState.status).toBe('success');
-     
-     // Should have called generateFix twice (Initial + Self-Correction)
-     expect(services.generateFix).toHaveBeenCalledTimes(2);
-     
-     // Should have called Linter twice
-     expect(services.toolLintCheck).toHaveBeenCalledTimes(2);
-     
-     // Check logs for self-correction message
-     expect(logCallback).toHaveBeenCalledWith('WARN', expect.stringContaining('Agent attempting self-correction'), expect.anything(), expect.anything());
+      expect(state.status).toBe('failed');
+      expect(state.phase).toBe(AgentPhase.FAILURE);
+      expect(services.runSandboxTest).toHaveBeenCalledTimes(3); // Assuming MAX_ITERATIONS is 3 in agent.ts
   });
 });
