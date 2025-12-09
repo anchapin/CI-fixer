@@ -117,6 +117,9 @@ export async function runIndependentAgentLoop(
         updateStateCallback(group.id, currentState);
         log('INFO', `Acquired lock on ${targetFile.path}`);
 
+        // --- FIX: Track previous feedback to prevent loops ---
+        const feedbackHistory: string[] = [];
+
         for (let i = 0; i < MAX_ITERATIONS; i++) {
             currentState.iteration = i;
             updateStateCallback(group.id, currentState);
@@ -125,10 +128,17 @@ export async function runIndependentAgentLoop(
             updateStateCallback(group.id, currentState);
 
             let extraContext = "";
+            
+            // Inject feedback from previous failures
+            if (feedbackHistory.length > 0) {
+                extraContext += `\n\nPREVIOUS ATTEMPTS FAILED. REVIEW FEEDBACK:\n${feedbackHistory.join('\n')}\n`;
+                extraContext += `IMPORTANT: You MUST modify the code. If you return the exact same code, the fix will fail again.\n`;
+            }
+
             if (i > 0) {
                 log('TOOL', 'Searching web for solutions...');
                 const webResult = await toolWebSearch(config, diagnosis.summary);
-                extraContext = `\nWEB SEARCH RESULTS:\n${webResult}`;
+                extraContext += `\nWEB SEARCH RESULTS:\n${webResult}`;
             }
 
             const fixCode = await generateFix(config, { 
@@ -174,7 +184,10 @@ export async function runIndependentAgentLoop(
                     return currentState;
                 } else {
                     log('WARN', `Sandbox Test Failed: ${testResult.logs.substring(0, 100)}...`);
+                    feedbackHistory.push(`Sandbox Test Failed: ${testResult.logs.substring(0, 200)}`);
                 }
+            } else {
+                feedbackHistory.push(`Judge Rejected: ${judgeResult.reasoning}`);
             }
             
             log('WARN', `Iteration ${i} failed. Retrying...`);
