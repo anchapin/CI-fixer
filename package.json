@@ -15,7 +15,8 @@
     "@google/genai": "latest",
     "diff": "latest",
     "vitest": "^4.0.15",
-    "@playwright/test": "^1.57.0"
+    "@playwright/test": "^1.57.0",
+    "@e2b/code-interpreter": "latest"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

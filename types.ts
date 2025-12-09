@@ -3,13 +3,14 @@ export enum AgentPhase {
   IDLE = 'IDLE',
   INIT_REPO = 'INIT_REPO',
   UNDERSTAND = 'UNDERSTAND',
+  EXPLORE = 'EXPLORE', // New Phase: Active Shell Investigation
   PLAN = 'PLAN',
-  PLAN_APPROVAL = 'PLAN_APPROVAL', // New Phase: Judge reviewing plan
-  ACQUIRE_LOCK = 'ACQUIRE_LOCK', // New Phase: File Reservation
+  PLAN_APPROVAL = 'PLAN_APPROVAL', 
+  ACQUIRE_LOCK = 'ACQUIRE_LOCK', 
   TOOL_USE = 'TOOL_USE', 
   IMPLEMENT = 'IMPLEMENT',
   VERIFY = 'VERIFY',
-  RELEASE_LOCK = 'RELEASE_LOCK', // New Phase: Releasing Reservation
+  RELEASE_LOCK = 'RELEASE_LOCK', 
   CONSOLIDATE = 'CONSOLIDATE', 
   TESTING = 'TESTING',
   SUCCESS = 'SUCCESS',
@@ -70,7 +71,8 @@ export interface AppConfig {
   tavilyApiKey?: string;
 
   // Sandbox / Verification Settings
-  sandboxMode?: 'simulation' | 'github_actions';
+  sandboxMode?: 'simulation' | 'github_actions' | 'e2b';
+  e2bApiKey?: string;
   sandboxTimeoutMinutes?: number;
 
   // Logging

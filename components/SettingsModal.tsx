@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
-import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders } from 'lucide-react';
+import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box } from 'lucide-react';
 import { getPRFailedRuns } from '../services';
 
 interface SettingsModalProps {
@@ -25,6 +25,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     searchProvider: 'gemini_grounding',
     tavilyApiKey: '',
     sandboxMode: 'simulation',
+    e2bApiKey: '',
     sandboxTimeoutMinutes: 15,
     logLevel: 'info'
   });
@@ -45,6 +46,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           searchProvider: currentConfig.searchProvider || 'gemini_grounding',
           tavilyApiKey: currentConfig.tavilyApiKey || '',
           sandboxMode: currentConfig.sandboxMode || 'simulation',
+          e2bApiKey: currentConfig.e2bApiKey || '',
           sandboxTimeoutMinutes: currentConfig.sandboxTimeoutMinutes || 15,
           logLevel: currentConfig.logLevel || 'info',
           // Ensure string fields are never undefined to keep inputs controlled
@@ -182,6 +184,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         }
     }
 
+    if (formData.sandboxMode === 'e2b' && !formData.e2bApiKey?.trim()) {
+        setValidationError("E2B API Key is required for Cloud Sandbox mode.");
+        return;
+    }
+
     onSave(formData as AppConfig);
   };
 
@@ -306,9 +313,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                         >
                             <option value="simulation">Virtual Simulator (Fast / LLM)</option>
                             <option value="github_actions">GitHub Actions (Real / Cloud)</option>
+                            <option value="e2b">E2B Cloud Sandbox (Real / Container)</option>
                         </select>
                     </div>
                     
+                    {formData.sandboxMode === 'e2b' && (
+                        <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
+                            <label className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
+                                <Box className="w-3 h-3" /> E2B API Key
+                            </label>
+                            <input 
+                                type="password" 
+                                value={formData.e2bApiKey || ''}
+                                onChange={e => setFormData({...formData, e2bApiKey: e.target.value})}
+                                className="w-full bg-slate-900 border border-amber-900/50 rounded px-2 py-1.5 text-xs text-amber-100 focus:border-amber-500/50"
+                                placeholder="e2b_..."
+                            />
+                        </div>
+                    )}
+
                     {formData.sandboxMode === 'github_actions' && (
                         <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
                             <label className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">

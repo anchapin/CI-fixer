@@ -1,11 +1,15 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { Sandbox } from '@e2b/code-interpreter';
 import { AppConfig, WorkflowRun, CodeFile, FileChange, AgentPlan, RunGroup, AgentPhase, PlanTask, AgentState } from './types';
 
 // --- Constants ---
 export const MODEL_FAST = 'gemini-2.5-flash';
 export const MODEL_SMART = 'gemini-3-pro-preview';
 const GITHUB_API_BASE = 'https://api.github.com';
+
+// Cache for active E2B sandboxes to persist state (e.g. git clone) across commands
+const activeSandboxes = new Map<string, Sandbox>();
 
 // --- CONTEXT COMPILER ---
 export function compileContext(
@@ -20,6 +24,7 @@ export function compileContext(
 
     switch (phase) {
         case AgentPhase.UNDERSTAND:
+        case AgentPhase.EXPLORE: // Share context with Understand
         case AgentPhase.PLAN:
         case AgentPhase.PLAN_APPROVAL:
             context += `Repository Architecture:\n${repoSummary}\n`;
@@ -353,6 +358,7 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     Constraints:
     1. Output strictly valid JSON.
     2. FILEPATH must be relative to repo root. Do NOT return directory paths. Guess the specific .yml file if it is a workflow error.
+    3. If the error is 'File Not Found', use the MISSING file path as the filePath.
     
     Log Snippet:
     ${truncatedLog}
@@ -395,10 +401,25 @@ export async function generateDetailedPlan(config: AppConfig, errorSummary: stri
     }
 }
 
-export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, errorSummary: string): Promise<{ approved: boolean, feedback: string }> {
-    const prompt = `Review plan for "${errorSummary}". Plan: ${JSON.stringify(plan)}. Return JSON: { "approved": boolean, "feedback": "string" }`;
+export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, errorSummary: string, recentLogs: string): Promise<{ approved: boolean, feedback: string }> {
+    const safeLogs = recentLogs.length > 5000 ? recentLogs.substring(recentLogs.length - 5000) : recentLogs;
+    const prompt = `
+    You are a Senior DevOps Lead reviewing a remediation plan.
+    
+    RAW LOGS (Ground Truth):
+    ${safeLogs}
+    
+    AGENT'S DIAGNOSIS: "${errorSummary}"
+    AGENT'S PLAN: ${JSON.stringify(plan)}
+    
+    CRITICAL INSTRUCTIONS:
+    1. Compare the AGENT'S DIAGNOSIS with the RAW LOGS. 
+    2. If the logs show a clear specific error (e.g., "No space left", "Missing file", "Import error") but the Agent says "Unknown Error", REJECT the plan.
+    3. If the plan is "Add Logging" but the error is already visible in the logs, REJECT the plan and instruct the agent to fix the visible error.
+    4. Return strictly JSON: { "approved": boolean, "feedback": "string" }
+    `;
     try {
-        const response = await unifiedGenerate(config, { contents: prompt, config: { responseMimeType: "application/json" }, model: MODEL_FAST });
+        const response = await unifiedGenerate(config, { contents: prompt, config: { responseMimeType: "application/json" }, model: MODEL_SMART });
         return safeJsonParse(response.text || "{}", { approved: true, feedback: "Auto-approved." });
     } catch { return { approved: true, feedback: "Judge Offline. Auto-approving." }; }
 }
@@ -430,7 +451,7 @@ export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSu
   `;
   const response = await unifiedGenerate(config, {
     contents: prompt,
-    config: { systemInstruction: "You are an expert Code Repair Agent.", maxOutputTokens: 16384 },
+    config: { systemInstruction: "You are an expert Code Repair Agent.", maxOutputTokens: 65536 }, // Increased limit
     model: MODEL_SMART
   });
   return extractCode(response.text || "", codeFile.language);
@@ -463,6 +484,118 @@ export async function generatePostMortem(config: AppConfig, failedAgents: AgentS
 }
 
 // --- TOOLS ---
+
+// New: Simulate Command Execution
+export async function toolExecuteCommand(config: AppConfig, command: string, context: string, agentId?: string): Promise<string> {
+    // Handling E2B Mode with REAL CLOUD EXECUTION
+    if (config.sandboxMode === 'e2b') {
+        if (!config.e2bApiKey) return "Error: E2B API Key is missing in settings.";
+
+        try {
+            let sb = agentId ? activeSandboxes.get(agentId) : undefined;
+            if (!sb) {
+                 // Initialize Sandbox (CodeInterpreter default has python/node/git)
+                 sb = await Sandbox.create({ apiKey: config.e2bApiKey });
+                 
+                 // Attempt to clone repo if agentId is provided (stateful session initialization)
+                 if (agentId) {
+                     activeSandboxes.set(agentId, sb);
+                     if (config.githubToken && config.repoUrl) {
+                         // We clone the repo into the container so 'ls' and other tools work on real files
+                         const repoWithAuth = `https://${config.githubToken}@github.com/${config.repoUrl}.git`;
+                         await sb.commands.run(`git clone ${repoWithAuth} repo`);
+                     }
+                 }
+            }
+
+            // Execute in the 'repo' directory if it exists, otherwise default cwd
+            const workDir = agentId ? '/home/user/repo' : undefined;
+            
+            const result = await sb.commands.run(command, { cwd: workDir });
+            
+            if (result.error) return `E2B Runtime Error: ${result.error}`;
+            return result.stdout + (result.stderr ? `\nSTDERR:\n${result.stderr}` : '');
+
+        } catch (e: any) {
+            return `E2B Exception: ${e.message}`;
+        }
+    }
+
+    // Default Simulation Mode (LLM Hallucination)
+    const prompt = `
+    Role: Linux Terminal Simulator.
+    Context: A DevOps agent is investigating a repo.
+    Repo Context: ${context.substring(0, 2000)}...
+    
+    Task: Simulate running the command: "${command}"
+    
+    Rules:
+    1. Return REALISTIC stdout/stderr. 
+    2. If command is 'ls' or 'find', return file lists consistent with repo context.
+    3. If command is 'rm', return nothing (success) or 'No such file'.
+    4. If command is 'npm install' or 'pip install', simulate dependency installation output.
+    5. Return ONLY the output text. No markdown blocks.
+    `;
+    
+    try {
+        const response = await unifiedGenerate(config, { 
+            contents: prompt, 
+            model: MODEL_FAST,
+            config: { maxOutputTokens: 1024 }
+        });
+        return response.text || "";
+    } catch { return "Error: Shell Simulator Offline."; }
+}
+
+// New: Generate Investigation Commands
+export async function generateExplorationCommands(config: AppConfig, error: string, context: string): Promise<string[]> {
+    const prompt = `
+    Error: "${error}"
+    Repo Context: ${context.substring(0, 1000)}...
+    
+    Task: Return a JSON list of shell commands to investigate this error.
+    Example: ["ls -R tests/", "cat package.json", "grep -r 'Todo' ."]
+    
+    Rules:
+    1. Use 'ls', 'cat', 'grep', 'find' to gather info.
+    2. Do NOT use destructive commands yet.
+    3. Return JSON: { "commands": ["cmd1", "cmd2"] }
+    `;
+    
+    try {
+        const response = await unifiedGenerate(config, { 
+            contents: prompt, 
+            config: { responseMimeType: "application/json" },
+            model: MODEL_FAST 
+        });
+        const parsed = safeJsonParse(response.text || "{}", { commands: [] });
+        return parsed.commands || [];
+    } catch { return []; }
+}
+
+// New: Decide Action Type
+export async function generateAction(config: AppConfig, plan: AgentPlan, context: string): Promise<{ type: 'command' | 'edit', command?: string, filePath?: string }> {
+    const prompt = `
+    Current Plan: ${JSON.stringify(plan)}
+    Repo Context: ${context.substring(0, 1000)}...
+    
+    Task: Decide if the next step requires a Shell Command (e.g. 'rm file', 'npm install') or a Code Edit.
+    
+    Return JSON: 
+    { "type": "command", "command": "rm -rf node_modules" } 
+    OR 
+    { "type": "edit", "filePath": "src/main.ts" }
+    `;
+    
+    try {
+         const response = await unifiedGenerate(config, { 
+            contents: prompt, 
+            config: { responseMimeType: "application/json" },
+            model: MODEL_FAST 
+        });
+        return safeJsonParse(response.text || "{}", { type: 'edit', filePath: '' });
+    } catch { return { type: 'edit', filePath: '' }; }
+}
 
 export async function toolCodeSearch(config: AppConfig, query: string): Promise<string[]> {
     const q = `${query} repo:${config.repoUrl}`;

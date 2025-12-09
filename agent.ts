@@ -1,3 +1,4 @@
+
 import { AppConfig, RunGroup, AgentState, AgentPhase, FileChange, LogLine, CodeFile, AgentPlan } from './types';
 import { 
     getWorkflowLogs, 
@@ -13,7 +14,10 @@ import {
     judgeFix, 
     runSandboxTest, 
     compileContext,
-    listRepoDirectory 
+    listRepoDirectory,
+    toolExecuteCommand,
+    generateExplorationCommands,
+    generateAction
 } from './services';
 
 // Helper for normalizeCode
@@ -58,6 +62,7 @@ export const runIndependentAgentLoop = async (
     // State to persist logs across iterations for adaptive diagnosis
     let currentLogText = "";
     let headSha = "";
+    let explorationLog = ""; // Store shell output
 
     while (iteration < MAX_RETRIES) {
         try {
@@ -109,69 +114,123 @@ export const runIndependentAgentLoop = async (
             if (!diagnosis) throw new Error("Diagnosis failed to return a valid object.");
             const safeSummary = diagnosis.summary || "Unknown Error";
             log('VERBOSE', `[DIAGNOSIS] Raw: ${JSON.stringify(diagnosis)}`);
+
+            // --- PHASE 1.5: EXPLORE (Shell Investigation) ---
+            currentState = { ...currentState, phase: AgentPhase.EXPLORE };
+            updateStateCallback(group.id, currentState);
             
+            // Ask Agent if it needs to explore
+            log('INFO', 'Initializing Shell Environment for investigation...');
+            const exploreCmds = await generateExplorationCommands(config, safeSummary, initialRepoContext + explorationLog);
+            
+            if (exploreCmds.length > 0) {
+                log('TOOL', `Executing ${exploreCmds.length} investigation commands...`);
+                for (const cmd of exploreCmds) {
+                    log('VERBOSE', `[SHELL] $ ${cmd}`);
+                    // PASS AGENT ID for persistent session
+                    const output = await toolExecuteCommand(config, cmd, initialRepoContext, group.id);
+                    log('VERBOSE', `[SHELL] > ${output.substring(0, 100).replace(/\n/g, ' ')}...`);
+                    explorationLog += `\n$ ${cmd}\n${output}\n`;
+                }
+                // Refine diagnosis with new info
+                log('INFO', 'Exploration complete. Refining context...');
+            } else {
+                log('INFO', 'Agent skipped active exploration (Confidence High).');
+            }
+
             // Fix: enhanced path cleaning to handle ./src prefix
             let cleanPath = diagnosis.filePath ? diagnosis.filePath.replace(/^(\.\/|\/)+/, '') : '';
+            
+            // NEW: Override for Lockfile Errors (ZeroOperator Fix)
+            const lowerSummary = safeSummary.toLowerCase();
+            if (lowerSummary.includes('frozen-lockfile') || lowerSummary.includes('lockfile is absent') || lowerSummary.includes('err_pnpm_no_lockfile')) {
+                log('WARN', `Missing Lockfile detected. Targeting package.json to potentially adjust scripts or versions.`);
+                cleanPath = 'package.json';
+            } else if (cleanPath) {
+                 // CyberSentinel Fix: Trust Diagnosis, but Verify Cross-Stack
+                 const isPythonError = lowerSummary.includes('python') || lowerSummary.includes('pip') || safeSummary.includes('.py');
+                 const isNodeError = lowerSummary.includes('npm') || lowerSummary.includes('node') || lowerSummary.includes('typescript') || lowerSummary.includes('react');
+                 
+                 const p = cleanPath.toLowerCase();
+                 const isPythonFile = p.endsWith('.py');
+                 const isNodeFile = p.endsWith('.ts') || p.endsWith('.tsx') || p.endsWith('.js') || p.endsWith('.jsx');
+
+                 if (isPythonError && isNodeFile) {
+                      log('WARN', `Diagnosis Mismatch: Error implies Python but target is ${cleanPath} (Node). Discarding target and invoking search.`);
+                      cleanPath = ''; // Force search
+                 } else if (isNodeError && isPythonFile) {
+                      log('WARN', `Diagnosis Mismatch: Error implies Node but target is ${cleanPath} (Python). Discarding target and invoking search.`);
+                      cleanPath = ''; // Force search
+                 }
+            }
             
             // Track search results for fallback logic
             let searchResults: string[] = [];
 
-            // --- TOOL: CODE SEARCH (If path ambiguous) ---
+            // --- TOOL: CODE SEARCH & RESOLUTION ---
             if (!cleanPath || cleanPath === 'unknown' || cleanPath === '') {
                  currentState = { ...currentState, phase: AgentPhase.TOOL_USE };
                  updateStateCallback(group.id, currentState);
-                 log('TOOL', `Invoking Code Search for error keywords...`);
-                 searchResults = await toolCodeSearch(config, safeSummary.substring(0, 30));
-                 log('VERBOSE', `[TOOL:CodeSearch] Results: ${JSON.stringify(searchResults)}`);
                  
-                 const lowerSummary = safeSummary.toLowerCase();
-
-                 if (searchResults.length > 0) {
-                     // NEW LOGIC: Heuristic filtering
-                     const extMatch = searchResults.find(f => {
-                         if (lowerSummary.includes('workflow') || lowerSummary.includes('ci')) return f.endsWith('.yml') || f.endsWith('.yaml');
-                         if (lowerSummary.includes('lockfile') || lowerSummary.includes('dependency') || lowerSummary.includes('module') || lowerSummary.includes('err_pnpm')) return f.endsWith('json') || f.endsWith('lock') || f.endsWith('txt');
-                         if (lowerSummary.includes('test')) return f.includes('test') || f.includes('spec');
-                         return false;
-                     });
-
-                     if (extMatch) {
-                         cleanPath = extMatch;
-                         log('INFO', `Search found context-relevant match: ${cleanPath}`);
+                 // IMPROVEMENT: Smart Missing File Detection
+                 // Regex to catch "No such file: 'requirements.txt'" or similar patterns in the summary
+                 const missingFileMatch = safeSummary.match(/(?:no such file|not found|missing).*?['"`]([^'"`\s]+\.[a-zA-Z0-9]+)['"`]/i);
+                 
+                 if (missingFileMatch && missingFileMatch[1]) {
+                     const missingCandidate = missingFileMatch[1];
+                     log('TOOL', `Diagnosis implies missing file: '${missingCandidate}'. Searching for existing locations...`);
+                     
+                     // Search specifically for this filename
+                     searchResults = await toolCodeSearch(config, `filename:${missingCandidate}`);
+                     
+                     if (searchResults.length === 0) {
+                         // If not found in repo, we MUST create it or fix the workflow.
+                         // Do NOT fuzzy search for random error words.
+                         cleanPath = missingCandidate;
+                         log('INFO', `File '${cleanPath}' appears to be completely missing from repo. Agent will target it for creation.`);
                      } else {
-                         // FIX: Handle "Missing File" hallucinations & Lockfile Errors
-                         const isLockfileError = lowerSummary.includes('lockfile') || lowerSummary.includes('err_pnpm') || lowerSummary.includes('frozen-lockfile');
-                         const isExplicitMissing = lowerSummary.includes('missing') || lowerSummary.includes('not found') || lowerSummary.includes('no such file') || lowerSummary.includes('no_lockfile');
-                         
-                         if (isLockfileError) {
-                             log('INFO', `Dependency/Lockfile error detected. Targeting package configuration.`);
-                             const packageJson = searchResults.find(f => f.endsWith('package.json'));
-                             const workflowFile = searchResults.find(f => f.includes('.github/workflows'));
-                             cleanPath = packageJson || workflowFile || 'package.json';
-                         } else if (isExplicitMissing) {
-                             log('WARN', `Error implies missing file. Rejecting weak search result: ${searchResults[0]}`);
-                             // Attempt heuristic inference for common missing files
-                             if (lowerSummary.includes('pnpm')) cleanPath = 'pnpm-lock.yaml';
-                             else if (lowerSummary.includes('yarn')) cleanPath = 'yarn.lock';
-                             else if (lowerSummary.includes('package-lock')) cleanPath = 'package-lock.json';
-                             else if (lowerSummary.includes('requirements.txt')) cleanPath = 'requirements.txt';
-                             else if (lowerSummary.includes('package.json')) cleanPath = 'package.json';
-                             // If no match, leave cleanPath empty to trigger fallback/creation logic
-                         } else {
-                             cleanPath = searchResults[0];
-                             log('WARN', `Defaulting to top search result (Confidence Low): ${cleanPath}`);
-                         }
+                         // If found elsewhere, maybe the path in workflow is wrong
+                         cleanPath = searchResults[0];
+                         log('INFO', `Found '${missingCandidate}' at '${cleanPath}'. Targeting this file.`);
                      }
                  } else {
-                     log('VERBOSE', `[TOOL:CodeSearch] No results found for query: "${safeSummary.substring(0, 30)}"`);
-                     // Even if search fails, check if we should target a specific missing file
-                     if (lowerSummary.includes('pnpm') && (lowerSummary.includes('lockfile') || lowerSummary.includes('missing'))) cleanPath = 'pnpm-lock.yaml';
-                     else if (lowerSummary.includes('yarn') && (lowerSummary.includes('lockfile') || lowerSummary.includes('missing'))) cleanPath = 'yarn.lock';
+                     // Fallback: Generic Context Search
+                     log('TOOL', `Invoking Code Search for error context...`);
+                     // Use a shorter, more keyword-focused query
+                     const query = safeSummary.replace(/[^\w\s.]/g, '').split(' ').filter(w => w.length > 4).slice(0, 4).join(' ');
+                     searchResults = await toolCodeSearch(config, query || safeSummary.substring(0, 30));
+                     log('VERBOSE', `[TOOL:CodeSearch] Results: ${JSON.stringify(searchResults)}`);
+                 }
+
+                 // IMPROVEMENT: Cross-Stack Contamination Guard
+                 if (!cleanPath && searchResults.length > 0) {
+                     const isPythonError = lowerSummary.includes('python') || lowerSummary.includes('pip') || safeSummary.includes('.py');
+                     const isNodeError = lowerSummary.includes('npm') || lowerSummary.includes('node') || lowerSummary.includes('typescript') || lowerSummary.includes('react') || safeSummary.includes('.ts') || safeSummary.includes('.js');
+                     
+                     const filteredResults = searchResults.filter(f => {
+                         const fLower = f.toLowerCase();
+                         if (isPythonError) {
+                             // If python error, reject TS/JS/React files
+                             return !fLower.endsWith('.tsx') && !fLower.endsWith('.ts') && !fLower.endsWith('.js') && !fLower.endsWith('.jsx');
+                         }
+                         if (isNodeError) {
+                             // If node error, reject Python files
+                             return !fLower.endsWith('.py');
+                         }
+                         return true;
+                     });
+
+                     if (filteredResults.length > 0) {
+                         cleanPath = filteredResults[0];
+                         log('INFO', `Selected relevant file (Stack-Verified): ${cleanPath}`);
+                     } else {
+                         log('WARN', `Search results rejected due to Cross-Stack Mismatch (e.g. Python error vs TSX file). Falling back to Infrastructure Config.`);
+                         // Leave cleanPath empty to trigger the infrastructure fallback below
+                     }
                  }
             }
 
             // --- LOGIC: Directory Resolution ---
-            // If the path is a directory (e.g. .github/workflows), find a file inside it
             if (cleanPath.endsWith('/') || cleanPath === '.github/workflows' || cleanPath === '.github/workflows/') {
                  log('INFO', `Path '${cleanPath}' is a directory. Resolving to specific workflow file...`);
                  try {
@@ -190,26 +249,19 @@ export const runIndependentAgentLoop = async (
             }
 
             if (!cleanPath) {
-                const lowerSummary = safeSummary.toLowerCase();
-                
                 // NEW: Handle System/Infrastructure Errors (e.g. Disk Space)
                 if (lowerSummary.includes('no space left') || lowerSummary.includes('oserror') || lowerSummary.includes('errno 28')) {
-                    // Infrastructure errors usually require modifying the workflow definition (e.g. to clean up disk space)
-                    // We target the workflow file associated with this run.
                     cleanPath = group.mainRun.path || '.github/workflows/ci.yml';
-                    log('WARN', `Infrastructure error detected (Disk Space/OS). Targeting workflow file: ${cleanPath}`);
+                    log('WARN', `Infrastructure error detected. Targeting workflow file: ${cleanPath}`);
                 }
                 // NEW: Handle Lockfile / Dependency Errors (Fallback)
                 else if (lowerSummary.includes('lockfile') || lowerSummary.includes('err_pnpm') || lowerSummary.includes('frozen-lockfile')) {
                     log('INFO', `Dependency/Lockfile error detected (Fallback). Targeting package configuration.`);
-                    
                     // 1. Try to find the relevant package.json
                     const packageJson = searchResults.find(f => f.endsWith('package.json'));
-                    
                     // 2. Or try to find the CI workflow to disable frozen-lockfile
                     const workflowFile = searchResults.find(f => f.includes('.github/workflows'));
 
-                    // Prioritize package.json to perhaps add a script, or workflow to change flags
                     cleanPath = packageJson || workflowFile || 'package.json';
                 }
                 // Context-aware fallback logic
@@ -217,11 +269,14 @@ export const runIndependentAgentLoop = async (
                     cleanPath = '.github/workflows/main.yml'; // Better guess for CI errors
                 } else if (lowerSummary.includes('pnpm') || lowerSummary.includes('npm') || lowerSummary.includes('node') || lowerSummary.includes('dependency')) {
                     cleanPath = 'package.json';
+                } else if (lowerSummary.includes('python') || lowerSummary.includes('pip') || lowerSummary.includes('requirements')) {
+                    cleanPath = 'requirements.txt'; // Default for python missing deps
                 } else {
                     cleanPath = 'docker-compose.yml'; 
                 }
+                log('WARN', `Path remains ambiguous. Defaulting to Infrastructure file: ${cleanPath}`);
             }
-            log('DEBUG', `Diagnosis: ${safeSummary} in ${cleanPath}`);
+            log('DEBUG', `Diagnosis Target: ${safeSummary} in ${cleanPath}`);
 
             // --- PLANNING & APPROVAL (Iteration > 0) ---
             // If this is a retry, we engage the Judge Planning Loop
@@ -242,7 +297,6 @@ export const runIndependentAgentLoop = async (
                      
                      // CONTEXT COMPILATION: Use strict scoping for planning
                      const planningContext = compileContext(AgentPhase.PLAN, initialRepoContext, safeSummary, undefined, currentLogText);
-                     log('VERBOSE', `[CTX] Planning Context Preview:\n${planningContext.substring(0, 500)}...`);
                      
                      const plan = await generateDetailedPlan(config, safeSummary, planFeedback, planningContext);
                      log('VERBOSE', `[PLAN] Generated Plan:\n${JSON.stringify(plan, null, 2)}`);
@@ -250,7 +304,6 @@ export const runIndependentAgentLoop = async (
                      // --- SAFEGUARD: Malformed Plan Check ---
                      if (!plan || !Array.isArray(plan.tasks)) {
                          log('WARN', 'LLM returned a malformed plan (missing tasks). Fallback to manual strategy.');
-                         // Fallback plan to prevent crash
                          const fallbackPlan: AgentPlan = { 
                              goal: "Manual Intervention (Plan Generation Failed)", 
                              tasks: [{ id: 'fallback', description: "Check logs manually and retry", status: 'pending' }], 
@@ -272,7 +325,26 @@ export const runIndependentAgentLoop = async (
                      
                      if (!plan.approved) {
                          judgeLog(`Reviewing Agent Strategy: "${plan.goal}"...`);
-                         judgement = await judgeDetailedPlan(config, plan, safeSummary);
+                         
+                         // HEURISTIC GUARDRAIL: Auto-reject lazy "investigation" plans if logs are clear
+                         const isGenericPlan = plan.goal.toLowerCase().includes("investigate") || plan.goal.toLowerCase().includes("add logging");
+                         const lowerLogs = currentLogText.toLowerCase();
+                         const logsShowClearError = lowerLogs.includes("no space left") || 
+                                                  lowerLogs.includes("no such file") || 
+                                                  lowerLogs.includes("modulenotfound") ||
+                                                  lowerLogs.includes("importerror");
+
+                         if (isGenericPlan && logsShowClearError) {
+                             log('WARN', `[JUDGE-AUTO] Rejected generic investigation plan because logs contain specific errors.`);
+                             judgement = { 
+                                 approved: false, 
+                                 feedback: "AUTO-REJECTION: The logs contain a clear specific error (e.g. Missing File, Disk Space, Import). Do not 'investigate' or 'add logging'. Fix the specific error shown in the logs." 
+                             };
+                         } else {
+                             // Call LLM Judge with Context
+                             judgement = await judgeDetailedPlan(config, plan, safeSummary, currentLogText);
+                         }
+
                          log('VERBOSE', `[JUDGE] Plan Review:\n${JSON.stringify(judgement, null, 2)}`);
                      } else {
                          log('WARN', `Plan pre-approved (Emergency/Fallback Mode). Skipping Judge.`);
@@ -302,227 +374,252 @@ export const runIndependentAgentLoop = async (
                  }
             }
 
-            // 2. ACQUIRE FILE LOCK (Agent Mail Protocol)
-            currentState = { ...currentState, phase: AgentPhase.ACQUIRE_LOCK };
-            updateStateCallback(group.id, currentState);
-            log('TOOL', `Requesting File Reservation (Lease) for: ${cleanPath}...`);
-            // Simulation of lock delay
-            await new Promise(r => setTimeout(r, 600)); 
-            currentState = { ...currentState, fileReservations: [cleanPath] };
-            updateStateCallback(group.id, currentState);
-            log('SUCCESS', `Lock acquired. Exclusive edit access granted for ${cleanPath}.`);
-
-            // 3. IMPLEMENT
+            // 3. DECIDE ACTION TYPE (Command vs Edit)
             currentState = { ...currentState, phase: AgentPhase.IMPLEMENT, status: 'working' };
             updateStateCallback(group.id, currentState);
-            
-            // Fetch file content - either from REPO or from PREVIOUS ITERATION (if close)
-            let currentContent: CodeFile;
-            
-            // Fuzzy match check for persistent file recovery (handling "src/main.py" vs "main.py")
-            const isSameFile = persistentFilePath && 
-                               (persistentFilePath === cleanPath || 
-                                persistentFilePath.endsWith(cleanPath) || 
-                                cleanPath.endsWith(persistentFilePath));
 
-            if (persistentFileContent && isSameFile) {
-                currentContent = persistentFileContent;
-                // FIX: Update cleanPath to the actual persistent path to maintain consistency
-                cleanPath = persistentFilePath!;
-                log('INFO', `Continuing implementation from previous partial fix (Using persistent state for ${cleanPath})...`);
-            } else {
-                try {
-                    const found = await findClosestFile(config, cleanPath, headSha);
-                    currentContent = found.file;
-                    
-                    log('VERBOSE', `[FILE] Read ${found.path} (SHA: ${found.file.sha || 'unknown'}). Size: ${found.file.content.length} chars.`);
-    
-                    // CRITICAL: Update cleanPath if the file was found at a different location (e.g. via fuzzy search)
-                    // This ensures we verify and commit to the correct path.
-                    if (found.path !== cleanPath) {
-                        log('WARN', `Path correction: '${cleanPath}' -> '${found.path}'`);
-                        cleanPath = found.path;
-                        
-                        // Reset persistent state if path changed unexpectedly to avoid contamination
-                        persistentFileContent = null;
-                        persistentFilePath = null;
-                    }
-                } catch (e: any) {
-                    // [FIX] Handle 404 by allowing file creation
-                    if (e.message.includes('404') || e.message.includes('not found')) {
-                        log('WARN', `File ${cleanPath} not found (404). Initializing empty file for creation.`);
-                        
-                        // Infer language from extension
-                        let inferredLang = 'txt';
-                        if (cleanPath.endsWith('.yml') || cleanPath.endsWith('.yaml')) inferredLang = 'yaml';
-                        else if (cleanPath.endsWith('.py')) inferredLang = 'python';
-                        else if (cleanPath.endsWith('.js')) inferredLang = 'javascript';
-                        else if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) inferredLang = 'typescript';
-                        else if (cleanPath.endsWith('.go')) inferredLang = 'go';
-                        else if (cleanPath.endsWith('.java')) inferredLang = 'java';
-
-                        currentContent = {
-                            name: cleanPath.split('/').pop() || 'new_file',
-                            language: inferredLang,
-                            content: "", // Empty content implies creation
-                            sha: undefined
-                        };
-                    } else {
-                        throw e; // Re-throw real errors (auth, rate limit, etc.)
-                    }
-                }
-            }
-
-            // --- TOOL: WEB SEARCH (If obscure error) ---
-            let externalKnowledge = "";
-            if (iteration > 0 || safeSummary.includes("exit code") || safeSummary.includes("unknown")) {
-                const providerLabel = config.searchProvider === 'tavily' ? 'Tavily AI' : 'Google Search';
-                log('TOOL', `Invoking Web Search (${providerLabel}) for solution...`);
-                const searchRes = await toolWebSearch(config, safeSummary);
-                externalKnowledge = `\nExternal Search Results: ${searchRes}\n`;
-                log('VERBOSE', `[SEARCH] Result:\n${searchRes}`);
-                log('INFO', 'External knowledge retrieved.');
-            }
-
-            // CONTEXT COMPILATION: Create focused context for implementation
-            // Note: We deliberately exclude massive logs here to focus on the code artifact
-            const implementationContext = compileContext(
-                AgentPhase.IMPLEMENT, 
-                initialRepoContext + dependencyContext, 
-                safeSummary, 
-                currentContent
-            );
+            const planContext = approvedPlan ? JSON.stringify(approvedPlan) : safeSummary;
+            const actionDecision = await generateAction(config, approvedPlan || { goal: safeSummary, tasks: [], approved: true }, initialRepoContext);
             
-            log('VERBOSE', `[CTX] Implementation Context assembled (${implementationContext.length} chars).`);
-            log('VERBOSE', `[IMPLEMENT] Instructions: ${safeSummary.length} chars. External Knowledge: ${externalKnowledge.length} chars.`);
+            // Branch 1: Shell Command Fix (e.g. "npm install")
+            if (actionDecision.type === 'command' && actionDecision.command) {
+                log('INFO', `Selected Action: SHELL EXECUTION. Running: ${actionDecision.command}`);
+                // PASS AGENT ID for persistent session
+                const cmdOutput = await toolExecuteCommand(config, actionDecision.command, initialRepoContext, group.id);
+                log('VERBOSE', `[SHELL] Output:\n${cmdOutput}`);
+                
+                // If it was a fix command, we might be done. 
+                // We'll proceed to VERIFY phase immediately, treating the shell output as the "fix artifact".
+                // Note: We don't acquire file locks for shell commands usually, unless we want to block the repo.
+                log('SUCCESS', 'Command executed. Proceeding to Verification.');
+                
+                // Hack: We populate currentContent with a dummy value to satisfy the interface downstream if needed,
+                // or we just skip the code generation block.
+                // For now, let's jump to verification.
+            } 
+            
+            // Branch 2: File Edit Fix (Standard Path)
+            else {
+                // 2. ACQUIRE FILE LOCK (Agent Mail Protocol)
+                currentState = { ...currentState, phase: AgentPhase.ACQUIRE_LOCK };
+                updateStateCallback(group.id, currentState);
+                log('TOOL', `Requesting File Reservation (Lease) for: ${cleanPath}...`);
+                // Simulation of lock delay
+                await new Promise(r => setTimeout(r, 600)); 
+                currentState = { ...currentState, fileReservations: [cleanPath] };
+                updateStateCallback(group.id, currentState);
+                log('SUCCESS', `Lock acquired. Exclusive edit access granted for ${cleanPath}.`);
 
-            // Execute Implementation (Injecting Plan if available)
-            let fixedContentStr = await generateFix(
-                config, 
-                currentContent, 
-                safeSummary + externalKnowledge, // Pass summary directly, context handled by compileContext
-                previousFeedback, 
-                implementationContext,
-                approvedPlan
-            );
-            
-            log('VERBOSE', `[LLM] Generated Code (First 200 chars):\n${fixedContentStr.substring(0, 200)}...`);
-            
-            // --- SANITY CHECK: Output Validation ---
-            const isSuspicious = fixedContentStr.includes("TodoRead") || 
-                                 (currentContent.content.length > 200 && fixedContentStr.length < 50) || 
-                                 (currentContent.content.length > 500 && fixedContentStr.length < currentContent.content.length * 0.4);
-            
-            if (isSuspicious) {
-                 log('WARN', 'Agent generated suspiciously short or lazy code. Rejecting output and retrying generation...');
-                 fixedContentStr = await generateFix(
-                     config, 
-                     currentContent, 
-                     safeSummary + " CRITICAL: PREVIOUS OUTPUT WAS TRUNCATED. YOU MUST OUTPUT THE ENTIRE FILE.", 
-                     "Previous output was rejected because it contained placeholders like 'TodoRead' or was incomplete.", 
-                     implementationContext
-                 );
-            }
-
-            // --- PRE-CHECK: Identity Check ---
-            if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
-                 log('VERBOSE', `[PRE-CHECK] Content identity match detected. SHA(original)=${currentContent.sha} vs Generated.`);
-                 log('WARN', 'Pre-check: No changes detected. Retrying generation with strict directive...');
-                 fixedContentStr = await generateFix(
-                     config, 
-                     currentContent, 
-                     safeSummary + " CRITICAL: YOU MUST MODIFY THE CODE. DO NOT RETURN ORIGINAL FILE.", 
-                     "Previous output was identical to original file. Please apply changes.", 
-                     implementationContext
-                 );
-                 
-                 if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
-                      log('WARN', 'Pre-check failed again: Still no changes. Skipping Judge.');
-                      previousFeedback = "Verification Pre-check Failed: You returned the exact original file twice. You must modify the code.";
-                      iteration++;
-                      // RELEASE LOCK ON FAILURE
-                      currentState = { ...currentState, fileReservations: [] };
-                      updateStateCallback(group.id, currentState);
-                      log('INFO', `Releasing file lock for ${cleanPath}...`);
-                      continue;
-                 }
-            }
-
-            // --- TOOL: SYNTAX LINTER (Self-Correction Loop) ---
-            log('TOOL', 'Running Syntax Linter (toolLintCheck)...');
-            let lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
-            log('VERBOSE', `[LINT] Valid: ${lintResult.valid}. Error: ${lintResult.error || 'None'}`);
-            
-            if (!lintResult.valid) {
-                log('WARN', `Linter found syntax error: ${lintResult.error || 'Unknown'}. Agent attempting self-correction...`);
-                log('VERBOSE', `[SELF-CORRECT] Triggering re-generation due to lint error.`);
-                currentState = { ...currentState, phase: AgentPhase.IMPLEMENT }; 
+                // 3. IMPLEMENT
+                currentState = { ...currentState, phase: AgentPhase.IMPLEMENT, status: 'working' };
                 updateStateCallback(group.id, currentState);
                 
-                fixedContentStr = await generateFix(
-                    config, 
-                    {...currentContent, content: fixedContentStr},
-                    `Fix the following SYNTAX ERROR: ${lintResult.error}`,
-                    "Previous attempt had syntax errors. Fix them while keeping the rest of the logic.",
-                    implementationContext
+                // Fetch file content - either from REPO or from PREVIOUS ITERATION (if close)
+                let currentContent: CodeFile;
+                
+                // Fuzzy match check for persistent file recovery (handling "src/main.py" vs "main.py")
+                const isSameFile = persistentFilePath && 
+                                (persistentFilePath === cleanPath || 
+                                    persistentFilePath.endsWith(cleanPath) || 
+                                    cleanPath.endsWith(persistentFilePath));
+
+                if (persistentFileContent && isSameFile) {
+                    currentContent = persistentFileContent;
+                    // FIX: Update cleanPath to the actual persistent path to maintain consistency
+                    cleanPath = persistentFilePath!;
+                    log('INFO', `Continuing implementation from previous partial fix (Using persistent state for ${cleanPath})...`);
+                } else {
+                    try {
+                        const found = await findClosestFile(config, cleanPath, headSha);
+                        currentContent = found.file;
+                        
+                        log('VERBOSE', `[FILE] Read ${found.path} (SHA: ${found.file.sha || 'unknown'}). Size: ${found.file.content.length} chars.`);
+        
+                        // CRITICAL: Update cleanPath if the file was found at a different location (e.g. via fuzzy search)
+                        // This ensures we verify and commit to the correct path.
+                        if (found.path !== cleanPath) {
+                            log('WARN', `Path correction: '${cleanPath}' -> '${found.path}'`);
+                            cleanPath = found.path;
+                            
+                            // Reset persistent state if path changed unexpectedly to avoid contamination
+                            persistentFileContent = null;
+                            persistentFilePath = null;
+                        }
+                    } catch (e: any) {
+                        // [FIX] Handle 404 by allowing file creation
+                        if (e.message.includes('404') || e.message.includes('not found')) {
+                            log('WARN', `File ${cleanPath} not found (404). Initializing empty file for creation.`);
+                            
+                            // Infer language from extension
+                            let inferredLang = 'txt';
+                            if (cleanPath.endsWith('.yml') || cleanPath.endsWith('.yaml')) inferredLang = 'yaml';
+                            else if (cleanPath.endsWith('.py')) inferredLang = 'python';
+                            else if (cleanPath.endsWith('.js')) inferredLang = 'javascript';
+                            else if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) inferredLang = 'typescript';
+                            else if (cleanPath.endsWith('.go')) inferredLang = 'go';
+                            else if (cleanPath.endsWith('.java')) inferredLang = 'java';
+
+                            currentContent = {
+                                name: cleanPath.split('/').pop() || 'new_file',
+                                language: inferredLang,
+                                content: "", // Empty content implies creation
+                                sha: undefined
+                            };
+                        } else {
+                            throw e; // Re-throw real errors (auth, rate limit, etc.)
+                        }
+                    }
+                }
+
+                // --- TOOL: WEB SEARCH (If obscure error) ---
+                let externalKnowledge = "";
+                if (iteration > 0 || safeSummary.includes("exit code") || safeSummary.includes("unknown")) {
+                    const providerLabel = config.searchProvider === 'tavily' ? 'Tavily AI' : 'Google Search';
+                    log('TOOL', `Invoking Web Search (${providerLabel}) for solution...`);
+                    const searchRes = await toolWebSearch(config, safeSummary);
+                    externalKnowledge = `\nExternal Search Results: ${searchRes}\n`;
+                    log('VERBOSE', `[SEARCH] Result:\n${searchRes}`);
+                    log('INFO', 'External knowledge retrieved.');
+                }
+
+                // CONTEXT COMPILATION: Create focused context for implementation
+                // Note: We deliberately exclude massive logs here to focus on the code artifact
+                const implementationContext = compileContext(
+                    AgentPhase.IMPLEMENT, 
+                    initialRepoContext + dependencyContext, 
+                    safeSummary, 
+                    currentContent
                 );
                 
-                lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
-                if (lintResult.valid) {
-                     log('INFO', 'Self-correction successful. Syntax valid.');
-                } else {
-                     log('ERROR', 'Self-correction failed. Proceeding with risk of syntax error.');
+                log('VERBOSE', `[CTX] Implementation Context assembled (${implementationContext.length} chars).`);
+                
+                // Execute Implementation (Injecting Plan if available)
+                let fixedContentStr = await generateFix(
+                    config, 
+                    currentContent, 
+                    safeSummary + externalKnowledge, // Pass summary directly, context handled by compileContext
+                    previousFeedback, 
+                    implementationContext,
+                    approvedPlan
+                );
+                
+                log('VERBOSE', `[LLM] Generated Code (First 200 chars):\n${fixedContentStr.substring(0, 200)}...`);
+                
+                // --- SANITY CHECK: Output Validation ---
+                const isSuspicious = fixedContentStr.includes("TodoRead") || 
+                                    (currentContent.content.length > 200 && fixedContentStr.length < 50) || 
+                                    (currentContent.content.length > 500 && fixedContentStr.length < currentContent.content.length * 0.4);
+                
+                if (isSuspicious) {
+                    log('WARN', 'Agent generated suspiciously short or lazy code. Rejecting output and retrying generation...');
+                    fixedContentStr = await generateFix(
+                        config, 
+                        currentContent, 
+                        safeSummary + " CRITICAL: PREVIOUS OUTPUT WAS TRUNCATED. YOU MUST OUTPUT THE ENTIRE FILE.", 
+                        "Previous output was rejected because it contained placeholders like 'TodoRead' or was incomplete.", 
+                        implementationContext
+                    );
                 }
-            } else {
-                log('INFO', 'Syntax Check Passed.');
-            }
 
-            // 4. VERIFY (Judge)
-            currentState = { ...currentState, phase: AgentPhase.VERIFY, status: 'working' };
-            updateStateCallback(group.id, currentState);
-            
-            // CONTEXT COMPILATION: Judge needs verification context
-            const judgeContext = compileContext(AgentPhase.VERIFY, initialRepoContext, safeSummary);
-            log('VERBOSE', `[JUDGE] Context size: ${judgeContext.length}.`);
-            
-            const judgeResult = await judgeFix(config, currentContent.content, fixedContentStr, safeSummary, judgeContext);
-            log('VERBOSE', `[JUDGE] Code Review Result:\n${JSON.stringify(judgeResult, null, 2)}`);
+                // --- PRE-CHECK: Identity Check ---
+                if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
+                    log('VERBOSE', `[PRE-CHECK] Content identity match detected. SHA(original)=${currentContent.sha} vs Generated.`);
+                    log('WARN', 'Pre-check: No changes detected. Retrying generation with strict directive...');
+                    fixedContentStr = await generateFix(
+                        config, 
+                        currentContent, 
+                        safeSummary + " CRITICAL: YOU MUST MODIFY THE CODE. DO NOT RETURN ORIGINAL FILE.", 
+                        "Previous output was identical to original file. Please apply changes.", 
+                        implementationContext
+                    );
+                    
+                    if (normalizeCode(currentContent.content) === normalizeCode(fixedContentStr)) {
+                        log('WARN', 'Pre-check failed again: Still no changes. Skipping Judge.');
+                        previousFeedback = "Verification Pre-check Failed: You returned the exact original file twice. You must modify the code.";
+                        iteration++;
+                        // RELEASE LOCK ON FAILURE
+                        currentState = { ...currentState, fileReservations: [] };
+                        updateStateCallback(group.id, currentState);
+                        log('INFO', `Releasing file lock for ${cleanPath}...`);
+                        continue;
+                    }
+                }
 
-            if (!judgeResult.passed) {
-                // RELEASE LOCK ON JUDGE FAILURE
-                currentState = { ...currentState, fileReservations: [] };
-                updateStateCallback(group.id, currentState);
-                log('INFO', `Releasing file lock for ${cleanPath} (Judge Failed)...`);
-
-                if (judgeResult.score >= 8) {
-                    log('WARN', `Judge Rejected but Score ${judgeResult.score}/10. Keeping partial fix for next iteration.`);
-                    persistentFileContent = { ...currentContent, content: fixedContentStr };
-                    persistentFilePath = cleanPath; // Track path
-                    previousFeedback = `Judge Score ${judgeResult.score}/10. Reasoning: ${judgeResult.reasoning}. KEEP previous changes, but address the remaining issues.`;
+                // --- TOOL: SYNTAX LINTER (Self-Correction Loop) ---
+                log('TOOL', 'Running Syntax Linter (toolLintCheck)...');
+                let lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
+                log('VERBOSE', `[LINT] Valid: ${lintResult.valid}. Error: ${lintResult.error || 'None'}`);
+                
+                if (!lintResult.valid) {
+                    log('WARN', `Linter found syntax error: ${lintResult.error || 'Unknown'}. Agent attempting self-correction...`);
+                    log('VERBOSE', `[SELF-CORRECT] Triggering re-generation due to lint error.`);
+                    currentState = { ...currentState, phase: AgentPhase.IMPLEMENT }; 
+                    updateStateCallback(group.id, currentState);
+                    
+                    fixedContentStr = await generateFix(
+                        config, 
+                        {...currentContent, content: fixedContentStr},
+                        `Fix the following SYNTAX ERROR: ${lintResult.error}`,
+                        "Previous attempt had syntax errors. Fix them while keeping the rest of the logic.",
+                        implementationContext
+                    );
+                    
+                    lintResult = await toolLintCheck(config, fixedContentStr, currentContent.language);
+                    if (lintResult.valid) {
+                        log('INFO', 'Self-correction successful. Syntax valid.');
+                    } else {
+                        log('ERROR', 'Self-correction failed. Proceeding with risk of syntax error.');
+                    }
                 } else {
-                    log('WARN', `Judge Rejected (Score ${judgeResult.score}/10). Discarding fix and reverting to original.`);
-                    persistentFileContent = null;
-                    persistentFilePath = null;
-                    previousFeedback = `Judge Rejected (Score ${judgeResult.score}/10): ${judgeResult.reasoning}.`;
+                    log('INFO', 'Syntax Check Passed.');
+                }
+
+                // 4. VERIFY (Judge)
+                currentState = { ...currentState, phase: AgentPhase.VERIFY, status: 'working' };
+                updateStateCallback(group.id, currentState);
+                
+                // CONTEXT COMPILATION: Judge needs verification context
+                const judgeContext = compileContext(AgentPhase.VERIFY, initialRepoContext, safeSummary);
+                
+                const judgeResult = await judgeFix(config, currentContent.content, fixedContentStr, safeSummary, judgeContext);
+                log('VERBOSE', `[JUDGE] Code Review Result:\n${JSON.stringify(judgeResult, null, 2)}`);
+
+                if (!judgeResult.passed) {
+                    // RELEASE LOCK ON JUDGE FAILURE
+                    currentState = { ...currentState, fileReservations: [] };
+                    updateStateCallback(group.id, currentState);
+                    log('INFO', `Releasing file lock for ${cleanPath} (Judge Failed)...`);
+
+                    if (judgeResult.score >= 8) {
+                        log('WARN', `Judge Rejected but Score ${judgeResult.score}/10. Keeping partial fix for next iteration.`);
+                        persistentFileContent = { ...currentContent, content: fixedContentStr };
+                        persistentFilePath = cleanPath; // Track path
+                        previousFeedback = `Judge Score ${judgeResult.score}/10. Reasoning: ${judgeResult.reasoning}. KEEP previous changes, but address the remaining issues.`;
+                    } else {
+                        log('WARN', `Judge Rejected (Score ${judgeResult.score}/10). Discarding fix and reverting to original.`);
+                        persistentFileContent = null;
+                        persistentFilePath = null;
+                        previousFeedback = `Judge Rejected (Score ${judgeResult.score}/10): ${judgeResult.reasoning}.`;
+                    }
+                    
+                    iteration++;
+                    continue; 
                 }
                 
-                iteration++;
-                continue; 
-            }
-            
-            log('SUCCESS', 'Fix accepted by Judge.');
-            
-            // Update Agent's PRIVATE File State
-            const newFileChange: FileChange = {
-                path: cleanPath,
-                original: currentContent,
-                modified: { ...currentContent, content: fixedContentStr },
-                status: 'modified'
-            };
+                log('SUCCESS', 'Fix accepted by Judge.');
+                
+                // Update Agent's PRIVATE File State
+                const newFileChange: FileChange = {
+                    path: cleanPath,
+                    original: currentContent,
+                    modified: { ...currentContent, content: fixedContentStr },
+                    status: 'modified'
+                };
 
-            // MERGE files state instead of overwrite
-            currentState = { ...currentState, files: { ...currentState.files, [cleanPath]: newFileChange } };
-            updateStateCallback(group.id, currentState);
+                // MERGE files state instead of overwrite
+                currentState = { ...currentState, files: { ...currentState.files, [cleanPath]: newFileChange } };
+                updateStateCallback(group.id, currentState);
+            } // End of File Edit Branch
 
             // 5. SANDBOX TESTING
             currentState = { ...currentState, phase: AgentPhase.TESTING, status: 'waiting' };
@@ -533,15 +630,17 @@ export const runIndependentAgentLoop = async (
             currentState = { ...currentState, phase: AgentPhase.TESTING, status: 'working' };
             updateStateCallback(group.id, currentState);
             
+            // Note: For shell commands, we don't necessarily have a "FileChange" object.
+            // We pass the latest state.
             const testResult = await runSandboxTest(
                 config, 
                 group, 
                 iteration, 
                 true, 
-                newFileChange, 
+                actionDecision.type === 'edit' ? currentState.files[cleanPath] : undefined, // Only pass change if edit
                 safeSummary,
                 (msg) => log('DEBUG', msg),
-                currentState.files // NEW: Pass accumulated file changes
+                currentState.files 
             );
             
             log('VERBOSE', `[SANDBOX] Full Result:\n${testResult.logs}`);
@@ -549,7 +648,7 @@ export const runIndependentAgentLoop = async (
             // RELEASE LOCK after Sandbox
             currentState = { ...currentState, fileReservations: [] };
             updateStateCallback(group.id, currentState);
-            log('INFO', `Releasing file lock for ${cleanPath} (Sandbox Complete).`);
+            if (actionDecision.type === 'edit') log('INFO', `Releasing file lock for ${cleanPath} (Sandbox Complete).`);
 
             const testLines = testResult.logs.split('\n');
             testLines.forEach(l => {

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AgentPhase, AgentState } from '../types';
-import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock } from 'lucide-react';
+import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock, Terminal } from 'lucide-react';
 
 interface AgentStatusProps {
   agentStates: Record<string, AgentState>;
@@ -13,8 +13,9 @@ interface AgentStatusProps {
 export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPhase, selectedAgentId, onSelectAgent }) => {
   const steps = [
     { id: AgentPhase.UNDERSTAND, label: 'Scan', icon: Search },
+    { id: AgentPhase.EXPLORE, label: 'Shell', icon: Terminal }, // New Step
     { id: AgentPhase.PLAN_APPROVAL, label: 'Auth', icon: ShieldAlert },
-    { id: AgentPhase.ACQUIRE_LOCK, label: 'Lock', icon: Lock }, // New Step
+    { id: AgentPhase.ACQUIRE_LOCK, label: 'Lock', icon: Lock }, 
     { id: AgentPhase.IMPLEMENT, label: 'Fix', icon: Code },
     { id: AgentPhase.VERIFY, label: 'Judge', icon: CheckCircle },
     { id: AgentPhase.TESTING, label: 'Box', icon: Beaker },
