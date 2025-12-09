@@ -221,6 +221,17 @@ const App: React.FC = () => {
     };
   }, [isSimulating, isRealMode, simStepIndex, runSimulationStep]);
 
+  // Sync Left Log Panel with Selected Agent
+  useEffect(() => {
+    if (selectedAgentId && selectedAgentId !== 'CONSOLIDATED') {
+        const agent = agentStates[selectedAgentId];
+        // Only update if the agent has explicitly fetched logs, otherwise keep previous view (or initial)
+        if (agent?.activeLog) {
+            setLogs(agent.activeLog);
+        }
+    }
+  }, [selectedAgentId, agentStates]);
+
   const generateCoolAgentName = (idx: number) => {
       const adjectives = ["Crimson", "Neon", "Zero", "Cyber", "Void", "Quantum", "Spectral", "Iron", "Obsidian"];
       const nouns = ["Architect", "Weaver", "Operator", "Sentinel", "Runner", "Engineer", "Daemon", "Vanguard"];

@@ -74,6 +74,11 @@ export const runIndependentAgentLoop = async (
                 const runData = await getWorkflowLogs(config.repoUrl, group.mainRun.id, config.githubToken);
                 currentLogText = runData.logText;
                 headSha = runData.headSha;
+                
+                // NEW: Publish the fetched log to the UI
+                currentState = { ...currentState, activeLog: currentLogText };
+                updateStateCallback(group.id, currentState);
+
                 log('VERBOSE', `[CTX] Fetched logs (${currentLogText.length} chars). SHA: ${headSha}`);
                 log('VERBOSE', `[CTX] Log Snippet: ${currentLogText.substring(0, 200)}...`);
             } else if (isRetry) {
@@ -86,7 +91,8 @@ export const runIndependentAgentLoop = async (
                                       currentLogText.includes("No module named") || 
                                       currentLogText.includes("Missing dependency") || 
                                       currentLogText.includes("package") || 
-                                      currentLogText.includes("Cannot find module");
+                                      currentLogText.includes("Cannot find module") ||
+                                      currentLogText.includes("ERR_PNPM");
                                       
             if (isDependencyIssue && iteration === 0) {
                  currentState = { ...currentState, phase: AgentPhase.TOOL_USE };
@@ -115,11 +121,44 @@ export const runIndependentAgentLoop = async (
                  log('TOOL', `Invoking Code Search for error keywords...`);
                  const searchResults = await toolCodeSearch(config, safeSummary.substring(0, 30));
                  log('VERBOSE', `[TOOL:CodeSearch] Results: ${JSON.stringify(searchResults)}`);
+                 
+                 const lowerSummary = safeSummary.toLowerCase();
+
                  if (searchResults.length > 0) {
-                     cleanPath = searchResults[0];
-                     log('INFO', `Search found potential match: ${cleanPath}`);
+                     // NEW LOGIC: Heuristic filtering
+                     const extMatch = searchResults.find(f => {
+                         if (lowerSummary.includes('workflow') || lowerSummary.includes('ci')) return f.endsWith('.yml') || f.endsWith('.yaml');
+                         if (lowerSummary.includes('lockfile') || lowerSummary.includes('dependency') || lowerSummary.includes('module') || lowerSummary.includes('err_pnpm')) return f.endsWith('json') || f.endsWith('lock') || f.endsWith('txt');
+                         if (lowerSummary.includes('test')) return f.includes('test') || f.includes('spec');
+                         return false;
+                     });
+
+                     if (extMatch) {
+                         cleanPath = extMatch;
+                         log('INFO', `Search found context-relevant match: ${cleanPath}`);
+                     } else {
+                         // FIX: Handle "Missing File" hallucinations
+                         const isExplicitMissing = lowerSummary.includes('missing') || lowerSummary.includes('not found') || lowerSummary.includes('no such file') || lowerSummary.includes('no_lockfile');
+                         
+                         if (isExplicitMissing) {
+                             log('WARN', `Error implies missing file. Rejecting weak search result: ${searchResults[0]}`);
+                             // Attempt heuristic inference for common missing files
+                             if (lowerSummary.includes('pnpm')) cleanPath = 'pnpm-lock.yaml';
+                             else if (lowerSummary.includes('yarn')) cleanPath = 'yarn.lock';
+                             else if (lowerSummary.includes('package-lock')) cleanPath = 'package-lock.json';
+                             else if (lowerSummary.includes('requirements.txt')) cleanPath = 'requirements.txt';
+                             else if (lowerSummary.includes('package.json')) cleanPath = 'package.json';
+                             // If no match, leave cleanPath empty to trigger fallback/creation logic
+                         } else {
+                             cleanPath = searchResults[0];
+                             log('WARN', `Defaulting to top search result (Confidence Low): ${cleanPath}`);
+                         }
+                     }
                  } else {
                      log('VERBOSE', `[TOOL:CodeSearch] No results found for query: "${safeSummary.substring(0, 30)}"`);
+                     // Even if search fails, check if we should target a specific missing file
+                     if (lowerSummary.includes('pnpm') && (lowerSummary.includes('lockfile') || lowerSummary.includes('missing'))) cleanPath = 'pnpm-lock.yaml';
+                     else if (lowerSummary.includes('yarn') && (lowerSummary.includes('lockfile') || lowerSummary.includes('missing'))) cleanPath = 'yarn.lock';
                  }
             }
 
@@ -143,9 +182,12 @@ export const runIndependentAgentLoop = async (
             }
 
             if (!cleanPath) {
+                const lowerSummary = safeSummary.toLowerCase();
                 // Context-aware fallback logic
-                if (safeSummary.toLowerCase().includes('workflow') || safeSummary.toLowerCase().includes('action') || safeSummary.toLowerCase().includes('yaml')) {
+                if (lowerSummary.includes('workflow') || lowerSummary.includes('action') || lowerSummary.includes('yaml')) {
                     cleanPath = '.github/workflows/main.yml'; // Better guess for CI errors
+                } else if (lowerSummary.includes('pnpm') || lowerSummary.includes('npm') || lowerSummary.includes('node') || lowerSummary.includes('dependency')) {
+                    cleanPath = 'package.json';
                 } else {
                     cleanPath = 'docker-compose.yml'; 
                 }
@@ -493,7 +535,10 @@ export const runIndependentAgentLoop = async (
                 
                 // Adaptive Diagnosis: Update the logs for the next iteration to be the new failure logs
                 currentLogText = testResult.logs;
-                
+                // NEW: Publish the new failure logs to the UI
+                currentState = { ...currentState, activeLog: currentLogText };
+                updateStateCallback(group.id, currentState);
+
                 iteration++;
             }
 

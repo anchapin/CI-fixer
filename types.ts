@@ -123,4 +123,5 @@ export interface AgentState {
   files: Record<string, FileChange>;
   currentPlan?: AgentPlan; // New: Store the active plan
   fileReservations?: string[]; // New: Files currently locked by this agent
+  activeLog?: string; // New: The active log chunk being analyzed by this agent
 }

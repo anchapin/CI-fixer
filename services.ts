@@ -97,7 +97,14 @@ export async function unifiedGenerate(config: AppConfig, params: any): Promise<{
                 body: JSON.stringify({ model, messages, response_format: params.config?.responseMimeType === 'application/json' ? { type: "json_object" } : undefined })
             });
 
-            if (!response.ok) throw new Error(`Provider Error: ${response.status}`);
+            if (!response.ok) {
+                let errorDetails = response.statusText;
+                try {
+                    const errorJson = await response.json();
+                    errorDetails = JSON.stringify(errorJson);
+                } catch {}
+                throw new Error(`Provider Error: ${response.status} - ${errorDetails}`);
+            }
             const data = await response.json();
             return { text: data.choices?.[0]?.message?.content || "" };
         } catch (e: any) {
@@ -325,8 +332,10 @@ export async function generateRepoSummary(config: AppConfig): Promise<string> {
 }
 
 export async function diagnoseError(config: AppConfig, logSnippet: string, repoContext?: string): Promise<{ summary: string, filePath: string }> {
-  const MAX_LOG_LENGTH = 100000;
+  // Truncate Logs to prevent Context Overflow (400)
+  const MAX_LOG_LENGTH = 50000;
   const truncatedLog = logSnippet.length > MAX_LOG_LENGTH ? logSnippet.substring(logSnippet.length - MAX_LOG_LENGTH) : logSnippet;
+  
   const prompt = `
     Analyze this CI/CD build log. Identify the primary error and the source code file causing it.
     Constraints:
@@ -351,7 +360,15 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
 }
 
 export async function generateDetailedPlan(config: AppConfig, errorSummary: string, feedback: string, repoContext: string): Promise<AgentPlan> {
-    const prompt = `Create a step-by-step fix plan for: "${errorSummary}". Feedback: "${feedback}". Return strictly JSON: { "goal": "string", "tasks": [{ "id": "task-1", "description": "string", "status": "pending" }] }`;
+    const prompt = `
+    Create a step-by-step fix plan for: "${errorSummary}". 
+    Feedback: "${feedback}". 
+    
+    CRITICAL RULES:
+    1. Do NOT suggest "Manual Fix" or "Check logs". You are an autonomous agent; YOU must fix it.
+    2. If the error is 'Unknown', your plan must be 'Investigate and Add Logging' or 'Attempt Reproduction'.
+    3. Return strictly JSON: { "goal": "string", "tasks": [{ "id": "task-1", "description": "string", "status": "pending" }] }
+    `;
     try {
         const response = await unifiedGenerate(config, { contents: prompt, config: { responseMimeType: "application/json", maxOutputTokens: 1024 }, model: MODEL_SMART });
         const plan = safeJsonParse(response.text || "{}", { goal: "Fix error", tasks: [], approved: false });
@@ -369,13 +386,29 @@ export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, erro
 }
 
 export async function generateFix(config: AppConfig, codeFile: CodeFile, errorSummary: string, userFeedback?: string, repoContext?: string, activePlan?: AgentPlan): Promise<string> {
+  // Truncate content to avoid token overflow. 
+  // 40,000 chars is roughly 10k tokens, leaving space for other prompts.
+  const MAX_CONTENT_LEN = 40000; 
+  let content = codeFile.content;
+  if (content.length > MAX_CONTENT_LEN) {
+      content = content.substring(0, MAX_CONTENT_LEN) + "\n...[TRUNCATED FILE CONTENT DUE TO SIZE]...";
+  }
+  
+  // Truncate error summary/external knowledge which can be huge
+  const MAX_ERROR_LEN = 15000;
+  let safeError = errorSummary;
+  if (safeError.length > MAX_ERROR_LEN) {
+      safeError = safeError.substring(0, MAX_ERROR_LEN) + "\n...[TRUNCATED ERROR LOG]...";
+  }
+
   const prompt = `
-    Context: Error "${errorSummary}" in ${codeFile.name}.
+    Context: Error "${safeError}" in ${codeFile.name}.
+    ${repoContext ? `Repo Context: ${repoContext}` : ''} 
     ${userFeedback ? `Previous Attempt Failed: ${userFeedback}` : ''}
     ${activePlan ? `Plan: ${activePlan.goal}` : ''}
     Instructions: Return the FULL, COMPLETE updated file content. Do not truncate.
     File Content:
-    ${codeFile.content}
+    ${content}
   `;
   const response = await unifiedGenerate(config, {
     contents: prompt,
@@ -445,13 +478,21 @@ export async function findClosestFile(config: AppConfig, path: string, sha?: str
 }
 
 export async function toolScanDependencies(config: AppConfig, sha?: string): Promise<string> {
-    const manifests = ['package.json', 'requirements.txt', 'go.mod'];
+    // Add Lockfiles to detection list for explicit checks
+    const manifests = ['package.json', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'requirements.txt', 'go.mod'];
     const files = await listRepoDirectory(config, '', sha);
     let report = "";
     for (const m of manifests) {
         const f = files.find(x => x.name === m);
         if (f) {
-            try { const c = await getFileContent(config, f.path, sha); report += `--- ${m} ---\n${c.content}\n`; } catch {}
+            try { 
+                const c = await getFileContent(config, f.path, sha); 
+                // Truncate large manifests to avoid Token Overflow (API 400)
+                const content = c.content.length > 5000 
+                    ? c.content.substring(0, 5000) + "\n...[TRUNCATED]..." 
+                    : c.content;
+                report += `--- ${m} ---\n${content}\n`; 
+            } catch {}
         }
     }
     return report || "No dependencies found.";
