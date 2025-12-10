@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
-import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal, Download } from 'lucide-react';
-import { getPRFailedRuns } from '../services';
+import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal, Download, Wifi, Loader2, AlertTriangle } from 'lucide-react';
+import { getPRFailedRuns, testE2BConnection } from '../services';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -36,6 +36,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const [foundRuns, setFoundRuns] = useState<WorkflowRun[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // E2B Test State
+  const [isTestingE2B, setIsTestingE2B] = useState(false);
+  const [e2bStatus, setE2bStatus] = useState<{success: boolean, message: string} | null>(null);
+
   useEffect(() => {
     if (isOpen && currentConfig) {
       setFormData({
@@ -59,6 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       if (currentConfig.selectedRuns) {
           setFoundRuns(currentConfig.selectedRuns);
       }
+      setE2bStatus(null);
     }
   }, [isOpen, currentConfig]);
 
@@ -161,6 +166,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       } else {
           setFormData(prev => ({ ...prev, selectedRuns: [...foundRuns] }));
       }
+  };
+
+  const handleTestE2B = async () => {
+      if (!formData.e2bApiKey) return;
+      setIsTestingE2B(true);
+      setE2bStatus(null);
+      
+      const result = await testE2BConnection(formData.e2bApiKey);
+      setE2bStatus(result);
+      
+      // Auto-switch logic restored for "Network Blocked" scenario
+      if (!result.success && (result.message.includes('Network Blocked') || result.message.includes('Failed to fetch'))) {
+          setFormData(prev => ({ ...prev, devEnv: 'simulation' }));
+      }
+      
+      setIsTestingE2B(false);
   };
 
   const handleSave = () => {
@@ -326,17 +347,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                     </div>
                     
                     {formData.devEnv === 'e2b' && (
-                        <div className="space-y-1 animate-[fadeIn_0.2s_ease-out]">
+                        <div className="space-y-2 animate-[fadeIn_0.2s_ease-out]">
                             <label className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
                                 <Box className="w-3 h-3" /> E2B API Key
                             </label>
-                            <input 
-                                type="password" 
-                                value={formData.e2bApiKey || ''}
-                                onChange={e => setFormData({...formData, e2bApiKey: e.target.value})}
-                                className="w-full bg-slate-900 border border-amber-900/50 rounded px-2 py-1.5 text-xs text-amber-100 focus:border-amber-500/50"
-                                placeholder="e2b_..."
-                            />
+                            <div className="flex gap-2 items-center">
+                                <input 
+                                    type="password" 
+                                    value={formData.e2bApiKey || ''}
+                                    onChange={e => setFormData({...formData, e2bApiKey: e.target.value})}
+                                    className="flex-1 bg-slate-900 border border-amber-900/50 rounded px-2 py-1.5 text-xs text-amber-100 focus:border-amber-500/50"
+                                    placeholder="e2b_..."
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleTestE2B}
+                                    disabled={!formData.e2bApiKey || isTestingE2B}
+                                    className="bg-amber-950 border border-amber-900 text-amber-500 hover:text-white hover:bg-amber-800 px-3 py-1.5 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed min-w-[80px] justify-center"
+                                >
+                                    {isTestingE2B ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wifi className="w-3 h-3" />}
+                                    {isTestingE2B ? 'Test...' : 'Test'}
+                                </button>
+                            </div>
+                            {e2bStatus && (
+                                <div className={`text-[10px] font-bold px-1 flex items-center gap-1 ${
+                                    e2bStatus.success ? 'text-emerald-400' : 
+                                    e2bStatus.message.includes('Simulation') ? 'text-amber-400' : 'text-rose-400'
+                                }`}>
+                                    {e2bStatus.success ? <Check className="w-3 h-3"/> : (e2bStatus.message.includes('Simulation') ? <AlertTriangle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3"/>)}
+                                    {e2bStatus.message}
+                                </div>
+                            )}
                         </div>
                     )}
 

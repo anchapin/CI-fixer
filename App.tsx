@@ -183,9 +183,9 @@ const App: React.FC = () => {
     // MOCK SIMULATION STATE UPDATE
     updateAgentState(mockAgentId, { 
         phase: step.phase, 
-        name: "NeonArchitect",  // Updated name to fit style
-        status: 'working', 
-        iteration: 0,
+        name: "NeonArchitect",  
+        status: step.phase === AgentPhase.SUCCESS ? 'success' : step.phase === AgentPhase.FAILURE ? 'failed' : 'working', 
+        iteration: step.iteration || 0,
         // In sim mode, we fake the file change appearing in the specific agent's state
         files: step.codeSnapshot ? { 
             'main.py': { 

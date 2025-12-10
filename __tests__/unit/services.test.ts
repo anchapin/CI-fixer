@@ -1,11 +1,10 @@
-
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { 
   extractCode, 
   diagnoseError, 
   judgeFix, 
   runDevShellCommand, 
-  toolLintCheck,
+  toolLintCheck, 
   toolCodeSearch
 } from '../../services';
 import { AppConfig } from '../../types';
@@ -13,9 +12,9 @@ import { AppConfig } from '../../types';
 // Hoist mocks to ensure they are available for module mocking
 const mocks = vi.hoisted(() => ({
   generateContent: vi.fn(),
-  e2bExec: vi.fn(),
-  e2bClose: vi.fn(),
-  e2bCreate: vi.fn()
+  sandboxRunCode: vi.fn(),
+  sandboxKill: vi.fn(),
+  sandboxCreate: vi.fn()
 }));
 
 // Mock GoogleGenAI
@@ -32,15 +31,14 @@ vi.mock('@google/genai', () => {
 
 // Mock E2B Code Interpreter
 vi.mock('@e2b/code-interpreter', () => {
-  const MockCI = {
-    create: mocks.e2bCreate
+  const MockSandbox = {
+    create: mocks.sandboxCreate
   };
   return {
-    CodeInterpreter: MockCI,
-    default: { CodeInterpreter: MockCI },
+    Sandbox: MockSandbox,
     // Simulate named export availability on the module object for the "import * as" usage
     __esModule: true,
-    ...MockCI
+    ...MockSandbox
   };
 });
 
@@ -137,21 +135,19 @@ describe('Service Utility Unit Tests', () => {
         const res = await runDevShellCommand(mockConfig, 'ls -la');
         expect(res.output).toContain('[SIMULATION]');
         expect(res.exitCode).toBe(0);
-        expect(mocks.e2bCreate).not.toHaveBeenCalled();
+        expect(mocks.sandboxCreate).not.toHaveBeenCalled();
     });
 
     it('should use E2B if configured and key present', async () => {
         const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'test-key' };
         
         // Mock Sandbox instance
-        const mockSandbox = {
-            notebook: {
-                execCell: mocks.e2bExec
-            },
-            close: mocks.e2bClose
+        const mockSandboxInstance = {
+            runCode: mocks.sandboxRunCode,
+            kill: mocks.sandboxKill
         };
-        mocks.e2bCreate.mockResolvedValue(mockSandbox);
-        mocks.e2bExec.mockResolvedValue({
+        mocks.sandboxCreate.mockResolvedValue(mockSandboxInstance);
+        mocks.sandboxRunCode.mockResolvedValue({
             logs: { stdout: ['file1'], stderr: [] },
             text: 'result',
             error: null
@@ -159,16 +155,15 @@ describe('Service Utility Unit Tests', () => {
 
         const res = await runDevShellCommand(e2bConfig, 'ls');
         
-        expect(mocks.e2bCreate).toHaveBeenCalledWith({ apiKey: 'test-key' });
-        expect(mocks.e2bExec).toHaveBeenCalledWith('ls');
-        expect(res.output).toContain('result');
+        expect(mocks.sandboxCreate).toHaveBeenCalledWith({ apiKey: 'test-key' });
+        expect(mocks.sandboxRunCode).toHaveBeenCalledWith('ls', { language: 'bash' });
         expect(res.output).toContain('file1');
-        expect(mocks.e2bClose).toHaveBeenCalled();
+        expect(mocks.sandboxKill).toHaveBeenCalled();
     });
 
     it('should handle E2B errors gracefully', async () => {
         const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'test-key' };
-        mocks.e2bCreate.mockRejectedValue(new Error('API Error'));
+        mocks.sandboxCreate.mockRejectedValue(new Error('API Error'));
         
         const res = await runDevShellCommand(e2bConfig, 'ls');
         expect(res.exitCode).toBe(1);
@@ -180,14 +175,14 @@ describe('Service Utility Unit Tests', () => {
     it('should use E2B for python linting when enabled', async () => {
         const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'test-key' };
         
-        const mockSandbox = {
-            notebook: { execCell: mocks.e2bExec },
-            close: mocks.e2bClose
+        const mockSandboxInstance = {
+            runCode: mocks.sandboxRunCode,
+            kill: mocks.sandboxKill
         };
-        mocks.e2bCreate.mockResolvedValue(mockSandbox);
+        mocks.sandboxCreate.mockResolvedValue(mockSandboxInstance);
         
         // Simulate Syntax Error
-        mocks.e2bExec.mockResolvedValue({
+        mocks.sandboxRunCode.mockResolvedValue({
             logs: { stdout: [], stderr: ['SyntaxError: invalid syntax'] },
             error: { name: 'Error', value: '1', traceback: [] }
         });
@@ -196,7 +191,7 @@ describe('Service Utility Unit Tests', () => {
         
         expect(res.valid).toBe(false);
         expect(res.error).toContain('SyntaxError');
-        expect(mocks.e2bExec).toHaveBeenCalledWith(expect.stringContaining('py_compile'));
+        expect(mocks.sandboxRunCode).toHaveBeenCalledWith(expect.stringContaining('py_compile'), expect.any(Object));
     });
 
     it('should fallback to LLM linting if not python or not E2B', async () => {
@@ -210,19 +205,19 @@ describe('Service Utility Unit Tests', () => {
   describe('toolCodeSearch', () => {
       it('should use grep in E2B mode', async () => {
           const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'key' };
-          const mockSandbox = {
-            notebook: { execCell: mocks.e2bExec },
-            close: mocks.e2bClose
+          const mockSandboxInstance = {
+            runCode: mocks.sandboxRunCode,
+            kill: mocks.sandboxKill
           };
-          mocks.e2bCreate.mockResolvedValue(mockSandbox);
-          mocks.e2bExec.mockResolvedValue({
+          mocks.sandboxCreate.mockResolvedValue(mockSandboxInstance);
+          mocks.sandboxRunCode.mockResolvedValue({
             logs: { stdout: ['src/main.py:import foo', 'src/utils.py:import foo'], stderr: [] },
             error: null
           });
 
           const results = await toolCodeSearch(e2bConfig, 'foo');
           expect(results).toEqual(['src/main.py', 'src/utils.py']);
-          expect(mocks.e2bExec).toHaveBeenCalledWith(expect.stringContaining('grep -r "foo"'));
+          expect(mocks.sandboxRunCode).toHaveBeenCalledWith(expect.stringContaining('grep -r "foo"'), expect.any(Object));
       });
 
       it('should return empty in simulation mode', async () => {

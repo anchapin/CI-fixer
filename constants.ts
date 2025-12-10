@@ -1,3 +1,4 @@
+
 import { CodeFile, LogLine, AgentPhase, SimulationStep } from './types';
 
 export const INITIAL_ERROR_LOG = `[2023-10-27 14:20:01] [INFO] Starting build pipeline #492...
@@ -94,18 +95,21 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 };
 
 export const SCENARIO_FAILURE_LOOP: SimulationStep[] = [
-  { phase: AgentPhase.UNDERSTAND, message: "Analyzing traceback...", delay: 800 },
-  { phase: AgentPhase.UNDERSTAND, message: "Identified `ObjectDeletedError` in `create_user`.", delay: 1000 },
-  { phase: AgentPhase.PLAN, message: "Hypothesis 1: Session is expiring prematurely.", delay: 1200 },
-  { phase: AgentPhase.PLAN, message: "Plan: Remove `expire_all()` call.", delay: 800 },
-  { phase: AgentPhase.IMPLEMENT, message: "Applying patch to `main.py`...", delay: 1500, codeSnapshot: ATTEMPT_1_CODE },
-  { phase: AgentPhase.VERIFY, message: "Running `pytest tests/api/test_endpoints.py`...", delay: 2000 },
-  { phase: AgentPhase.FAILURE, message: "Verification Failed: Database transaction not committed.", delay: 1500, logAppend: { id: 'fail1', timestamp: new Date().toISOString(), level: 'ERROR', content: 'Test Failed: User not found in DB (Did you forget to commit?)' } },
+  { phase: AgentPhase.UNDERSTAND, message: "Analyzing traceback...", delay: 800, iteration: 0 },
+  { phase: AgentPhase.UNDERSTAND, message: "Identified `ObjectDeletedError` in `create_user`.", delay: 1000, iteration: 0 },
+  { phase: AgentPhase.EXPLORE, message: "Locating source file `main.py`...", delay: 800, iteration: 0 },
+  { phase: AgentPhase.PLAN, message: "Hypothesis 1: Session is expiring prematurely.", delay: 1200, iteration: 0 },
+  { phase: AgentPhase.PLAN, message: "Plan: Remove `expire_all()` call.", delay: 800, iteration: 0 },
+  { phase: AgentPhase.ACQUIRE_LOCK, message: "Acquiring lock on `main.py`...", delay: 600, iteration: 0 },
+  { phase: AgentPhase.IMPLEMENT, message: "Applying patch to `main.py`...", delay: 1500, codeSnapshot: ATTEMPT_1_CODE, iteration: 0 },
+  { phase: AgentPhase.VERIFY, message: "Running `pytest tests/api/test_endpoints.py`...", delay: 2000, iteration: 0 },
+  { phase: AgentPhase.FAILURE, message: "Verification Failed: Database transaction not committed.", delay: 1500, logAppend: { id: 'fail1', timestamp: new Date().toISOString(), level: 'ERROR', content: 'Test Failed: User not found in DB (Did you forget to commit?)' }, iteration: 0 },
   
-  // RECURSION
-  { phase: AgentPhase.PLAN, message: "Hypothesis 1 Failed. Re-evaluating...", delay: 1000 },
-  { phase: AgentPhase.PLAN, message: "Hypothesis 2: `flush()` is unnecessary and `commit()` is missing.", delay: 1200 },
-  { phase: AgentPhase.IMPLEMENT, message: "Refactoring session logic...", delay: 1500, codeSnapshot: FIXED_CODE },
-  { phase: AgentPhase.VERIFY, message: "Running test suite...", delay: 2000 },
-  { phase: AgentPhase.SUCCESS, message: "All tests passed (32/32).", delay: 1000, logAppend: { id: 'pass1', timestamp: new Date().toISOString(), level: 'SUCCESS', content: 'Tests Passed. Deployment ready.' } },
+  // RECURSION - Iteration 1
+  { phase: AgentPhase.PLAN, message: "Hypothesis 1 Failed. Re-evaluating...", delay: 1000, iteration: 1 },
+  { phase: AgentPhase.PLAN, message: "Hypothesis 2: `flush()` is unnecessary and `commit()` is missing.", delay: 1200, iteration: 1 },
+  { phase: AgentPhase.ACQUIRE_LOCK, message: "Re-acquiring lock on `main.py`...", delay: 600, iteration: 1 },
+  { phase: AgentPhase.IMPLEMENT, message: "Refactoring session logic...", delay: 1500, codeSnapshot: FIXED_CODE, iteration: 1 },
+  { phase: AgentPhase.VERIFY, message: "Running test suite...", delay: 2000, iteration: 1 },
+  { phase: AgentPhase.SUCCESS, message: "All tests passed (32/32).", delay: 1000, logAppend: { id: 'pass1', timestamp: new Date().toISOString(), level: 'SUCCESS', content: 'Tests Passed. Deployment ready.' }, iteration: 1 },
 ];

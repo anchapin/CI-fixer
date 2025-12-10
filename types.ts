@@ -41,6 +41,7 @@ export interface SimulationStep {
   delay: number; 
   codeSnapshot?: CodeFile;
   logAppend?: LogLine;
+  iteration?: number; // Added to simulate recursion steps
 }
 
 export interface WorkflowRun {

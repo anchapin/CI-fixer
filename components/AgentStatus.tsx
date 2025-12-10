@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AgentPhase, AgentState } from '../types';
-import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock, Terminal } from 'lucide-react';
+import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock, Terminal, Brain, Repeat } from 'lucide-react';
 
 interface AgentStatusProps {
   agentStates: Record<string, AgentState>;
@@ -13,7 +13,8 @@ interface AgentStatusProps {
 export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPhase, selectedAgentId, onSelectAgent }) => {
   const steps = [
     { id: AgentPhase.UNDERSTAND, label: 'Scan', icon: Search },
-    { id: AgentPhase.EXPLORE, label: 'Shell', icon: Terminal }, // New Step
+    { id: AgentPhase.EXPLORE, label: 'Shell', icon: Terminal }, 
+    { id: AgentPhase.PLAN, label: 'Plan', icon: Brain },
     { id: AgentPhase.PLAN_APPROVAL, label: 'Auth', icon: ShieldAlert },
     { id: AgentPhase.ACQUIRE_LOCK, label: 'Lock', icon: Lock }, 
     { id: AgentPhase.IMPLEMENT, label: 'Fix', icon: Code },
@@ -94,11 +95,19 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                              
                              let isPassed = false;
                              if (isSuccess) isPassed = true;
-                             else if (isFailed && agent.phase === AgentPhase.FAILURE) isPassed = true; 
+                             else if (isFailed && agent.phase === AgentPhase.FAILURE) {
+                                // If failed globally, assume we passed up to the point of failure? 
+                                // Actually, stick to gray.
+                                isPassed = false; 
+                             }
                              else if (currentIndex > stepIndex) isPassed = true;
                              
-                             // Visual logic for skipped steps
-                             if (step.id === AgentPhase.PLAN_APPROVAL && agent.phase === AgentPhase.ACQUIRE_LOCK) isPassed = true;
+                             // Visual logic for skipped steps (Plan Approval is often skipped in automated mode)
+                             if (step.id === AgentPhase.PLAN_APPROVAL && (
+                                 agent.phase === AgentPhase.ACQUIRE_LOCK || 
+                                 agent.phase === AgentPhase.IMPLEMENT ||
+                                 currentIndex > stepIndex
+                             )) isPassed = true;
 
                              const isCurrent = agent.phase === step.id;
                              
@@ -118,10 +127,13 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                 </div>
 
                 {/* Iteration Count */}
-                <div className="text-center">
-                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                        agent.iteration > 0 ? 'bg-amber-950/40 text-amber-500 border border-amber-900/50' : 'text-slate-600'
+                <div className="flex items-center justify-center">
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                        agent.iteration > 0 
+                        ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50 shadow-[0_0_5px_rgba(168,85,247,0.2)]' 
+                        : 'text-slate-600'
                     }`}>
+                        {agent.iteration > 0 && <Repeat className="w-2 h-2" />}
                         v{agent.iteration + 1}
                     </span>
                 </div>
