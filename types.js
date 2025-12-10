@@ -1,0 +1,22 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AgentPhase = void 0;
+var AgentPhase;
+(function (AgentPhase) {
+    AgentPhase["IDLE"] = "IDLE";
+    AgentPhase["INIT_REPO"] = "INIT_REPO";
+    AgentPhase["UNDERSTAND"] = "UNDERSTAND";
+    AgentPhase["EXPLORE"] = "EXPLORE";
+    AgentPhase["PLAN"] = "PLAN";
+    AgentPhase["PLAN_APPROVAL"] = "PLAN_APPROVAL";
+    AgentPhase["ACQUIRE_LOCK"] = "ACQUIRE_LOCK";
+    AgentPhase["TOOL_USE"] = "TOOL_USE";
+    AgentPhase["IMPLEMENT"] = "IMPLEMENT";
+    AgentPhase["VERIFY"] = "VERIFY";
+    AgentPhase["RELEASE_LOCK"] = "RELEASE_LOCK";
+    AgentPhase["CONSOLIDATE"] = "CONSOLIDATE";
+    AgentPhase["TESTING"] = "TESTING";
+    AgentPhase["SUCCESS"] = "SUCCESS";
+    AgentPhase["FAILURE"] = "FAILURE";
+    AgentPhase["PARTIAL_SUCCESS"] = "PARTIAL_SUCCESS";
+})(AgentPhase || (exports.AgentPhase = AgentPhase = {}));

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
 import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal, Download, Wifi, Loader2, AlertTriangle } from 'lucide-react';
-import { getPRFailedRuns, testE2BConnection } from '../services';
+import { getPRFailedRuns, testE2BConnection, validateE2BApiKey } from '../services';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -173,11 +173,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       setIsTestingE2B(true);
       setE2bStatus(null);
       
+      // Validate API key format first
+      const validation = validateE2BApiKey(formData.e2bApiKey);
+      if (!validation.valid) {
+          setE2bStatus({ success: false, message: `Invalid API Key: ${validation.message}` });
+          setIsTestingE2B(false);
+          return;
+      }
+      
       const result = await testE2BConnection(formData.e2bApiKey);
       setE2bStatus(result);
       
-      // Auto-switch logic restored for "Network Blocked" scenario
-      if (!result.success && (result.message.includes('Network Blocked') || result.message.includes('Failed to fetch'))) {
+      // Auto-switch logic for network issues
+      if (!result.success && (result.message.includes('Network') || result.message.includes('Failed to fetch'))) {
           setFormData(prev => ({ ...prev, devEnv: 'simulation' }));
       }
       

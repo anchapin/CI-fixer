@@ -20,6 +20,28 @@ export function extractCode(text: string, language: string = 'text'): string {
   return text.trim();
 }
 
+// Helper: Validate E2B API Key format
+export function validateE2BApiKey(apiKey: string): { valid: boolean; message: string } {
+  if (!apiKey || apiKey.trim() === '') {
+    return { valid: false, message: 'API key is empty' };
+  }
+  
+  if (!apiKey.startsWith('e2b_')) {
+    return { valid: false, message: 'API key must start with "e2b_" prefix' };
+  }
+  
+  if (apiKey.length < 20) {
+    return { valid: false, message: 'API key is too short (should be at least 20 characters)' };
+  }
+  
+  // Check for common formatting issues
+  if (apiKey.includes(' ') || apiKey.includes('\n') || apiKey.includes('\r')) {
+    return { valid: false, message: 'API key contains invalid characters (spaces, newlines)' };
+  }
+  
+  return { valid: true, message: 'API key format is valid' };
+}
+
 // Helper: Safe JSON Parse with aggressive cleanup
 export function safeJsonParse<T>(text: string, fallback: T): T {
     try {
@@ -300,6 +322,17 @@ export async function findClosestFile(config: AppConfig, filePath: string): Prom
 export async function runDevShellCommand(config: AppConfig, command: string): Promise<{ output: string, exitCode: number }> {
     // Check if we should even attempt E2B
     if (config.devEnv === 'e2b' && config.e2bApiKey) {
+        // Validate API key before attempting connection
+        const validation = validateE2BApiKey(config.e2bApiKey);
+        if (!validation.valid) {
+            console.warn(`[E2B] Invalid API Key: ${validation.message}. Falling back to simulation.`);
+            config.devEnv = 'simulation';
+            return { 
+                output: `[SYSTEM WARNING] Invalid E2B API Key: ${validation.message}. Switched to High-Fidelity Simulation.\n\n[SIMULATION] $ ${command}\n> (Mock Output: Command assumed successful for demo)`, 
+                exitCode: 0 
+            };
+        }
+        
         let sandbox;
         try {
             console.log(`[E2B] Executing: ${command}`);
@@ -343,13 +376,34 @@ export async function runDevShellCommand(config: AppConfig, command: string): Pr
                  if (command.includes('pytest')) mockOutput = "tests/test_api.py::test_create_user PASSED";
 
                  return { 
-                     output: `[SYSTEM WARNING] E2B Connection Unreachable (DEBUG: ${errStr}). Switched to High-Fidelity Simulation.\n\n[SIMULATION] $ ${command}\n> ${mockOutput}`, 
+                     output: `[SYSTEM WARNING] E2B Connection Unreachable (DEBUG: ${errStr}). Please check:\n` +
+                             `- Internet connectivity\n` +
+                             `- CORS/browser security settings\n` +
+                             `- Firewall/ad-blocker blocking api.e2b.dev\n` +
+                             `- Valid E2B API key format\n\n` +
+                             `Switched to High-Fidelity Simulation.\n\n[SIMULATION] $ ${command}\n> ${mockOutput}`, 
                      exitCode: 0 
                  };
             }
 
-            console.error("E2B Execution Failed:", e);
-            return { output: `E2B Exception: ${e.message}`, exitCode: 1 };
+            else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('Unauthorized') || errStr.includes('Forbidden')) {
+                console.error(`[E2B] Authentication Failed: ${errStr}`);
+                return { 
+                    output: `[E2B AUTH ERROR] Invalid or expired API key: ${errStr}. Please check your E2B API key and try again.`,
+                    exitCode: 1 
+                };
+            }
+            else if (errStr.includes('timeout') || errStr.includes('Timeout')) {
+                console.error(`[E2B] Connection Timeout: ${errStr}`);
+                return { 
+                    output: `[E2B TIMEOUT] Connection to E2B timed out: ${errStr}. Service may be temporarily unavailable.`,
+                    exitCode: 1 
+                };
+            }
+            else {
+                console.error("E2B Execution Failed:", e);
+                return { output: `E2B Exception: ${e.message}`, exitCode: 1 };
+            }
         } finally {
             if (sandbox) {
                 try {
@@ -574,7 +628,11 @@ export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, erro
 
 // Utility to test E2B connection explicitly
 export async function testE2BConnection(apiKey: string): Promise<{ success: boolean; message: string }> {
-    if (!apiKey) return { success: false, message: "No API Key provided" };
+    // First validate the API key format
+    const validation = validateE2BApiKey(apiKey);
+    if (!validation.valid) {
+        return { success: false, message: `Invalid API Key: ${validation.message}` };
+    }
     
     // We create a sandbox, run a trivial command, and kill it immediately.
     // This verifies authentication and network path.
@@ -585,28 +643,52 @@ export async function testE2BConnection(apiKey: string): Promise<{ success: bool
         const result = await sandbox.runCode('echo "Connection Verified"', { language: 'bash' });
         
         if (result.error) {
-             throw new Error(result.error.value || "Unknown execution error");
+             const errorMsg = result.error.value || "Unknown execution error";
+             console.error(`[E2B] Execution Error: ${result.error.name}: ${errorMsg}`);
+             return { success: false, message: `E2B Execution Error: ${result.error.name}: ${errorMsg}` };
         }
         
         if (!result.logs.stdout.join('').includes('Connection Verified')) {
-            throw new Error("Sandbox created but command output mismatch.");
+            const stdout = result.logs.stdout.join('\n');
+            const stderr = result.logs.stderr.join('\n');
+            console.error(`[E2B] Command output mismatch. Expected "Connection Verified" but got stdout: ${stdout}, stderr: ${stderr}`);
+            return { success: false, message: `Unexpected command output. Check E2B sandbox environment.` };
         }
 
         return { success: true, message: "Connection Established & Verified." };
     } catch (e: any) {
         const errStr = e.message || e.toString();
+        console.error(`[E2B] Connection Test Failed: ${errStr}`);
         
-        // Robust check for network/fetch errors BEFORE logging as error
+        // Enhanced error classification for better debugging
         if (errStr.includes('Failed to fetch') || errStr.includes('NetworkError') || errStr.includes('Network request failed')) {
              console.warn(`[E2B] Network Blocked. Raw Error: ${errStr}`);
-             return { success: false, message: `Network Blocked (DEBUG: ${errStr}). Switching to Simulation.` };
+             return { 
+                 success: false, 
+                 message: `Network Connection Failed: ${errStr}. Please check:\n` +
+                         `- Internet connectivity\n` +
+                         `- CORS/browser security settings\n` +
+                         `- Firewall/ad-blocker blocking api.e2b.dev\n` +
+                         `- Valid E2B API key format` 
+             };
         }
-        
-        console.error("[E2B] Connection Test Failed:", e);
-        return { success: false, message: errStr || "Connection Failed" };
+        else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('Unauthorized') || errStr.includes('Forbidden')) {
+             return { success: false, message: `Authentication Failed: ${errStr}. Please verify your E2B API key is correct and active.` };
+        }
+        else if (errStr.includes('timeout') || errStr.includes('Timeout')) {
+             return { success: false, message: `Connection Timeout: ${errStr}. E2B service may be temporarily unavailable.` };
+        }
+        else {
+             return { success: false, message: `Connection Error: ${errStr}` };
+        }
     } finally {
         if (sandbox) {
-            try { await sandbox.kill(); } catch (e) { console.warn("Failed to kill test sandbox", e); }
+            try { 
+                await sandbox.kill(); 
+                console.log("[E2B] Test sandbox cleaned up successfully");
+            } catch (e) { 
+                console.warn("Failed to kill test sandbox", e);
+            }
         }
     }
 }
