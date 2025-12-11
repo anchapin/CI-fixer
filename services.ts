@@ -1,6 +1,10 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { AppConfig, WorkflowRun, CodeFile, FileChange, AgentPhase, RunGroup, LogLine, AgentPlan, PlanTask } from './types';
+import * as yaml from 'js-yaml';
+import { AppConfig, WorkflowRun, CodeFile, FileChange, AgentPhase, RunGroup, LogLine, AgentPlan, PlanTask } from './types.js';
+
+
+import { SandboxEnvironment, createSandbox } from './sandbox.js';
 import { Sandbox } from '@e2b/code-interpreter';
 
 // Constants
@@ -140,7 +144,6 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
                     throw new Error(`Provider API Server/Rate Error ${response.status}: ${errText}`);
                 }
                 // For client errors (4xx), do not retry usually, unless it's a specific known useful retry case.
-                // But generally 400/401/403 should fail immediately.
                 const clientError: any = new Error(`Provider API Client Error ${response.status}: ${errText}`);
                 clientError.noRetry = true;
                 throw clientError;
@@ -148,7 +151,9 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
 
             const data = await response.json();
             return { text: data.choices?.[0]?.message?.content || "" };
-        }, 3, 1000); // 3 retries, 1000ms base delay
+        }, 5, 2000).catch(e => {
+            throw new Error(`LLM Generation Failed after retries: ${e.message}`);
+        });
     }
 
     // 2. Default: Google GenAI SDK
@@ -268,8 +273,37 @@ export async function getWorkflowLogs(repoUrl: string, runId: number, token: str
     }
 
     if (!failedJob) {
+        // Fallback: If the run failed but no specific job failed (e.g. startup failure, timeout, or cancellation)
+        if (runData.conclusion === 'failure' || runData.conclusion === 'timed_out') {
+            const checkSuiteUrl = runData.check_suite_url;
+            let failureDetails = `Workflow Run Failed (${runData.conclusion}) but no individual job failed.\n`;
+
+            // Try fetching annotations from the check suite
+            try {
+                if (checkSuiteUrl) {
+                    const checkRunsRes = await fetch(`${checkSuiteUrl}/check-runs`, { headers: { Authorization: `Bearer ${token}` } });
+                    const checkRunsData = await checkRunsRes.json();
+                    const failedCheck = checkRunsData.check_runs?.find((c: any) => c.conclusion === 'failure');
+
+                    if (failedCheck) {
+                        failureDetails += `Check Run '${failedCheck.name}' failed.\nOutput: ${failedCheck.output?.summary || "No summary"}\n${failedCheck.output?.text || ""}`;
+                    } else {
+                        failureDetails += "Could not locate specific check run failure. Possible invalid YAML or secrets.";
+                    }
+                }
+            } catch (e: any) {
+                failureDetails += `Failed to fetch failure annotations: ${e.message}`;
+            }
+
+            return {
+                logText: failureDetails,
+                jobName: "Workflow Setup",
+                headSha
+            };
+        }
+
         return {
-            logText: `No failed job found in this run (Strategy: ${strategy}).`,
+            logText: `No failed job found in this run (Strategy: ${strategy}). Status: ${runData.status}, Conclusion: ${runData.conclusion}`,
             jobName: "unknown",
             headSha
         };
@@ -342,6 +376,7 @@ export interface DiagnosisResult {
     filePath: string;
     fixAction: 'edit' | 'command'; // New: Support shell commands
     suggestedCommand?: string;
+    reproductionCommand?: string; // TDR: Command to reproduce the failure
 }
 
 export async function diagnoseError(config: AppConfig, logSnippet: string, repoContext?: string): Promise<DiagnosisResult> {
@@ -363,23 +398,36 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
        - 'edit': Modifying a code file or workflow YAML.
        - 'command': Running a one-off shell command (RARELY USED for CI issues).
     
-    SPECIAL RULE:
     - If the error is "No space left on device" or similar, you MUST recommend 'edit'.
     - The 'filePath' should be the workflow file (e.g., .github/workflows/deploy.yml).
     - The plan should be to insert 'docker system prune -af' before the failing step.
+    - VALIDATION RULES:
+      - Do NOT suggest commands with syntax errors (e.g. 'pip install -r' without a filename).
+      - Do NOT suggest invalid YAML (indentation must be correct).
+      - If modifying a YAML file, suggestion MUST be a valid YAML snippet.
+    - EXTRACT A REPRODUCTION COMMAND:
+    - EXTRACT A REPRODUCTION COMMAND:
+      - Look for the failing test name in the logs.
+      - Construct a command to run ONLY that test.
+      - Examples: 
+        - \`npm test -- -t "Login Test"\`
+        - \`pytest tests/test_auth.py\`
+        - \`go test ./pkg/auth -run TestLogin\`
+      - If no specific test is failing (e.g. build error), usage \`npm run build\` or the failing script.
 
     Output JSON: { 
       "summary": "string", 
       "filePath": "string (relative path, or empty if unknown)", 
       "fixAction": "edit" | "command",
-      "suggestedCommand": "string (only if action is command)"
+      "suggestedCommand": "string (only if action is command)",
+      "reproductionCommand": "string (e.g. 'npm test -- -t \"test_name\"')"
     }
     
     === AGENT CONTEXT ===
-    ${repoContext || 'None'}
+    \${repoContext || 'None'}
 
     === TARGET CI LOGS ===
-    ${cleanLogs}
+    \${cleanLogs}
   `;
 
     try {
@@ -413,10 +461,11 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
             summary: result.summary || "Diagnosis Failed",
             filePath: result.filePath || "",
             fixAction: result.fixAction || "edit",
-            suggestedCommand: result.suggestedCommand
+            suggestedCommand: result.suggestedCommand,
+            reproductionCommand: result.reproductionCommand
         };
     } catch {
-        return { summary: "Diagnosis Failed", filePath: "", fixAction: "edit" };
+        return { summary: "Diagnosis Failed", filePath: "", fixAction: "edit", reproductionCommand: undefined };
     }
 }
 
@@ -425,7 +474,7 @@ export async function generateRepoSummary(config: AppConfig): Promise<string> {
 }
 
 export async function generatePostMortem(config: AppConfig, failedAgents: any[]): Promise<string> {
-    const prompt = `Generate a post-mortem for these failed agents: ${JSON.stringify(failedAgents)}`;
+    const prompt = `Generate a post - mortem for these failed agents: ${JSON.stringify(failedAgents)} `;
     const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
     return res.text;
 }
@@ -442,132 +491,86 @@ export async function findClosestFile(config: AppConfig, filePath: string): Prom
 
 // --- NEW SHELL / DEV ENVIRONMENT SERVICES ---
 
-export async function runDevShellCommand(config: AppConfig, command: string): Promise<{ output: string, exitCode: number }> {
-    // Check if we should even attempt E2B
-    if (config.devEnv === 'e2b' && config.e2bApiKey) {
-        // Validate API key before attempting connection
-        const validation = validateE2BApiKey(config.e2bApiKey);
-        if (!validation.valid) {
-            console.warn(`[E2B] Invalid API Key: ${validation.message}. Falling back to simulation.`);
-            // Note: Removed automatic config.devEnv modification to prevent state changes
-            return {
-                output: `[SYSTEM WARNING] Invalid E2B API Key: ${validation.message}. Using High-Fidelity Simulation.\n\n[SIMULATION] $ ${command}\n> (Mock Output: Command assumed successful for demo)`,
-                exitCode: 0
-            };
+export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha?: string): Promise<SandboxEnvironment> {
+    // 1. Create the Sandbox via Factory (Docker or E2B)
+    const sandbox = createSandbox(config);
+
+    // 2. Initialize (Start Container / Connect to E2B)
+    try {
+        await sandbox.init();
+    } catch (e: any) {
+        throw new Error(`Failed to initialize sandbox: ${e.message}`);
+    }
+
+    console.log(`[Sandbox] Persistent Sandbox Created. ID: ${sandbox.getId()}`);
+
+    // 3. Initialize Repo
+    // Construct Auth URL if token present
+    let cloneUrl = repoUrl;
+    if (config.githubToken && !repoUrl.includes('@')) {
+        const cleanUrl = repoUrl.replace('https://', '');
+        cloneUrl = `https://oauth2:${config.githubToken}@${cleanUrl}`;
+    }
+
+    console.log(`[Sandbox] Cloning ${repoUrl}...`);
+    try {
+        await sandbox.runCommand(`git clone ${cloneUrl} .`);
+    } catch (e: any) {
+        throw new Error(`Failed to clone repo in sandbox: ${e.message}`);
+    }
+
+    if (headSha) {
+        console.log(`[Sandbox] Checkout ${headSha}...`);
+        await sandbox.runCommand(`git checkout ${headSha}`);
+    }
+
+    // 4. Try detecting and installing dependencies (Best Effort)
+    try {
+        console.log('[Sandbox] Checking for dependencies...');
+        const check = await sandbox.runCommand('ls package.json requirements.txt');
+        const output = check.stdout;
+
+        // Install LSP Tools Globally (Best Effort)
+        // Use single quotes for safety in shells
+        console.log('[Sandbox] Installing LSP Tools (pyright, typescript)...');
+        await sandbox.runCommand('npm install -g typescript pyright || pip install pyright');
+
+        if (output.includes('package.json')) {
+            console.log('[Sandbox] Installing Node dependencies...');
+            await sandbox.runCommand('npm install');
+        } else if (output.includes('requirements.txt')) {
+            console.log('[Sandbox] Installing Python dependencies...');
+            await sandbox.runCommand('pip install -r requirements.txt');
         }
+    } catch (e) {
+        console.warn('[Sandbox] Dependency installation warning (continuing):', e);
+    }
 
-        let sandbox;
+    return sandbox;
+}
+
+export async function runDevShellCommand(config: AppConfig, command: string, sandbox?: SandboxEnvironment): Promise<{ output: string, exitCode: number }> {
+    // 1. Logic: Use Sandbox if available
+    if (sandbox) {
         try {
-            console.log(`[E2B] Executing: ${command} (Env: ${IS_BROWSER ? 'Browser' : 'Node'})`);
+            console.log(`[Sandbox] Executing: ${command}`);
+            const result = await sandbox.runCommand(command);
+            const combinedLogs = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
 
-            // Use the standard Sandbox API with Retry
-            // In Browser, use the local proxy to avoid CORS/AdBlockers
-            const sandboxOpts: any = { apiKey: config.e2bApiKey };
-            if (IS_BROWSER) {
-                // Use the current origin + /api/e2b proxy path
-                // We use 'apiUrl' because 'domain' forces https:// prefix in the SDK,
-                // which breaks when connecting to localhost (http).
-                sandboxOpts.apiUrl = window.location.origin + '/api/e2b';
-            }
-
-            sandbox = await retryWithBackoff(() => Sandbox.create(sandboxOpts));
-            console.log('[E2B] Sandbox Created. ID:', sandbox.sandboxId);
-
-            if (IS_BROWSER) {
-                // Monkey-patch the connection config to route execution requests through our dynamic proxy
-                const sbAny = sandbox as any;
-                if (sbAny.connectionConfig) {
-                    const originalGetSandboxUrl = sbAny.connectionConfig.getSandboxUrl.bind(sbAny.connectionConfig);
-
-                    sbAny.connectionConfig.getSandboxUrl = (sandboxId: string, opts: any) => {
-                        // Get the original direct URL (e.g. https://49999-<id>.e2b.app)
-                        const originalUrl = originalGetSandboxUrl(sandboxId, opts);
-                        // Extract the hostname (remove protocol)
-                        // e.g. 49999-<id>.e2b.app
-                        const targetHost = originalUrl.replace(/^https?:\/\//, '');
-
-                        // Return our proxy URL: http://localhost:3000/api/sandbox_exec/<TARGET_HOST>
-                        // The rest of the path is appended by the SDK
-                        return window.location.origin + '/api/sandbox_exec/' + targetHost;
-                    };
-                    console.log('[E2B] Patched connectionConfig.getSandboxUrl for proxy execution');
-                }
-            }
-
-            // Execute using bash to support shell commands
-            const result = await sandbox.runCode(command, { language: 'bash' });
-
-            // Format output from logs
-            const stdout = result.logs.stdout.join('\n');
-            const stderr = result.logs.stderr.join('\n');
-            const combinedLogs = stdout + (stderr ? `\n[STDERR]\n${stderr}` : "");
-
-            // Check for execution errors
-            if (result.error) {
-                const errorInfo = `E2B Error: ${result.error.name}: ${result.error.value}\n${result.error.traceback}`;
-                console.error(`[E2B] Execution Error Details:`, result.error);
-                return { output: `${errorInfo}\nLogs:\n${combinedLogs}`, exitCode: 1 };
-            }
-
-            return { output: combinedLogs || "Command executed.", exitCode: 0 };
+            return {
+                output: combinedLogs,
+                exitCode: result.exitCode
+            };
         } catch (e: any) {
-            // Robust Error Handling for Network/AdBlock issues
-            const errStr = e.message || e.toString();
-            const isNetworkError =
-                errStr.includes('Failed to fetch') ||
-                errStr.includes('NetworkError') ||
-                errStr.includes('Network request failed');
-
-            if (isNetworkError) {
-                console.warn(`[E2B] Connection Blocked. Raw Error: ${errStr}`);
-
-                // Note: Removed automatic config.devEnv modification to prevent state changes
-                // Generate a plausible mock response based on the command to keep the agent moving
-                let mockOutput = "(Mock Output: Command assumed successful for demo)";
-                if (command.includes('grep')) mockOutput = `src/main.py:10: ${command.split('"')[1] || 'match'}`;
-                if (command.includes('ls')) mockOutput = "src\ntests\nREADME.md\nrequirements.txt";
-                if (command.includes('pytest')) mockOutput = "tests/test_api.py::test_create_user PASSED";
-
-                return {
-                    output: `[SYSTEM WARNING] E2B Connection Unreachable (DEBUG: ${errStr}). Please check:\n` +
-                        `- Internet connectivity\n` +
-                        `- CORS/browser security settings\n` +
-                        `- Firewall/ad-blocker blocking api.e2b.dev\n` +
-                        `- Valid E2B API key format\n\n` +
-                        `Using High-Fidelity Simulation.\n\n[SIMULATION] $ ${command}\n> ${mockOutput}`,
-                    exitCode: 0
-                };
-            }
-
-            else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('Unauthorized') || errStr.includes('Forbidden')) {
-                console.error(`[E2B] Authentication Failed: ${errStr}`);
-                return {
-                    output: `[E2B AUTH ERROR] Invalid or expired API key: ${errStr}. Please check your E2B API key and try again.`,
-                    exitCode: 1
-                };
-            }
-            else if (errStr.includes('timeout') || errStr.includes('Timeout')) {
-                console.error(`[E2B] Connection Timeout: ${errStr}`);
-                return {
-                    output: `[E2B TIMEOUT] Connection to E2B timed out: ${errStr}. Service may be temporarily unavailable.`,
-                    exitCode: 1
-                };
-            }
-            else {
-                console.error("E2B Execution Failed:", e);
-                return { output: `E2B Exception: ${e.message}`, exitCode: 1 };
-            }
-        } finally {
-            if (sandbox) {
-                try {
-                    await sandbox.kill();
-                } catch (cleanupError) {
-                    console.warn("Failed to kill sandbox:", cleanupError);
-                }
-            }
+            console.error(`[Sandbox] Execution Failed:`, e);
+            return { output: `Execution Exception: ${e.message}`, exitCode: 1 };
         }
     }
-    // Simulation
+
+    // 2. Logic: One-off E2B (Legacy support or fallback) - Currently removed to encourage persistent usage
+    // If config.devEnv === 'e2b', we really should have a sandbox by now.
+
+    // 3. Fallback: Simulation
     return { output: `[SIMULATION] Shell command executed: ${command}\n> (Mock Output)`, exitCode: 0 };
 }
 
@@ -575,36 +578,66 @@ export async function searchRepoFile(config: AppConfig, query: string): Promise<
     return null;
 }
 
-export async function toolCodeSearch(config: AppConfig, query: string): Promise<string[]> {
-    // If we have E2B, we could run 'grep' or 'find' here.
-    if (config.devEnv === 'e2b') {
+export async function toolCodeSearch(config: AppConfig, query: string, sandbox?: SandboxEnvironment): Promise<string[]> {
+    if (sandbox) {
         const cmd = `grep -r "${query}" . | head -n 5`;
-        const res = await runDevShellCommand(config, cmd);
+        const res = await runDevShellCommand(config, cmd, sandbox);
         if (res.exitCode === 0 && res.output.trim().length > 0) {
-            // Basic parsing of grep output
             const lines = res.output.split('\n');
             const paths = lines.map(l => l.split(':')[0]).filter(p => p && !p.startsWith('['));
-            // Filter unique
             return paths.filter((v, i, a) => a.indexOf(v) === i);
         }
     }
+    // Simulation / Default
     return [];
 }
 
-export async function toolLintCheck(config: AppConfig, code: string, language: string): Promise<{ valid: boolean, error?: string }> {
-    // 1. Try E2B Real Linter if available
-    if (config.devEnv === 'e2b' && config.e2bApiKey) {
-        // Simple python syntax check example
+export async function toolLintCheck(config: AppConfig, code: string, language: string, sandbox?: SandboxEnvironment): Promise<{ valid: boolean, error?: string }> {
+    // 1. Try Sandbox Check
+    if (sandbox) {
+        // Python: Use pyright (installed globally in prepareSandbox)
         if (language === 'python') {
-            const cmd = `echo "${code.replace(/"/g, '\\"')}" > check.py && python3 -m py_compile check.py`;
-            const res = await runDevShellCommand(config, cmd);
-            if (res.exitCode !== 0 && !res.output.includes('[SIMULATION]')) {
-                return { valid: false, error: res.output };
-            }
-            // If simulation fallback occurred, assume valid to proceed
-            if (res.output.includes('[SIMULATION]')) return { valid: true };
+            console.log('[LSP] Running Pyright (Python)...');
+            const tempFile = `temp_check.py`;
+            await sandbox.writeFile(tempFile, code);
 
+            const cmd = `pyright ${tempFile}`;
+            const res = await runDevShellCommand(config, cmd, sandbox);
+
+            if (res.exitCode !== 0) {
+                const cleanError = res.output.replace(new RegExp(tempFile, 'g'), 'file.py').slice(0, 500);
+                return { valid: false, error: `[Pyright Type Error] ${cleanError}` };
+            }
             return { valid: true };
+        }
+
+        // TypeScript/JavaScript: Use tsc
+        if (language === 'typescript' || language === 'javascript' || language === 'javascriptreact' || language === 'typescriptreact') {
+            console.log('[LSP] Running TSC (TypeScript)...');
+            const ext = (language.includes('react') ? 'tsx' : 'ts');
+            const tempFile = `temp_check.${ext}`;
+
+            await sandbox.writeFile(tempFile, code);
+
+            // Run tsc
+            const cmd = `npx tsc ${tempFile} --noEmit --esModuleInterop --skipLibCheck --jsx react`;
+            const res = await runDevShellCommand(config, cmd, sandbox);
+
+            if (res.exitCode !== 0) {
+                const cleanError = res.output.replace(new RegExp(tempFile, 'g'), `file.${ext}`).slice(0, 500);
+                return { valid: false, error: `[TSC Type Error] ${cleanError}` };
+            }
+            return { valid: true };
+        }
+    }
+
+    // 2. YAML Validation (Using js-yaml)
+    if (language === 'yaml' || language === 'yml') {
+        try {
+            yaml.load(code);
+            return { valid: true };
+        } catch (e: any) {
+            return { valid: false, error: `[YAML Syntax Error] ${e.message}` };
         }
     }
 
@@ -616,6 +649,26 @@ export async function toolLintCheck(config: AppConfig, code: string, language: s
         model: MODEL_FAST
     });
     return safeJsonParse(res.text, { valid: true });
+}
+
+export async function toolLSPDefinition(config: AppConfig, file: string, line: number, sandbox?: SandboxEnvironment): Promise<string> {
+    if (sandbox) {
+        // Universal Git Grep Definition (Heuristic Fallback for CLI)
+        return "";
+    }
+    return "";
+}
+
+export async function toolLSPReferences(config: AppConfig, file: string, line: number, symbol: string, sandbox?: SandboxEnvironment): Promise<string[]> {
+    if (sandbox) {
+        // Heuristic: grep for the symbol
+        const cmd = `grep -r "${symbol}" . --include=\*.{ts,tsx,js,py,go}`;
+        const res = await runDevShellCommand(config, cmd, sandbox);
+        if (res.exitCode === 0) {
+            return res.output.split('\n').slice(0, 10);
+        }
+    }
+    return [];
 }
 
 export async function toolScanDependencies(config: AppConfig, headSha: string): Promise<string> {
@@ -704,8 +757,51 @@ export async function judgeFix(config: AppConfig, original: string, fixed: strin
     } catch { return { passed: true, score: 5, reasoning: "Judge Offline (Bypass)" }; }
 }
 
-export async function runSandboxTest(config: AppConfig, group: RunGroup, iteration: number, isRealMode: boolean, fileChange: FileChange, errorGoal: string, logCallback: any, fileMap: any): Promise<{ passed: boolean, logs: string }> {
+export async function runSandboxTest(config: AppConfig, group: RunGroup, iteration: number, isRealMode: boolean, fileChange: FileChange, errorGoal: string, logCallback: any, fileMap: any, sandbox?: SandboxEnvironment): Promise<{ passed: boolean, logs: string }> {
     // CHECK PHASE: Uses checkEnv configuration (GitHub Actions or Simulation)
+
+    // 0. Persistent Container Mode
+    if (config.checkEnv === 'e2b' || (sandbox)) {
+        if (!sandbox) return { passed: false, logs: "Sandbox not available for testing." };
+
+        logCallback('INFO', 'Running verification in Persistent Container...');
+        try {
+            // 1. Write the file change
+            await sandbox.writeFile(fileChange.path, fileChange.modified.content);
+            logCallback('VERBOSE', `Updated file ${fileChange.path} in container.`);
+
+            // 2. Determine and run test command
+            // Try to guess based on existing files or config
+            let testCmd = "npm test";
+            const lsCheck = await sandbox.runCommand("ls package.json requirements.txt");
+            const files = lsCheck.stdout;
+
+            if (files.includes('requirements.txt') && !files.includes('package.json')) {
+                testCmd = "pytest";
+            }
+
+            logCallback('TOOL', `Executing test command: ${testCmd}`);
+            const result = await sandbox.runCommand(testCmd);
+            const fullLog = result.stdout + "\n" + result.stderr;
+
+            if (result.exitCode !== 0) {
+                // Exit code non-zero generally means failure in test runners
+                return { passed: false, logs: fullLog };
+            }
+
+            if (fullLog.includes('FAIL') || fullLog.includes('failed') || fullLog.includes('Error:')) {
+                // Be careful not to match "0 failed"
+                if (!fullLog.includes('0 failed')) {
+                    return { passed: false, logs: fullLog };
+                }
+            }
+
+            return { passed: true, logs: fullLog };
+
+        } catch (e: any) {
+            return { passed: false, logs: `Container Exception: ${e.message}` };
+        }
+    }
 
     if (config.checkEnv === 'github_actions' && isRealMode) {
         logCallback('INFO', 'Triggering GitHub Action for verification (Pushing changes)...');
@@ -792,61 +888,85 @@ export async function pushMultipleFilesToGitHub(config: AppConfig, files: { path
         'Content-Type': 'application/json'
     };
 
-    // 1. Get the latest commit SHA of the branch
-    const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${branchName}`, { headers });
-    if (!refRes.ok) throw new Error(`Failed to get ref for branch ${branchName}`);
-    const refData = await refRes.json();
-    const latestCommitSha = refData.object.sha;
+    // Helper to run the atomic commit sequence
+    const attemptPush = async () => {
+        // 1. Get the latest commit SHA of the branch
+        const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${branchName}`, { headers });
+        if (!refRes.ok) {
+            if (refRes.status === 404) throw new Error(`Branch '${branchName}' not found`);
+            const err = new Error(`Failed to get ref for branch ${branchName}: ${refRes.statusText}`);
+            (err as any).noRetry = refRes.status === 401 || refRes.status === 403; // Auth errors are fatal
+            throw err;
+        }
+        const refData = await refRes.json();
+        const latestCommitSha = refData.object.sha;
 
-    // 2. Get the base tree of the latest commit
-    const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits/${latestCommitSha}`, { headers });
-    if (!commitRes.ok) throw new Error("Failed to get latest commit");
-    const commitData = await commitRes.json();
-    const baseTreeSha = commitData.tree.sha;
+        // 2. Get the base tree of the latest commit
+        const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits/${latestCommitSha}`, { headers });
+        if (!commitRes.ok) throw new Error("Failed to get latest commit");
+        const commitData = await commitRes.json();
+        const baseTreeSha = commitData.tree.sha;
 
-    // 3. Create a new tree with the file changes
-    const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-            base_tree: baseTreeSha,
-            tree: files.map(f => ({
-                path: f.path,
-                mode: '100644', // 100644 for file (blob), 100755 for executable (blob), 040000 for subdirectory (tree)
-                type: 'blob',
-                content: f.content
-            }))
-        })
-    });
-    if (!treeRes.ok) throw new Error("Failed to create git tree");
-    const treeData = await treeRes.json();
-    const newTreeSha = treeData.sha;
+        // 3. Create a new tree with the file changes
+        const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                base_tree: baseTreeSha,
+                tree: files.map(f => ({
+                    path: f.path,
+                    mode: '100644', // 100644 for file (blob), 100755 for executable (blob), 040000 for subdirectory (tree)
+                    type: 'blob',
+                    content: f.content
+                }))
+            })
+        });
+        if (!treeRes.ok) throw new Error("Failed to create git tree");
+        const treeData = await treeRes.json();
+        const newTreeSha = treeData.sha;
 
-    // 4. Create a new commit
-    const newCommitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-            message: `Auto-fix via CI Fixer Agent: Updated ${files.length} files`,
-            tree: newTreeSha,
-            parents: [latestCommitSha]
-        })
-    });
-    if (!newCommitRes.ok) throw new Error("Failed to create commit");
-    const newCommitData = await newCommitRes.json();
-    const newCommitSha = newCommitData.sha;
+        // 4. Create a new commit
+        const newCommitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                message: `Auto-fix via CI Fixer Agent: Updated ${files.length} files`,
+                tree: newTreeSha,
+                parents: [latestCommitSha]
+            })
+        });
+        if (!newCommitRes.ok) throw new Error("Failed to create commit");
+        const newCommitData = await newCommitRes.json();
+        const newCommitSha = newCommitData.sha;
 
-    // 5. Update the branch reference
-    const updateRefRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branchName}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-            sha: newCommitSha
-        }) // Force update not needed usually if valid fast-forward, but this is standard Update Ref
-    });
-    if (!updateRefRes.ok) throw new Error("Failed to update branch ref");
+        // 5. Update the branch reference
+        // We use standard ref update. If the branch has moved since we read 'latestCommitSha', 
+        // this will fail (optimistic locking), which is exactly what we want so we can retry.
+        const updateRefRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branchName}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+                sha: newCommitSha
+            })
+        });
 
-    return newCommitData.html_url || `https://github.com/${owner}/${repo}/commit/${newCommitSha}`;
+        if (!updateRefRes.ok) {
+            const errorText = await updateRefRes.text();
+            // 409 Conflict or 422 Unprocessable Entity often means the ref was updated by someone else
+            // We throw a standard error to trigger the retry implementation in retryWithBackoff
+            throw new Error(`Failed to update branch ref (${updateRefRes.status}): ${errorText}`);
+        }
+
+        return newCommitData.html_url || `https://github.com/${owner}/${repo}/commit/${newCommitSha}`;
+    };
+
+    // Wrap in retry logic (5 attempts, starting at 1s delay)
+    // This gives us ~30s of patience for other agents to finish their pushes
+    try {
+        return await retryWithBackoff(attemptPush, 5, 1000);
+    } catch (e: any) {
+        throw new Error(`Push failed after retries: ${e.message}`);
+    }
 }
 
 export async function getAgentChatResponse(config: AppConfig, message: string, context?: string): Promise<string> {

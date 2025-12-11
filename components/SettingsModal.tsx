@@ -29,7 +29,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         checkEnv: 'simulation',
         e2bApiKey: process.env.E2B_API_KEY || '',
         sandboxTimeoutMinutes: 15,
-        logLevel: 'info'
+        logLevel: 'info',
+        executionBackend: 'e2b',
+        dockerImage: 'node:20-bullseye'
     });
 
     const [isLoadingRuns, setIsLoadingRuns] = useState(false);
@@ -58,7 +60,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 logLevel: currentConfig.logLevel || 'info',
                 prUrl: currentConfig.prUrl || '',
                 githubToken: currentConfig.githubToken || process.env.GITHUB_TOKEN || '',
-                repoUrl: currentConfig.repoUrl || ''
+                repoUrl: currentConfig.repoUrl || '',
+                executionBackend: currentConfig.executionBackend || 'e2b',
+                dockerImage: currentConfig.dockerImage || 'node:20-bullseye'
             });
             if (currentConfig.selectedRuns) {
                 setFoundRuns(currentConfig.selectedRuns);
@@ -202,7 +206,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             }
         }
 
-        if (formData.devEnv === 'e2b' && !formData.e2bApiKey?.trim()) {
+        if (formData.devEnv === 'e2b' && formData.executionBackend === 'e2b' && !formData.e2bApiKey?.trim()) {
             setValidationError("E2B API Key is required for Cloud Sandbox mode.");
             return;
         }
@@ -322,6 +326,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             </h3>
                             <div className="space-y-3">
 
+                                {/* Execution Backend Selector */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                                        <Layers className="w-3 h-3" /> Execution Strategy
+                                    </label>
+                                    <select
+                                        value={formData.executionBackend || 'e2b'}
+                                        onChange={e => setFormData({ ...formData, executionBackend: e.target.value as any })}
+                                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-amber-500/50"
+                                    >
+                                        <option value="e2b">Cloud Sandbox (E2B)</option>
+                                        <option value="docker_local">Local Docker Container</option>
+                                    </select>
+                                </div>
+
                                 {/* Dev Environment */}
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
@@ -352,7 +371,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                     </select>
                                 </div>
 
-                                {formData.devEnv === 'e2b' && (
+                                {formData.devEnv === 'e2b' && formData.executionBackend === 'e2b' && (
                                     <div className="space-y-2 animate-[fadeIn_0.2s_ease-out]">
                                         <label className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
                                             <Box className="w-3 h-3" /> E2B API Key
@@ -383,6 +402,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                                 {e2bStatus.message}
                                             </div>
                                         )}
+                                    </div>
+                                )}
+
+                                {formData.executionBackend === 'docker_local' && (
+                                    <div className="space-y-2 animate-[fadeIn_0.2s_ease-out]">
+                                        <label className="text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1">
+                                            <Server className="w-3 h-3" /> Docker Image
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.dockerImage || 'node:20-bullseye'}
+                                            onChange={e => setFormData({ ...formData, dockerImage: e.target.value })}
+                                            className="w-full bg-slate-900 border border-blue-900/50 rounded px-2 py-1.5 text-xs text-blue-100 focus:border-blue-500/50"
+                                            placeholder="e.g. node:20-bullseye"
+                                        />
+                                        <p className="text-[9px] text-slate-500">
+                                            Ensure Docker Desktop is running and the image is available.
+                                        </p>
                                     </div>
                                 )}
 

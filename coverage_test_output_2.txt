@@ -1,0 +1,97 @@
+
+> recursive-devops-agent@0.0.0 test
+> vitest run __tests__/unit/services_coverage.test.ts
+
+
+[1m[46m RUN [49m[22m [36mv4.0.15 [39m[90mC:/Users/ancha/Documents/projects/CI-fixer[39m
+
+[90mstdout[2m | __tests__/unit/services_coverage.test.ts[2m > [22m[2mServices Coverage Tests[2m > [22m[2mrunDevShellCommand Error Handling[2m > [22m[2mshould fallback to simulation on Network Error
+[22m[39m[E2B] Executing: ls (Env: Node)
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should fallback to simulation on Network Error
+[E2B] Connection attempt 1/3 failed. Retrying in 1000ms... Failed to fetch
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should fallback to simulation on Network Error
+[E2B] Connection attempt 2/3 failed. Retrying in 2000ms... Failed to fetch
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should fallback to simulation on Network Error
+[E2B] Connection attempt 3/3 failed. Retrying in 4000ms... Failed to fetch
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should fallback to simulation on Network Error
+[E2B] Connection Blocked. Raw Error: Failed to fetch
+
+[90mstdout[2m | __tests__/unit/services_coverage.test.ts[2m > [22m[2mServices Coverage Tests[2m > [22m[2mrunDevShellCommand Error Handling[2m > [22m[2mshould return error on Auth Error (401)
+[22m[39m[E2B] Executing: ls (Env: Node)
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Auth Error (401)
+[E2B] Connection attempt 1/3 failed. Retrying in 1000ms... 401 Unauthorized
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Auth Error (401)
+[E2B] Connection attempt 2/3 failed. Retrying in 2000ms... 401 Unauthorized
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Auth Error (401)
+[E2B] Connection attempt 3/3 failed. Retrying in 4000ms... 401 Unauthorized
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Auth Error (401)
+[E2B] Authentication Failed: 401 Unauthorized
+
+[90mstdout[2m | __tests__/unit/services_coverage.test.ts[2m > [22m[2mServices Coverage Tests[2m > [22m[2mrunDevShellCommand Error Handling[2m > [22m[2mshould return error on Timeout
+[22m[39m[E2B] Executing: ls (Env: Node)
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Timeout
+[E2B] Connection attempt 1/3 failed. Retrying in 1000ms... Connection timed out
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Timeout
+[E2B] Connection attempt 2/3 failed. Retrying in 2000ms... Connection timed out
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Timeout
+[E2B] Connection attempt 3/3 failed. Retrying in 4000ms... Connection timed out
+
+stderr | __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Timeout
+E2B Execution Failed: Error: Connection timed out
+    at C:/Users/ancha/Documents/projects/CI-fixer/__tests__/unit/services_coverage.test.ts:59:51
+    at file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/@vitest/runner/dist/index.js:145:11
+    at file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/@vitest/runner/dist/index.js:915:26
+    at file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/@vitest/runner/dist/index.js:1240:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/@vitest/runner/dist/index.js:1206:10)
+    at file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/@vitest/runner/dist/index.js:1650:37
+    at Traces.$ (file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/vitest/dist/chunks/traces.U4xDYhzZ.js:115:27)
+    at trace (file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/vitest/dist/chunks/test.BT8LKgU9.js:239:21)
+    at runTest (file:///C:/Users/ancha/Documents/projects/CI-fixer/node_modules/@vitest/runner/dist/index.js:1650:12)
+
+[90mstdout[2m | __tests__/unit/services_coverage.test.ts[2m > [22m[2mServices Coverage Tests[2m > [22m[2mrunDevShellCommand Persistent Sandbox[2m > [22m[2mshould use provided sandbox and NOT kill it
+[22m[39m[E2B] Executing: echo test (Env: Node)
+[E2B] Using Persistent Sandbox (persistent-id)
+
+ [31mΓ¥»[39m __tests__/unit/services_coverage.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 21093[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should fallback to simulation on Network Error [33m 7025[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should return error on Auth Error (401) [33m 7031[2mms[22m[39m
+[31m       [31m├ù[31m should return error on Timeout[39m[33m 7033[2mms[22m[39m
+       [32mΓ£ô[39m should use provided sandbox and NOT kill it[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should fetch check-runs annotations if no job failed but run failed[32m 1[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  __tests__/unit/services_coverage.test.ts > Services Coverage Tests > runDevShellCommand Error Handling > should return error on Timeout
+AssertionError: expected 'E2B Exception: Connection timed out' to contain '[E2B TIMEOUT]'
+
+Expected: "[E2B TIMEOUT]"
+Received: "E2B Exception: Connection timed out"
+
+ Γ¥» __tests__/unit/services_coverage.test.ts:63:32
+     61| 
+     62|             expect(res.exitCode).toBe(1);
+     63|             expect(res.output).toContain('[E2B TIMEOUT]');
+       |                                ^
+     64|         });
+     65|     });
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m4 passed[39m[22m[90m (5)[39m
+[2m   Start at [22m 16:14:41
+[2m   Duration [22m 21.61s[2m (transform 94ms, setup 0ms, import 286ms, tests 21.09s, environment 0ms)[22m
+

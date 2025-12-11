@@ -19,6 +19,7 @@ vi.mock('../../services', async (importOriginal) => {
     judgeFix: vi.fn(),
     runSandboxTest: vi.fn(),
     runDevShellCommand: vi.fn(),
+    prepareSandbox: vi.fn(),
   };
 });
 
@@ -143,7 +144,7 @@ describe('Agent Loop Integration', () => {
 
     expect(state.status).toBe('success');
     // Assert search was called with summary
-    expect(services.toolCodeSearch).toHaveBeenCalledWith(expect.anything(), "Duplicate Test Module");
+    expect(services.toolCodeSearch).toHaveBeenCalledWith(expect.anything(), "Duplicate Test Module", undefined);
   });
 
   it('should fail after max iterations if tests do not pass', async () => {
@@ -191,7 +192,7 @@ describe('Agent Loop Integration', () => {
     const state = await runIndependentAgentLoop(mockConfig, mockGroup, "", updateStateCallback, logCallback);
 
     expect(state.status).toBe('success');
-    expect(services.runDevShellCommand).toHaveBeenCalledWith(expect.anything(), "npm install foo");
+    expect(services.runDevShellCommand).toHaveBeenCalledWith(expect.anything(), "npm install foo", undefined);
     // Should skip findClosestFile and generateFix
     expect(services.findClosestFile).not.toHaveBeenCalled();
     expect(services.generateFix).not.toHaveBeenCalled();
@@ -291,5 +292,51 @@ describe('Agent Loop Integration', () => {
     expect(state.status).toBe('success');
     // Check that fileReservations includes the new file
     expect(updateStateCallback).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ fileReservations: ["new.py"] }));
+  });
+
+  it('should verify fix using reproduction command if available (TDR)', async () => {
+    // 1. Logs & Diagnosis with Repro Command
+    vi.mocked(services.getWorkflowLogs).mockResolvedValue({ logText: "err", jobName: "j", headSha: "s" });
+    vi.mocked(services.diagnoseError).mockResolvedValue({
+      summary: "Bug",
+      filePath: "bug.ts",
+      fixAction: 'edit',
+      reproductionCommand: "npm test bug.ts"
+    });
+    vi.mocked(services.findClosestFile).mockResolvedValue({ file: { name: 'bug.ts', content: '', language: 'ts' }, path: 'bug.ts' });
+    vi.mocked(services.generateFix).mockResolvedValue("fixed_code");
+    vi.mocked(services.toolLintCheck).mockResolvedValue({ valid: true });
+    vi.mocked(services.judgeFix).mockResolvedValue({ passed: true, score: 9, reasoning: "Good fix" });
+
+    // 2. Command Mocks
+    vi.mocked(services.runDevShellCommand)
+      .mockResolvedValueOnce({ exitCode: 0, output: "failed" }) // 1st: Reproduce (Success means failure reproduced)
+      .mockResolvedValueOnce({ exitCode: 0, output: "passed" }); // 2nd: Verify (Success means passed)
+
+    // 3. Sandbox
+    vi.mocked(services.runSandboxTest).mockResolvedValue({ passed: true, logs: "ok" });
+
+    // Config with E2B
+    const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'key' };
+    vi.mocked(services.prepareSandbox).mockResolvedValue({ sandboxId: 's1', kill: vi.fn() } as any);
+
+    const state = await runIndependentAgentLoop(e2bConfig, mockGroup, "", updateStateCallback, logCallback);
+
+    expect(state.status).toBe('success');
+    // Expect runDevShellCommand to be called for verification
+    expect(services.runDevShellCommand).toHaveBeenCalledWith(expect.anything(), "npm test bug.ts", expect.anything());
+  });
+
+  it('should cleanup E2B sandbox on exit', async () => {
+    const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'key' };
+    const mockKill = vi.fn();
+    vi.mocked(services.prepareSandbox).mockResolvedValue({ sandboxId: 's1', kill: mockKill } as any);
+
+    // Make it fail fast
+    vi.mocked(services.getWorkflowLogs).mockRejectedValue(new Error("Fail"));
+
+    await runIndependentAgentLoop(e2bConfig, mockGroup, "", updateStateCallback, logCallback);
+
+    expect(mockKill).toHaveBeenCalled();
   });
 });

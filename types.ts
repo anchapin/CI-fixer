@@ -3,6 +3,7 @@ export enum AgentPhase {
   IDLE = 'IDLE',
   INIT_REPO = 'INIT_REPO',
   UNDERSTAND = 'UNDERSTAND',
+  REPRODUCE = 'REPRODUCE', // New Phase: Test-Driven Reproduction
   EXPLORE = 'EXPLORE', // New Phase: Active Shell Investigation
   PLAN = 'PLAN',
   PLAN_APPROVAL = 'PLAN_APPROVAL',
@@ -74,13 +75,17 @@ export interface AppConfig {
 
   // Execution Environments (Re-Architected)
   devEnv: 'simulation' | 'e2b';           // For Agent Loop: Linting, Exploration
-  checkEnv: 'simulation' | 'github_actions'; // For Test Phase: Final Verification
+  checkEnv: 'simulation' | 'github_actions' | 'e2b'; // For Test Phase: Final Verification
 
   e2bApiKey?: string;
   sandboxTimeoutMinutes?: number; // Applies to GHA
 
   // Logging
   logLevel?: 'info' | 'debug' | 'verbose';
+
+  // Execution Internal Logic
+  executionBackend?: 'e2b' | 'docker_local';
+  dockerImage?: string; // e.g., 'node:20-bullseye'
 }
 
 export interface ChatMessage {

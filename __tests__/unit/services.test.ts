@@ -209,7 +209,7 @@ describe('Service Utility Unit Tests', () => {
 
       expect(res.valid).toBe(false);
       expect(res.error).toContain('SyntaxError');
-      expect(mocks.sandboxRunCode).toHaveBeenCalledWith(expect.stringContaining('py_compile'), expect.any(Object));
+      expect(mocks.sandboxRunCode).toHaveBeenCalledWith(expect.stringContaining('pyright'), expect.any(Object));
     });
 
     it('should fallback to LLM linting if not python or not E2B', async () => {

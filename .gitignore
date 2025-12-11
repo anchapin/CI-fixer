@@ -33,3 +33,15 @@ test-results
 # Debug logs
 e2e_debug_logs*.txt
 e2e_failure_logs.txt
+
+# Temporary Output Files
+*_output.txt
+*_debug.txt
+temp_*.txt
+
+# E2B definitions
+e2b_*.txt
+
+# Debug scripts
+debug_*.js
+test-server.js

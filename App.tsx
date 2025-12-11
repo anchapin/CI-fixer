@@ -17,7 +17,6 @@ import {
     judgeFix, runSandboxTest, searchRepoFile, findClosestFile, generateRepoSummary, generatePostMortem,
     toolCodeSearch, toolLintCheck, toolScanDependencies, toolWebSearch, toolFindReferences,
 } from './services';
-import { runIndependentAgentLoop } from './agent';
 
 const App: React.FC = () => {
     // Layout State
@@ -161,6 +160,82 @@ const App: React.FC = () => {
         };
         setChatMessages(prev => [...prev, msg]);
     }, []);
+
+    // --- 4. Agent Execution (Server-Side) ---
+    const startAgentRun = async (group: RunGroup, config: AppConfig, repoContext: string) => {
+        // Optimistic Update
+        const initialState: AgentState = {
+            groupId: group.id,
+            name: group.name,
+            phase: AgentPhase.IDLE,
+            iteration: 0,
+            status: 'working',
+            files: {},
+            fileReservations: [],
+            activeLog: ''
+        };
+
+        setAgentStates(prev => ({ ...prev, [group.id]: initialState }));
+        setSelectedAgentId(group.id);
+
+        // Trigger Server Execution
+        try {
+            const response = await fetch('/api/agent/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    config: config,
+                    group: group,
+                    initialRepoContext: repoContext
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server failed to start agent: ${response.statusText}`);
+            }
+
+        } catch (e: any) {
+            console.error("Agent Start Failed:", e);
+            setAgentStates(prev => ({
+                ...prev,
+                [group.id]: {
+                    ...initialState,
+                    status: 'failed',
+                    message: `Failed to start: ${e.message}`
+                }
+            }));
+        }
+    };
+
+    // Status Polling Effect
+    useEffect(() => {
+        const activeIds = Object.keys(agentStates).filter(id => {
+            const status = agentStates[id].status;
+            return status === 'working' || status === 'idle' || status === 'waiting';
+        });
+
+        if (activeIds.length === 0) return;
+
+        const intervalId = setInterval(async () => {
+            for (const id of activeIds) {
+                try {
+                    const res = await fetch(`/api/agent/${id}`);
+                    if (res.ok) {
+                        const serverState = await res.json();
+                        setAgentStates(prev => ({
+                            ...prev,
+                            [id]: serverState
+                        }));
+                    }
+                } catch (e) {
+                    // Ignore polling errors transiently
+                    console.warn(`Polling failed for ${id}`, e);
+                }
+            }
+        }, 1000); // Poll every 1s
+
+        return () => clearInterval(intervalId);
+    }, [agentStates]);
 
     // Helper to update a single agent's state
     const updateAgentState = useCallback((groupId: string, updates: Partial<AgentState>) => {
@@ -306,43 +381,15 @@ const App: React.FC = () => {
             // Default to Consolidated view, which is empty initially
             setSelectedAgentId('CONSOLIDATED');
 
-            addLog('INFO', `Deploying ${initialGroups.length} autonomous agents (Protocol: Concurrent)...`);
+            addLog('INFO', `Deploying ${initialGroups.length} autonomous agents (Protocol: Concurrent, Server-Side)...`);
 
-            // FIRE AND FORGET
-            const finalResults = await Promise.all(initialGroups.map(group =>
-                runIndependentAgentLoop(
-                    cleanConfig,
-                    group,
-                    currentRepoSummary || "",
-                    updateAgentState, // Call back to update React State
-                    addLog // Call back to log events
-                )
-            ));
+            // FIRE AND FORGET (Server-Side Trigger)
+            // We do not await completion here. The polling effect handles updates.
+            initialGroups.forEach(group => {
+                startAgentRun(group, cleanConfig, currentRepoSummary || "");
+            });
 
-            // --- PHASE 3: CONSOLIDATION & ANALYSIS ---
-            const successes = finalResults.filter(r => r.status === 'success');
-            const failures = finalResults.filter(r => r.status === 'failed');
-
-            if (successes.length === 0) {
-                setGlobalPhase(AgentPhase.FAILURE);
-                addChatMessage('agent', "Mission Failed. No agents were able to verify a fix.");
-            } else if (failures.length === 0) {
-                setGlobalPhase(AgentPhase.SUCCESS); // All Good
-                addChatMessage('agent', "Mission Complete. All issues verified. Click 'View Merged Master' to deploy.");
-            } else {
-                setGlobalPhase(AgentPhase.PARTIAL_SUCCESS);
-                addLog('WARN', `Partial Success: ${successes.length} fixed, ${failures.length} failed.`);
-                addChatMessage('agent', `Mission Result: Mixed. ${successes.length} agents succeeded, ${failures.length} agents failed.`);
-
-                // Generate Post Mortem for failures
-                addLog('INFO', 'Generating Post-Mortem Recommendations for failed agents...');
-                const postMortem = await generatePostMortem(cleanConfig, failures);
-                addChatMessage('agent', `RECOMMENDATION REPORT:\n\n${postMortem}`);
-                addChatMessage('agent', "You can push the successful fixes now and address the remaining issues manually.");
-            }
-
-            addLog('INFO', 'Pipeline execution finished.');
-
+            addLog('INFO', 'Agent deployment triggered. Monitoring status...');
         } catch (error: any) {
             setGlobalPhase(AgentPhase.FAILURE);
             addLog('ERROR', error.message || "Pipeline Error");

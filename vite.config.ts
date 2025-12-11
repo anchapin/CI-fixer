@@ -9,6 +9,11 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
+        '/api/agent': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        },
         '/api/e2b': {
           target: 'https://api.e2b.dev',
           changeOrigin: true,

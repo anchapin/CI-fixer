@@ -1,11 +1,11 @@
-
-import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange } from './types';
+import { SandboxEnvironment, SimulationSandbox } from './sandbox.js';
+import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange } from './types.js';
 import {
     getWorkflowLogs, toolScanDependencies, diagnoseError,
     findClosestFile, toolCodeSearch, generateDetailedPlan,
     toolWebSearch, generateFix, toolLintCheck, judgeFix, runSandboxTest,
-    runDevShellCommand, DiagnosisResult
-} from './services';
+    runDevShellCommand, DiagnosisResult, prepareSandbox
+} from './services.js';
 
 export async function runIndependentAgentLoop(
     config: AppConfig,
@@ -32,7 +32,24 @@ export async function runIndependentAgentLoop(
         updateStateCallback(group.id, { activeLog: currentState.activeLog });
     };
 
+    let sandbox: SandboxEnvironment | undefined;
+
     try {
+        // Initialize Sandbox (Persistent or Simulation)
+        try {
+            log('INFO', 'Initializing Sandbox Environment...');
+            // Use head_sha from the run if available, else HEAD
+            const sha = group.mainRun.head_sha || undefined;
+            sandbox = await prepareSandbox(config, config.repoUrl, sha);
+            log('SUCCESS', `Sandbox Ready (${sandbox.getId()}). Cloned & Checked Out.`);
+        } catch (e: any) {
+            log('ERROR', `Sandbox Init Failed: ${e.message}. Falling back to Simulation.`);
+            sandbox = new SimulationSandbox();
+            await sandbox.init();
+            // Ensure config reflects this fallback to prevent confusion
+            config.devEnv = 'simulation';
+        }
+
         currentState.phase = AgentPhase.UNDERSTAND;
         updateStateCallback(group.id, { ...currentState });
         log('INFO', `Starting analysis for workflow: ${group.name}`);
@@ -42,7 +59,7 @@ export async function runIndependentAgentLoop(
         let currentLogText = logText;
 
         // Loop State
-        let diagnosis: DiagnosisResult = { summary: "", filePath: "", fixAction: 'edit' };
+        let diagnosis: DiagnosisResult = { summary: "", filePath: "", fixAction: 'edit', reproductionCommand: undefined };
         let targetFile: { file: any, path: string } | null = null;
         const feedbackHistory: string[] = [];
 
@@ -103,6 +120,39 @@ export async function runIndependentAgentLoop(
                 diagnosis = await diagnoseError(config, currentLogText, initialRepoContext);
             }
             log('INFO', `Diagnosis [v${i + 1}]: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
+            if (diagnosis.reproductionCommand) {
+                log('INFO', `Reproduction Command identified: ${diagnosis.reproductionCommand}`);
+            }
+
+            // 1.5 REPRODUCTION (TDR)
+            // Before we even look for files, let's verify if the issue is reproducible in the sandbox
+            if (diagnosis.reproductionCommand && config.devEnv === 'e2b') {
+                currentState.phase = AgentPhase.REPRODUCE;
+                updateStateCallback(group.id, { ...currentState });
+                log('INFO', `Attempting to reproduce failure...`);
+
+
+                const res = await sandbox!.runCommand(diagnosis.reproductionCommand);
+                const repro = {
+                    output: res.stdout + (res.stderr ? `\n[STDERR]\n${res.stderr}` : ""),
+                    exitCode: res.exitCode
+                };
+
+                if (repro.exitCode === 0) {
+                    // SUCCESS means we FAILED to reproduce the bug (it shouldn't pass yet!)
+                    log('WARN', `Reproduction failed! The command passed unexpectedly. Environment mismatch or flaky test.`);
+                    log('WARN', `Output: ${repro.output.substring(0, 200)}...`);
+
+                    // Critical decision: Do we abort?
+                    // For now, let's log a heavy warning but maybe proceed if it's the first iteration,
+                    // OR we can try to "break" it. 
+                    // Strict TDR says we should stop.
+                    feedbackHistory.push(`Reproduction Command passed initially. This means the agent cannot verify if it fixed anything.`);
+                    // Let's assume we proceed but with low confidence.
+                } else {
+                    log('SUCCESS', `Failure Reproduced via command. (Exit Code: ${repro.exitCode})`);
+                }
+            }
 
             // 2. RESOURCE ACQUISITION (File/Tool)
             if (diagnosis.fixAction === 'edit') {
@@ -114,7 +164,7 @@ export async function runIndependentAgentLoop(
                 if (!targetFile) {
                     log('WARN', `File '${diagnosis.filePath}' not found. Searching repo...`);
                     const query = (diagnosis.filePath && diagnosis.filePath.length > 2) ? diagnosis.filePath : diagnosis.summary.substring(0, 100);
-                    const searchResults = await toolCodeSearch(config, query);
+                    const searchResults = await toolCodeSearch(config, query, sandbox);
                     if (searchResults.length > 0) {
                         log('INFO', `Search found potential match: ${searchResults[0]}`);
                         targetFile = await findClosestFile(config, searchResults[0]);
@@ -158,7 +208,12 @@ export async function runIndependentAgentLoop(
             if (diagnosis.fixAction === 'command') {
                 const cmd = diagnosis.suggestedCommand || "echo 'No command suggested'";
                 log('TOOL', `Executing Shell Command: ${cmd}`);
-                const cmdResult = await runDevShellCommand(config, cmd);
+
+                const res = await sandbox!.runCommand(cmd);
+                const cmdResult = {
+                    output: res.stdout + (res.stderr ? `\n[STDERR]\n${res.stderr}` : ""),
+                    exitCode: res.exitCode
+                };
 
                 if (cmdResult.exitCode !== 0) {
                     log('WARN', `Command failed: ${cmdResult.output}`);
@@ -191,9 +246,15 @@ export async function runIndependentAgentLoop(
                     extraContext
                 });
 
-                // Self-Correction (Lint)
-                const lintResult = await toolLintCheck(config, fixCode, targetFile.file.language);
-                if (!lintResult.valid) log('WARN', `Lint check failed: ${lintResult.error}.`);
+                // Self-Correction (LSP/Lint)
+                const lintResult = await toolLintCheck(config, fixCode, targetFile.file.language, sandbox);
+                if (!lintResult.valid) {
+                    log('WARN', `Lint check failed: ${lintResult.error}.`);
+                    feedbackHistory.push(`Linter Error: ${lintResult.error}`);
+                    // Critical: If deep linting fails, REJECT the fix immediately.
+                    // This prevents running expensive tests on invalid code.
+                    continue;
+                }
 
                 // Create File Change Object
                 activeFileChange = {
@@ -216,6 +277,33 @@ export async function runIndependentAgentLoop(
                     log('WARN', `Judge rejected fix. Retrying...`);
                     continue; // Loop will increment i, triggering re-diagnosis (same logs) -> new attempt
                 }
+
+                // TDR: LOCAL VERIFICATION
+                // If we had a repro command, run it NOW to verify the fix locally before full tests
+                if (diagnosis.reproductionCommand) {
+                    currentState.phase = AgentPhase.VERIFY;
+                    updateStateCallback(group.id, { ...currentState });
+                    log('INFO', `Verifying fix with reproduction command...`);
+
+                    log('INFO', `Verifying fix with reproduction command...`);
+
+                    const res = await sandbox!.runCommand(diagnosis.reproductionCommand);
+                    const verifyRun = {
+                        output: res.stdout + (res.stderr ? `\n[STDERR]\n${res.stderr}` : ""),
+                        exitCode: res.exitCode
+                    };
+
+                    if (verifyRun.exitCode !== 0) {
+                        log('WARN', `Local Verification Failed! The fix did not make the test pass.`);
+                        feedbackHistory.push(`Local Verification Failed: ${verifyRun.output.substring(0, 300)}`);
+                        // Use the output as new logs for diagnosis
+                        currentLogText = verifyRun.output;
+                        continue; // Retry logic
+                    } else {
+                        log('SUCCESS', `Local Verification Passed! Proceeding to full suite.`);
+                    }
+                }
+
                 implementationSuccess = true;
             }
 
@@ -224,7 +312,7 @@ export async function runIndependentAgentLoop(
                 currentState.phase = AgentPhase.TESTING;
                 updateStateCallback(group.id, { ...currentState });
 
-                const testResult = await runSandboxTest(config, group, i, true, activeFileChange, diagnosis.summary, logCallback, currentState.files);
+                const testResult = await runSandboxTest(config, group, i, true, activeFileChange, diagnosis.summary, logCallback, currentState.files, sandbox);
 
                 if (testResult.passed) {
                     currentState.status = 'success';
@@ -258,5 +346,14 @@ export async function runIndependentAgentLoop(
         updateStateCallback(group.id, currentState);
         log('ERROR', `Agent crashed: ${error.message}`);
         return currentState;
+    } finally {
+        if (sandbox) {
+            try {
+                await sandbox.teardown();
+                log('INFO', 'Sandbox container terminated.');
+            } catch (e) {
+                console.warn('Failed to kill sandbox:', e);
+            }
+        }
     }
 }
