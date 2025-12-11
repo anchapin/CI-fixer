@@ -62,23 +62,12 @@
         background: #475569; 
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "@google/genai": "https://esm.run/@google/genai",
-    "diff": "https://esm.run/diff",
-    "vitest": "https://aistudiocdn.com/vitest@^4.0.15",
-    "@playwright/test": "https://aistudiocdn.com/@playwright/test@^1.57.0",
-    "@e2b/code-interpreter": "https://esm.sh/@e2b/code-interpreter?bundle"
-  }
-}
-</script>
+
 </head>
   <body>
     <div id="root"></div>
+    <script type="module">
+      import './index.tsx';
+    </script>
   </body>
 </html>

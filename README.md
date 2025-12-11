@@ -15,6 +15,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/1iL5s7t_xHxZJeqwbPxkT4u
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. **Configuration**:
+   - Copy `.env.example` to `.env.local`.
+   - See [SETUP.md](./SETUP.md) for details on Z.ai vs Gemini configuration.
+   - Set `GEMINI_API_KEY` and `VITE_LLM_PROVIDER` appropriately.
 3. Run the app:
    `npm run dev`

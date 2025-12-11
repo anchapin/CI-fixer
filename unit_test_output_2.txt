@@ -1,0 +1,77 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.15 [39m[90mC:/Users/ancha/Documents/projects/CI-fixer[39m
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > unifiedGenerate > should retry on Z.ai fetch network/server errors
+[E2B] Connection attempt 1/3 failed. Retrying in 1000ms... Failed to fetch
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > unifiedGenerate > should retry on Z.ai fetch network/server errors
+[E2B] Connection attempt 2/3 failed. Retrying in 2000ms... Provider API Server/Rate Error 502: Bad Gateway
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > unifiedGenerate > should retry on Google GenAI 503 errors
+[Gemini] Error 503. Retrying in 1000ms...
+
+[90mstdout[2m | __tests__/unit/services_comprehensive.test.ts[2m > [22m[2mServices Comprehensive Tests[2m > [22m[2mtestE2BConnection[2m > [22m[2mshould return success when connection works
+[22m[39m[E2B] Testing Connection... (Env: Node)
+
+[90mstdout[2m | __tests__/unit/services_comprehensive.test.ts[2m > [22m[2mServices Comprehensive Tests[2m > [22m[2mtestE2BConnection[2m > [22m[2mshould return success when connection works
+[22m[39m[E2B] Test sandbox cleaned up successfully
+
+[90mstdout[2m | __tests__/unit/services_comprehensive.test.ts[2m > [22m[2mServices Comprehensive Tests[2m > [22m[2mtestE2BConnection[2m > [22m[2mshould handle network errors
+[22m[39m[E2B] Testing Connection... (Env: Node)
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > testE2BConnection > should handle network errors
+[E2B] Connection attempt 1/3 failed. Retrying in 1000ms... Failed to fetch
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > testE2BConnection > should handle network errors
+[E2B] Connection attempt 2/3 failed. Retrying in 2000ms... Failed to fetch
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > testE2BConnection > should handle network errors
+[E2B] Connection attempt 3/3 failed. Retrying in 4000ms... Failed to fetch
+
+stderr | __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > testE2BConnection > should handle network errors
+[E2B] Connection Test Failed: Failed to fetch
+[E2B] Network Blocked. Raw Error: Failed to fetch
+
+ [31mΓ¥»[39m __tests__/unit/services_comprehensive.test.ts [2m([22m[2m14 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 11076[2mms[22m[39m
+       [32mΓ£ô[39m should use fetch for Z.ai provider[32m 3[2mms[22m[39m
+       [32mΓ£ô[39m should use fetch for OpenAI provider[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should handle fetch errors[32m 1[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should retry on Z.ai fetch network/server errors [33m 3024[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should retry on Google GenAI 503 errors [33m 1013[2mms[22m[39m
+       [32mΓ£ô[39m should run in simulation mode by default[32m 1[2mms[22m[39m
+[31m       [31m├ù[31m should trigger GitHub Action when checkEnv is github_actions[39m[32m 4[2mms[22m[39m
+       [32mΓ£ô[39m should return success when connection works[32m 1[2mms[22m[39m
+       [32mΓ£ô[39m should fail if API key is invalid[32m 1[2mms[22m[39m
+       [33m[2mΓ£ô[22m[39m should handle network errors [33m 7024[2mms[22m[39m
+       [32mΓ£ô[39m getAgentChatResponse should return text[32m 0[2mms[22m[39m
+       [32mΓ£ô[39m generateDetailedPlan should return a plan[32m 0[2mms[22m[39m
+       [32mΓ£ô[39m judgeDetailedPlan should approve by default[32m 0[2mms[22m[39m
+       [32mΓ£ô[39m pushMultipleFilesToGitHub should return mock URL[32m 0[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  __tests__/unit/services_comprehensive.test.ts > Services Comprehensive Tests > runSandboxTest > should trigger GitHub Action when checkEnv is github_actions
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ Γ¥» __tests__/unit/services_comprehensive.test.ts:202:32
+    200|             );
+    201| 
+    202|             expect(res.passed).toBe(true);
+       |                                ^
+    203|             expect(logCallback).toHaveBeenCalledWith('INFO', expect.stΓÇª
+    204|         });
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m13 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 12:56:29
+[2m   Duration [22m 12.13s[2m (transform 123ms, setup 0ms, import 222ms, tests 11.08s, environment 0ms)[22m
+

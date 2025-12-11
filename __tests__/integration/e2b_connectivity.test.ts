@@ -17,10 +17,11 @@ describe('E2B Connectivity Integration Test', () => {
     it('should successfully connect to E2B and execute code', async () => {
         console.log("Attempting E2B connection with provided key...");
         const sandbox = await Sandbox.create({ apiKey });
-        
+
         try {
             const result = await sandbox.runCode('echo "Connection Verified"', { language: 'bash' });
-            expect(result.logs.stdout).toContain('Connection Verified');
+            // stdout is string[], so we join it to check for substring
+            expect(result.logs.stdout.join('')).toContain('Connection Verified');
             console.log("E2B Connection Verified Successfully.");
         } catch (e) {
             console.error("E2B Connection Failed:", e);

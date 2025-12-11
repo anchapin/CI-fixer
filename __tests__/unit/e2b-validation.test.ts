@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { validateE2BApiKey, testE2BConnection } from '../../services';
 import { Sandbox } from '@e2b/code-interpreter';
 
@@ -38,7 +38,7 @@ describe('E2B API Key Validation', () => {
   });
 
   it('should reject API keys with invalid characters', () => {
-    const invalidKey = 'e2b_key with spaces';
+    const invalidKey = 'e2b_key with spaces and extra length';
     const result = validateE2BApiKey(invalidKey);
     expect(result.valid).toBe(false);
     expect(result.message).toContain('invalid characters');
@@ -46,6 +46,14 @@ describe('E2B API Key Validation', () => {
 });
 
 describe('E2B Connection Testing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should reject invalid API key format before attempting connection', async () => {
     const invalidKey = 'invalid_key';
     const result = await testE2BConnection(invalidKey);
@@ -57,10 +65,17 @@ describe('E2B Connection Testing', () => {
   it('should handle network errors with detailed debugging info', async () => {
     // Mock a network error
     vi.mocked(Sandbox.create).mockRejectedValue(new Error('Failed to fetch'));
-    
+
     const validKey = 'e2b_valid_api_key_with_sufficient_length_123';
-    const result = await testE2BConnection(validKey);
-    
+    const promise = testE2BConnection(validKey);
+
+    // Advance timers to trigger retries
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(10000);
+    }
+
+    const result = await promise;
+
     expect(result.success).toBe(false);
     expect(result.message).toContain('Network Connection Failed');
     expect(result.message).toContain('Internet connectivity');
@@ -71,10 +86,17 @@ describe('E2B Connection Testing', () => {
   it('should handle authentication errors specifically', async () => {
     // Mock an authentication error
     vi.mocked(Sandbox.create).mockRejectedValue(new Error('401 Unauthorized'));
-    
+
     const validKey = 'e2b_valid_api_key_with_sufficient_length_123';
-    const result = await testE2BConnection(validKey);
-    
+    const promise = testE2BConnection(validKey);
+
+    // Advance timers to trigger retries
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(10000);
+    }
+
+    const result = await promise;
+
     expect(result.success).toBe(false);
     expect(result.message).toContain('Authentication Failed');
     expect(result.message).toContain('verify your E2B API key');
@@ -83,10 +105,17 @@ describe('E2B Connection Testing', () => {
   it('should handle timeout errors specifically', async () => {
     // Mock a timeout error
     vi.mocked(Sandbox.create).mockRejectedValue(new Error('Connection timeout'));
-    
+
     const validKey = 'e2b_valid_api_key_with_sufficient_length_123';
-    const result = await testE2BConnection(validKey);
-    
+    const promise = testE2BConnection(validKey);
+
+    // Advance timers to trigger retries
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(10000);
+    }
+
+    const result = await promise;
+
     expect(result.success).toBe(false);
     expect(result.message).toContain('Connection Timeout');
     expect(result.message).toContain('temporarily unavailable');
