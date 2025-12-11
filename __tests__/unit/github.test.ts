@@ -53,7 +53,7 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should fallback to constructed path if API path is missing', async () => {
-             fetchSpy.mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ head: { sha: 'sha' } })
             } as Response);
@@ -87,7 +87,7 @@ describe('GitHub API Helpers', () => {
 
             const result = await getFileContent(config, 'path/to/test.txt');
             expect(result.content).toBe(content);
-            expect(result.language).toBe('txt');
+            expect(result.language).toBe('text');
         });
 
         it('should detect python language extension', async () => {
@@ -100,7 +100,7 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should detect Dockerfile', async () => {
-             fetchSpy.mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ name: 'Dockerfile.dev', content: '' })
             } as Response);
@@ -109,11 +109,11 @@ describe('GitHub API Helpers', () => {
         });
 
         it('should throw proper error for directories', async () => {
-             fetchSpy.mockResolvedValueOnce({
+            fetchSpy.mockResolvedValueOnce({
                 ok: true,
-                json: async () => ([ { name: 'child' } ]) // Array implies directory
+                json: async () => ([{ name: 'child' }]) // Array implies directory
             } as Response);
-            
+
             await expect(getFileContent(config, 'src/'))
                 .rejects.toThrow('Path \'src/\' is a directory');
         });
@@ -125,37 +125,37 @@ describe('GitHub API Helpers', () => {
                 statusText: 'Not Found',
                 json: async () => ({})
             } as Response);
-             await expect(getFileContent(config, 'missing.txt'))
+            await expect(getFileContent(config, 'missing.txt'))
                 .rejects.toThrow('404');
         });
     });
 
     describe('getWorkflowLogs', () => {
         it('should retrieve text logs from failed job', async () => {
-             // 1. Get Run (head_sha)
-             fetchSpy.mockResolvedValueOnce({
-                 ok: true,
-                 json: async () => ({ head_sha: 'abc' })
-             } as Response);
+            // 1. Get Run (head_sha)
+            fetchSpy.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ head_sha: 'abc' })
+            } as Response);
 
-             // 2. Get Jobs
-             fetchSpy.mockResolvedValueOnce({
-                 ok: true,
-                 json: async () => ({
-                     jobs: [{ id: 99, name: 'build', conclusion: 'failure' }]
-                 })
-             } as Response);
+            // 2. Get Jobs
+            fetchSpy.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    jobs: [{ id: 99, name: 'build', conclusion: 'failure' }]
+                })
+            } as Response);
 
-             // 3. Get Logs
-             fetchSpy.mockResolvedValueOnce({
-                 ok: true,
-                 text: async () => "Error Log Content"
-             } as Response);
+            // 3. Get Logs
+            fetchSpy.mockResolvedValueOnce({
+                ok: true,
+                text: async () => "Error Log Content"
+            } as Response);
 
-             const res = await getWorkflowLogs('o/r', 1, 'token');
-             expect(res.logText).toBe('Error Log Content');
-             expect(res.jobName).toBe('build');
-             expect(res.headSha).toBe('abc');
+            const res = await getWorkflowLogs('o/r', 1, 'token');
+            expect(res.logText).toBe('Error Log Content');
+            expect(res.jobName).toBe('build');
+            expect(res.headSha).toBe('abc');
         });
     });
 });

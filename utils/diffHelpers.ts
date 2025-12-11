@@ -1,14 +1,14 @@
 
-import * as Diff from 'diff';
+import { diffLines } from 'diff';
 
 export const getStats = (original: string, modified: string) => {
-    // Safe access to diffLines whether it's on default or root object
-    const differ = (Diff as any).diffLines || (Diff as any).default?.diffLines;
-    if (!differ) return { added: 0, removed: 0 };
+    // Normalize: Ensure text ends with newline to prevent "modified last line" false positives
+    const normOriginal = original.endsWith('\n') ? original : original + '\n';
+    const normModified = modified.endsWith('\n') ? modified : modified + '\n';
 
-    const diff = differ(original, modified);
+    const diff = diffLines(normOriginal, normModified);
     let added = 0, removed = 0;
-    diff.forEach((part: Diff.Change) => {
+    diff.forEach((part: any) => {
         if (part.added) added += part.count || 0;
         if (part.removed) removed += part.count || 0;
     });
@@ -16,13 +16,12 @@ export const getStats = (original: string, modified: string) => {
 };
 
 export const getContextualDiff = (original: string, modified: string, contextLines: number = 3) => {
-    // Safe access to diffLines whether it's on default or root object
-    const differ = (Diff as any).diffLines || (Diff as any).default?.diffLines;
-    const diff = differ ? differ(original, modified) : [];
-    
+    const diff = diffLines(original, modified);
+
     const result: { value: string, added?: boolean, removed?: boolean, isSpacer?: boolean, originalIndex: number }[] = [];
 
-    diff.forEach((part: Diff.Change, index: number) => {
+    // Explicitly cast to avoid namespace issues if types are not perfect
+    diff.forEach((part: any, index: number) => {
         const partWithIndex = { ...part, originalIndex: index };
         if (part.added || part.removed) {
             result.push(partWithIndex);
@@ -34,13 +33,13 @@ export const getContextualDiff = (original: string, modified: string, contextLin
         if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
 
         if (lines.length <= contextLines * 2) {
-             result.push(partWithIndex);
+            result.push(partWithIndex);
         } else {
-             const head = lines.slice(0, contextLines).join('\n') + '\n';
-             result.push({ ...partWithIndex, value: head });
-             result.push({ value: `... ${lines.length - (contextLines * 2)} unchanged lines hidden ...\n`, isSpacer: true, originalIndex: -1 });
-             const tail = lines.slice(-contextLines).join('\n') + (index === diff.length - 1 ? '' : '\n'); 
-             result.push({ ...partWithIndex, value: tail });
+            const head = lines.slice(0, contextLines).join('\n') + '\n';
+            result.push({ ...partWithIndex, value: head });
+            result.push({ value: `... ${lines.length - (contextLines * 2)} unchanged lines hidden ...\n`, isSpacer: true, originalIndex: -1 });
+            const tail = lines.slice(-contextLines).join('\n') + (index === diff.length - 1 ? '' : '\n');
+            result.push({ ...partWithIndex, value: tail });
         }
     });
     return { diffFull: diff, diffRender: result };

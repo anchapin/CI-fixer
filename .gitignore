@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test coverage
+coverage
+
+# Playwright
+playwright-report
+test-results
+
+# Debug logs
+e2e_debug_logs*.txt
+e2e_failure_logs.txt
