@@ -73,7 +73,7 @@ describe('Prisma Persistence Integration', () => {
         const updateState = vi.fn();
         const logCallback = vi.fn();
 
-        await runWorkerTask(config, group, undefined, 'initial', updateState, logCallback);
+        await runWorkerTask(config, group, undefined, undefined, 'initial', updateState, logCallback);
 
         // 3. Verify ErrorFact
         const facts = await db.errorFact.findMany({

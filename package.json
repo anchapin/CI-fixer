@@ -33,6 +33,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@octokit/rest": "^22.0.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/js-yaml": "^4.0.9",

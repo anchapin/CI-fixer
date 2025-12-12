@@ -396,10 +396,58 @@ export interface DiagnosisResult {
     reproductionCommand?: string; // TDR: Command to reproduce the failure
 }
 
-export async function diagnoseError(config: AppConfig, logSnippet: string, repoContext?: string): Promise<DiagnosisResult> {
+export async function diagnoseError(
+    config: AppConfig,
+    logSnippet: string,
+    repoContext?: string,
+    profile?: any, // RepositoryProfile from validation.ts
+    previousClassification?: any // ClassifiedError from errorClassification.ts
+): Promise<DiagnosisResult> {
     // Phase 2: Context Engineering - Smart Filtering & Summarization
     const filteredLogs = filterLogs(logSnippet);
     const logSummary = await summarizeLogs(filteredLogs); // Heuristic summary for now
+
+    // Build profile context if available
+    let profileContext = '';
+    if (profile) {
+        profileContext = `
+=== REPOSITORY PROFILE ===
+- Languages: ${profile.languages?.join(', ') || 'Unknown'}
+- Package Manager: ${profile.packageManager || 'Unknown'}
+- Build System: ${profile.buildSystem || 'Unknown'}
+- Test Framework: ${profile.testFramework || 'Unknown'}
+- Available Scripts: ${Object.keys(profile.availableScripts || {}).join(', ') || 'None'}
+- Directory Structure: ${profile.directoryStructure?.hasBackend ? 'Backend' : ''}${profile.directoryStructure?.hasFrontend ? ' Frontend' : ''}
+
+PROFILE INSTRUCTIONS:
+- Use ${profile.packageManager || 'npm'} for package management commands
+- Test commands should use ${profile.testFramework || 'the detected test framework'}
+- Available npm scripts: ${Object.keys(profile.availableScripts || {}).join(', ') || 'check package.json'}
+- Build commands should use ${profile.buildSystem || 'the detected build system'}
+`;
+    }
+
+    // Build classification context if available
+    let classificationContext = '';
+    if (previousClassification) {
+        const priorityLabels = ['Low', 'Low', 'Medium', 'Medium', 'Medium', 'Medium-High', 'High', 'High', 'Critical', 'Critical', 'Critical'];
+        const priority = previousClassification.priority || 0;
+        const priorityLabel = priorityLabels[Math.min(priority, 10)];
+
+        classificationContext = `
+=== ERROR CLASSIFICATION ===
+- Category: ${previousClassification.category || 'Unknown'}
+- Priority: ${priorityLabel} (${priority}/10)
+- Confidence: ${previousClassification.confidence ? (previousClassification.confidence * 100).toFixed(0) + '%' : 'Unknown'}
+${previousClassification.affectedFiles?.length > 0 ? `- Affected Files: ${previousClassification.affectedFiles.join(', ')}` : ''}
+${previousClassification.suggestedAction ? `- Suggested Action: ${previousClassification.suggestedAction}` : ''}
+
+CLASSIFICATION INSTRUCTIONS:
+- This is a ${priorityLabel.toLowerCase()}-priority ${previousClassification.category || 'error'}
+${previousClassification.suggestedAction ? `- Recommended approach: ${previousClassification.suggestedAction}` : ''}
+${previousClassification.affectedFiles?.length > 0 ? `- Focus on files: ${previousClassification.affectedFiles.slice(0, 3).join(', ')}` : ''}
+`;
+    }
 
     const prompt = `
     You are an automated Error Diagnosis Agent.
@@ -408,7 +456,7 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     - You are analyzing GitHub Action logs.
     - CI Runners are ephemeral. Running "commands" directly often fails or doesn't persist.
     - For environment issues like Disk Space, the fix usually requires EDITING the workflow file (YAML) to add a cleanup step.
-
+${profileContext}${classificationContext}
     INSTRUCTIONS:
     1. Analyze the "TARGET CI LOGS" below. identify the primary error.
     2. Ignore any "AGENT CONTEXT" warnings unless they help explain the CI state.
@@ -442,6 +490,7 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     
     === AGENT CONTEXT ===
     \${repoContext || 'None'}
+
 
     === LOG ANALYSIS ===
     \${logSummary}

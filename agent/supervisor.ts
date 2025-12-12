@@ -3,6 +3,7 @@ import { prepareSandbox } from '../services.js';
 import { runWorkerTask } from './worker.js';
 import { SandboxEnvironment, SimulationSandbox } from '../sandbox.js';
 import { AppConfig, RunGroup, AgentState, LogLine } from '../types.js';
+import { analyzeRepository, formatProfileSummary, type RepositoryProfile } from '../validation.js';
 
 export async function runSupervisorAgent(
     config: AppConfig,
@@ -13,6 +14,7 @@ export async function runSupervisorAgent(
 ): Promise<AgentState> {
 
     let sandbox: SandboxEnvironment | undefined;
+    let profile: RepositoryProfile | undefined;
 
     try {
         // 1. Initialize Sandbox (Persistent or Simulation)
@@ -28,7 +30,21 @@ export async function runSupervisorAgent(
             config.devEnv = 'simulation';
         }
 
-        // 2. Delegate to Worker (Centralized Coordination)
+        // 2. Profile Repository (for context-aware decisions)
+        try {
+            logCallback('INFO', 'Profiling repository structure...', group.id, group.name);
+            const [owner, repo] = config.repoUrl.split('/').slice(-2);
+            const sha = group.mainRun.head_sha || 'main';
+            profile = await analyzeRepository(owner, repo, sha, config.githubToken);
+
+            const summary = formatProfileSummary(profile);
+            logCallback('INFO', `Repository Profile:\n${summary}`, group.id, group.name);
+        } catch (e: any) {
+            logCallback('WARN', `Repository profiling failed: ${e.message}. Proceeding without profile.`, group.id, group.name);
+            profile = undefined; // Graceful degradation
+        }
+
+        // 3. Delegate to Worker (Centralized Coordination)
         // In the future, this Supervisor can plan sub-tasks and spawn multiple workers.
         // For now, it delegates the entire goal to a single worker.
         logCallback('INFO', 'Spawning Worker Agent...', group.id, group.name);
@@ -37,6 +53,7 @@ export async function runSupervisorAgent(
             config,
             group,
             sandbox,
+            profile,
             initialRepoContext,
             updateStateCallback,
             logCallback

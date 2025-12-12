@@ -3,6 +3,49 @@ import { describe, it, expect, vi } from 'vitest';
 import { runIndependentAgentLoop } from '../../agent.js';
 import { SimulationSandbox } from '../../sandbox.js';
 import { AppConfig, RunGroup } from '../../types.js';
+import { setupInMemoryDb, getTestDb } from '../helpers/vitest-setup.js';
+
+// Setup test database
+setupInMemoryDb();
+
+// Mock validation and classification modules
+vi.mock('../../validation.js', () => ({
+    analyzeRepository: vi.fn().mockResolvedValue({
+        languages: ['typescript'],
+        packageManager: 'npm',
+        buildSystem: 'vite',
+        testFramework: 'vitest',
+        availableScripts: { test: 'vitest' },
+        directoryStructure: { hasBackend: false, hasFrontend: true, testDirectories: [], sourceDirectories: [] },
+        configFiles: [],
+        repositorySize: 50
+    }),
+    formatProfileSummary: vi.fn().mockReturnValue('Mock Profile'),
+    validateFileExists: vi.fn().mockResolvedValue(true),
+    validateCommand: vi.fn().mockReturnValue({ valid: true })
+}));
+
+vi.mock('../../errorClassification.js', () => ({
+    classifyError: vi.fn().mockReturnValue({
+        category: 'disk_space',
+        confidence: 0.95,
+        rootCauseLog: 'No space left',
+        cascadingErrors: [],
+        affectedFiles: [],
+        errorMessage: 'No space left on device'
+    }),
+    classifyErrorWithHistory: vi.fn().mockReturnValue({
+        category: 'disk_space',
+        confidence: 0.95,
+        rootCauseLog: 'No space left',
+        cascadingErrors: [],
+        affectedFiles: [],
+        errorMessage: 'No space left on device'
+    }),
+    formatErrorSummary: vi.fn().mockReturnValue('Error Summary'),
+    getErrorPriority: vi.fn().mockReturnValue(10),
+    isCascadingError: vi.fn().mockReturnValue(false)
+}));
 
 // Mock services to avoid external API calls
 vi.mock('../../services.js', async (importOriginal: any) => {
@@ -36,10 +79,6 @@ vi.mock('../../services.js', async (importOriginal: any) => {
     };
 });
 
-// Mock Context Compiler explicitly if needed, but since we mock services/index it might be enough if re-exported?
-// Actually context-compiler is a separate file import in agent.ts? 
-// No, in agent/worker.ts it imports from context-compiler.js DIRECTLY.
-// So we must mock that module too.
 vi.mock('../../services/context-compiler.js', () => ({
     getCachedRepoContext: vi.fn().mockResolvedValue("Cached Context"),
     filterLogs: vi.fn().mockReturnValue("Filtered Logs"),
@@ -48,12 +87,23 @@ vi.mock('../../services/context-compiler.js', () => ({
 
 describe('Agent Supervisor-Worker Integration', () => {
     it('should coordinate Supervisor and Worker to complete a fix', async () => {
+        // Seed the database with the run
+        const db = getTestDb();
+        await db.agentRun.create({
+            data: {
+                id: 'g1',
+                groupId: 'g1', // supervisor uses group.id for everything
+                status: 'pending',
+                state: '{}'
+            }
+        });
+
         const config: AppConfig = {
             githubToken: 'test-token',
             repoUrl: 'owner/repo',
             checkEnv: 'simulation',
             devEnv: 'simulation',
-            openaiApiKey: 'test-key'
+            selectedRuns: []
         };
 
         const group: RunGroup = {

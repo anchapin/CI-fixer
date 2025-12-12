@@ -19,6 +19,8 @@ model AgentRun {
 
   fileModifications FileModification[]
   errorFacts        ErrorFact[]
+  metrics           AgentMetrics[]
+  fixAttempts       FixAttempt[]
 }
 
 model FileModification {
@@ -37,4 +39,81 @@ model ErrorFact {
   runId        String
   agentRun     AgentRun @relation(fields: [runId], references: [id])
   createdAt    DateTime @default(now())
+}
+
+// ============================================================================
+// METRICS COLLECTION
+// ============================================================================
+
+model AgentMetrics {
+  id             String   @id @default(uuid())
+  runId          String
+  agentRun       AgentRun @relation(fields: [runId], references: [id])
+  successRate    Float    // 0.0 - 1.0
+  iterationCount Int
+  timeToFixMs    Int      // Total time in milliseconds
+  errorCategory  String   // From ErrorCategory enum
+  createdAt      DateTime @default(now())
+}
+
+model FixAttempt {
+  id           String   @id @default(uuid())
+  runId        String
+  agentRun     AgentRun @relation(fields: [runId], references: [id])
+  iteration    Int
+  action       String   // "edit", "command", "web_search", etc.
+  success      Boolean
+  durationMs   Int
+  filesChanged String   // JSON array
+  createdAt    DateTime @default(now())
+}
+
+// ============================================================================
+// HISTORICAL LEARNING
+// ============================================================================
+
+model FixPattern {
+  id               String   @id @default(uuid())
+  errorFingerprint String   // Hash of error characteristics
+  errorCategory    String
+  filePath         String
+  fixTemplate      String   // JSON: { action, command?, edits? }
+  successCount     Int      @default(1)
+  lastUsed         DateTime @default(now())
+  createdAt        DateTime @default(now())
+  
+  @@index([errorFingerprint])
+  @@index([errorCategory])
+}
+
+model ErrorSolution {
+  id                String   @id @default(uuid())
+  errorFingerprint  String
+  solution          String   // Detailed fix description
+  filesAffected     String   // JSON array
+  commandsUsed      String   // JSON array
+  successRate       Float
+  timesApplied      Int      @default(0)
+  avgIterations     Float
+  createdAt         DateTime @default(now())
+  
+  @@index([errorFingerprint])
+}
+
+// ============================================================================
+// SUGGESTED ACTION LIBRARY
+// ============================================================================
+
+model ActionTemplate {
+  id              String   @id @default(uuid())
+  errorCategory   String
+  filePattern     String   // e.g., "*.ts", "package.json"
+  actionType      String   // "install_deps", "fix_syntax", "add_import"
+  template        String   // Command or edit template
+  frequency       Int      @default(0)
+  successRate     Float    @default(0.0)
+  lastUsed        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  
+  @@index([errorCategory, filePattern])
 }

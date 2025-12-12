@@ -166,11 +166,130 @@ app.post('/api/agent/:id/stop', async (req, res) => {
     }
 });
 
-// Proxy for E2B (if we still need to support browser-based execution for legacy reasons,
-// strictly speaking we don't need this if we move everything to server, but good for hybrid)
-app.all(/^\/api\/e2b\/.*/, async (req, res) => {
-    // Simple proxy if needed, otherwise ignore.
-    res.status(501).send('Use server-side agents');
+// ============================================================================
+// METRICS ENDPOINTS
+// ============================================================================
+
+import { getMetricsSummary, getMetricsByCategory, getRecentMetrics } from './services/metrics.js';
+
+app.get('/api/metrics/summary', async (req, res) => {
+    try {
+        const summary = await getMetricsSummary();
+        res.json(summary);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/metrics/by-category/:category', async (req, res) => {
+    try {
+        const metrics = await getMetricsByCategory(req.params.category);
+        res.json(metrics);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/metrics/recent', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 10;
+        const recent = await getRecentMetrics(limit);
+        res.json(recent);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================================
+// KNOWLEDGE BASE ENDPOINTS
+// ============================================================================
+
+import { getTopFixPatterns, generateErrorFingerprint } from './services/knowledge-base.js';
+import { db as prisma } from './db/client.js';
+
+app.get('/api/knowledge-base/patterns', async (req, res) => {
+    try {
+        const patterns = await getTopFixPatterns(50);
+        res.json(patterns);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/knowledge-base/match', async (req, res) => {
+    try {
+        const { errorCategory, errorMessage, files } = req.query;
+
+        if (!errorCategory || !errorMessage) {
+            return res.status(400).json({ error: 'Missing errorCategory or errorMessage' });
+        }
+
+        const fingerprint = generateErrorFingerprint(
+            errorCategory as string,
+            errorMessage as string,
+            files ? (files as string).split(',') : []
+        );
+
+        const matches = await prisma.fixPattern.findMany({
+            where: { errorFingerprint: fingerprint }
+        });
+        res.json(matches);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================================
+// ACTION LIBRARY ENDPOINTS
+// ============================================================================
+
+import { getSuggestedActions, addActionTemplate, getActionTemplates } from './services/action-library.js';
+import { classifyError } from './errorClassification.js';
+
+app.get('/api/actions/suggest', async (req, res) => {
+    try {
+        const { logs, filePath } = req.query;
+
+        if (!logs || !filePath) {
+            return res.status(400).json({ error: 'Missing logs or filePath' });
+        }
+
+        const classified = classifyError(logs as string);
+        const suggestions = await getSuggestedActions(classified, filePath as string, 3);
+        res.json(suggestions);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/actions/templates', async (req, res) => {
+    try {
+        const { errorCategory } = req.query;
+        const templates = await getActionTemplates(errorCategory as string | undefined);
+        res.json(templates);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/actions/template', async (req, res) => {
+    try {
+        const { errorCategory, filePattern, actionType, template } = req.body;
+
+        if (!errorCategory || !filePattern || !actionType || !template) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const newTemplate = await addActionTemplate(
+            errorCategory,
+            filePattern,
+            actionType,
+            template
+        );
+        res.json(newTemplate);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // TanStack AI Chat Endpoint
