@@ -39,6 +39,7 @@ debug_*.txt
 compile_error.txt
 local_*.txt
 e2b_*.txt
+test_report*.txt
 
 # Debug scripts
 debug_*.js
