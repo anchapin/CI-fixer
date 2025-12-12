@@ -18,7 +18,10 @@
     "@e2b/code-interpreter": "latest",
     "@google/genai": "latest",
     "@playwright/test": "^1.57.0",
+    "@prisma/client": "^5.22.0",
     "@rollup/rollup-win32-x64-msvc": "^4.53.3",
+    "@tanstack/ai": "^0.0.3",
+    "@tanstack/ai-react": "^0.0.3",
     "cors": "^2.8.5",
     "diff": "latest",
     "dotenv": "^17.2.3",
@@ -26,7 +29,8 @@
     "lucide-react": "^0.556.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.15",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -37,6 +41,7 @@
     "@vitest/coverage-v8": "^4.0.15",
     "concurrently": "^9.2.1",
     "js-yaml": "^4.1.1",
+    "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

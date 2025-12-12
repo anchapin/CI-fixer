@@ -11,8 +11,9 @@ CI-Fixer is an intelligent agent designed to autonomously diagnose and fix GitHu
 The application architecture has evolved to separate concerns for better stability and performance:
 
 -   **Frontend (React/Vite)**: Provides the interactive chat interface, specialized diff views, terminal output, and real-time settings management.
--   **Backend (Node.js/Express)**: Manages the agent's lifecycle, state persistence, and orchestrates interactions with external tools (GitHub API, LLMs).
+-   **Backend (Node.js/Express)**: Manages the agent's lifecycle, state persistence (**SQLite/Prisma**), and orchestrates interactions with external tools.
 -   **Execution Engine**: Pluggable sandbox environment supporting both Cloud (E2B) and Local (Docker) execution strategies.
+-   **Agent Core**: Implements a **Supervisor-Worker** pattern where a Supervisor manages the environment and delegates sub-tasks to Worker Agents that execute "Understand -> Edit -> Verify" loops.
 
 ## 🚀 Getting Started
 
@@ -25,6 +26,7 @@ The application architecture has evolved to separate concerns for better stabili
 
 ```bash
 npm install
+npx prisma db push
 ```
 
 ### Configuration

@@ -6,6 +6,9 @@ import { AppConfig, WorkflowRun, CodeFile, FileChange, AgentPhase, RunGroup, Log
 
 import { SandboxEnvironment, createSandbox } from './sandbox.js';
 import { Sandbox } from '@e2b/code-interpreter';
+import { toolDefinition } from '@tanstack/ai';
+import { z } from 'zod';
+import { filterLogs, summarizeLogs } from './services/context-compiler.js';
 
 // Constants
 const MODEL_FAST = "gemini-2.5-flash";
@@ -96,7 +99,7 @@ export function safeJsonParse<T>(text: string, fallback: T): T {
 }
 
 // Core LLM Wrapper
-export async function unifiedGenerate(config: AppConfig, params: { model?: string, contents: any, config?: any }): Promise<{ text: string }> {
+export async function unifiedGenerate(config: AppConfig, params: { model?: string, contents: any, config?: any }): Promise<{ text: string, toolCalls?: any[] }> {
     // 1. Handle Z.AI / OpenAI Providers via Fetch
     if (config.llmProvider === 'zai' || config.llmProvider === 'openai') {
         const isZai = config.llmProvider === 'zai';
@@ -150,7 +153,11 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
             }
 
             const data = await response.json();
-            return { text: data.choices?.[0]?.message?.content || "" };
+            const message = data.choices?.[0]?.message;
+            return {
+                text: message?.content || "",
+                toolCalls: message?.tool_calls
+            };
         }, 5, 2000).catch(e => {
             throw new Error(`LLM Generation Failed after retries: ${e.message}`);
         });
@@ -173,7 +180,17 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
                 contents: params.contents,
                 config: params.config
             });
-            return { text: response.text || "" };
+
+            // Google GenAI Tool Calls (basic extraction if available in text or parts)
+            // Note: The SDK typically handles function calls by returning them in parts.
+            // We need to check if 'functionCall' exists in the candidates.
+            const candidate = response.candidates?.[0];
+            const functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall).map((p: any) => p.functionCall);
+
+            return {
+                text: response.text || "",
+                toolCalls: functionCalls && functionCalls.length > 0 ? functionCalls : undefined
+            };
         } catch (error: any) {
             lastError = error;
 
@@ -380,8 +397,9 @@ export interface DiagnosisResult {
 }
 
 export async function diagnoseError(config: AppConfig, logSnippet: string, repoContext?: string): Promise<DiagnosisResult> {
-    // Use tail of logs for better context on recent failures
-    const cleanLogs = logSnippet.slice(-20000);
+    // Phase 2: Context Engineering - Smart Filtering & Summarization
+    const filteredLogs = filterLogs(logSnippet);
+    const logSummary = await summarizeLogs(filteredLogs); // Heuristic summary for now
 
     const prompt = `
     You are an automated Error Diagnosis Agent.
@@ -406,7 +424,6 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
       - Do NOT suggest invalid YAML (indentation must be correct).
       - If modifying a YAML file, suggestion MUST be a valid YAML snippet.
     - EXTRACT A REPRODUCTION COMMAND:
-    - EXTRACT A REPRODUCTION COMMAND:
       - Look for the failing test name in the logs.
       - Construct a command to run ONLY that test.
       - Examples: 
@@ -426,8 +443,11 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     === AGENT CONTEXT ===
     \${repoContext || 'None'}
 
-    === TARGET CI LOGS ===
-    \${cleanLogs}
+    === LOG ANALYSIS ===
+    \${logSummary}
+
+    === FILTERED ERROR LOGS ===
+    \${filteredLogs}
   `;
 
     try {
@@ -469,8 +489,41 @@ export async function diagnoseError(config: AppConfig, logSnippet: string, repoC
     }
 }
 
-export async function generateRepoSummary(config: AppConfig): Promise<string> {
-    return "Repository structure analysis (simulated).";
+export async function generateRepoSummary(config: AppConfig, sandbox?: SandboxEnvironment): Promise<string> {
+    if (!sandbox) return "Repository Context: (Simulation Mode - No Access)";
+
+    try {
+        // 1. Get File Tree
+        const tree = await runDevShellCommand(config, "find . -maxdepth 3 -not -path '*/.*'", sandbox);
+        const fileTree = tree.output.split('\n').filter(Boolean).join('\n');
+
+        // 2. Read README
+        let readme = "";
+        try {
+            const readmeRes = await runDevShellCommand(config, "cat README.md", sandbox);
+            if (readmeRes.exitCode === 0) readme = readmeRes.output.slice(0, 2000); // Truncate
+        } catch { }
+
+        // 3. Read Package Configs (package.json, etc)
+        let configFiles = "";
+        try {
+            const pkgRes = await runDevShellCommand(config, "cat package.json", sandbox);
+            if (pkgRes.exitCode === 0) configFiles += `\n=== package.json ===\n${pkgRes.output}`;
+        } catch { }
+
+        return `
+        Repository Structure:
+        ${fileTree}
+        
+        Key Documentation:
+        ${readme}
+        
+        Configuration:
+        ${configFiles}
+        `;
+    } catch (e: any) {
+        return `Failed to generate repo summary: ${e.message}`;
+    }
 }
 
 export async function generatePostMortem(config: AppConfig, failedAgents: any[]): Promise<string> {
@@ -714,6 +767,39 @@ export async function toolWebSearch(config: AppConfig, query: string): Promise<s
 
 export async function toolFindReferences(config: AppConfig, symbol: string): Promise<string[]> {
     return [];
+}
+
+export function createTools(config: AppConfig, sandbox?: SandboxEnvironment) {
+    return {
+        check: toolDefinition({
+            name: 'check',
+            description: 'Check code for syntax errors or linting issues',
+            inputSchema: z.object({
+                code: z.string(),
+                language: z.string()
+            })
+        }).server(async ({ code, language }) => {
+            return toolLintCheck(config, code, language, sandbox);
+        }),
+        search: toolDefinition({
+            name: 'search',
+            description: 'Search the repository for a string',
+            inputSchema: z.object({
+                query: z.string()
+            })
+        }).server(async ({ query }) => {
+            return toolCodeSearch(config, query, sandbox);
+        }),
+        webSearch: toolDefinition({
+            name: 'webSearch',
+            description: 'Search the web for information',
+            inputSchema: z.object({
+                query: z.string()
+            })
+        }).server(async ({ query }) => {
+            return toolWebSearch(config, query);
+        })
+    };
 }
 
 export async function generateFix(config: AppConfig, context: any): Promise<string> {

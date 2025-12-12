@@ -21,7 +21,15 @@ Ensure you have keys for:
 - [Tavily](https://tavily.com) (`TAVILY_API_KEY`)
 - GitHub Token (`GITHUB_TOKEN`)
 
-## 2. Verification
+## 2. Database Initialization
+The application uses **SQLite** with **Prisma**. You must initialize the database file before running the server:
+
+```bash
+# Creates agent.db
+npx prisma db push
+```
+
+## 3. Verification
 Run the integration test suite to verify your keys and connectivity:
 ```bash
 npx vitest run __tests__/integration/mvp_full_stack.test.ts

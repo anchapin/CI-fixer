@@ -10,11 +10,34 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+import { chat, toStreamResponse } from '@tanstack/ai';
+import { CIMultiAdapter } from './services/CIMultiAdapter.js';
+import { createTools } from './services.js';
+
 const PORT = 3001;
 
-// In-Memory Store
-const agents = new Map<string, AgentState>();
+import { db } from './db/client.js';
+
+// In-Memory Store (for AbortControllers only)
 const abortControllers = new Map<string, AbortController>();
+
+// Initialize Adapter
+// Note: We use process.env to populate AppConfig. 
+// In a real app we might want per-request config, but the adapter stores it.
+// We'll create a default config from env.
+const defaultAdapterConfig: AppConfig = {
+    repoUrl: '',
+    githubToken: process.env.GITHUB_TOKEN || '',
+    llmProvider: (process.env.LLM_PROVIDER as any) || 'google',
+    llmModel: process.env.LLM_MODEL || 'gemini-3-pro-preview',
+    llmBaseUrl: process.env.LLM_BASE_URL,
+    customApiKey: process.env.API_KEY || process.env.OPENAI_API_KEY || "dummy",
+    tavilyApiKey: process.env.TAVILY_API_KEY,
+    devEnv: 'simulation',
+    checkEnv: 'simulation',
+    selectedRuns: []
+};
+const adapter = new CIMultiAdapter(defaultAdapterConfig);
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -46,21 +69,38 @@ app.post('/api/agent/start', async (req, res) => {
             fileReservations: [],
             activeLog: ''
         };
-        agents.set(agentId, initialState);
+
+        // Create DB Entry
+        await db.agentRun.create({
+            data: {
+                id: agentId,
+                groupId: agentId,
+                status: 'working',
+                state: JSON.stringify(initialState)
+            }
+        });
 
         // Start Loop in Background
-        // Note: In a real prod app, use a proper job queue (Bull/Redis)
-        const updateCallback = (id: string, partial: Partial<AgentState>) => {
-            const current = agents.get(id);
-            if (current) {
-                agents.set(id, { ...current, ...partial });
+        let localState = initialState;
+
+        const updateCallback = async (id: string, partial: Partial<AgentState>) => {
+            localState = { ...localState, ...partial };
+            try {
+                await db.agentRun.update({
+                    where: { id },
+                    data: {
+                        state: JSON.stringify(localState),
+                        status: localState.status
+                    }
+                });
+            } catch (e) {
+                console.error(`[DB] Failed to update state for ${id}:`, e);
             }
         };
 
         const logCallback = (level: LogLine['level'], content: string, agentId?: string, agentName?: string) => {
             console.log(`[AGENT:${agentName}] ${level}: ${content}`);
-            // Logs are appended to activeLog in the agent loop usually, 
-            // but we can also store them here if we want a separate log store.
+            // Logs are persisted via updateCallback (activeLog)
         };
 
         // Run asynchronously
@@ -70,13 +110,26 @@ app.post('/api/agent/start', async (req, res) => {
             initialRepoContext,
             updateCallback,
             logCallback
-        ).then(finalState => {
-            agents.set(agentId, finalState);
+        ).then(async finalState => {
+            await db.agentRun.update({
+                where: { id: agentId },
+                data: {
+                    status: finalState.status,
+                    state: JSON.stringify(finalState)
+                }
+            });
             console.log(`[AGENT:${group.name}] Finished with status: ${finalState.status}`);
-        }).catch(err => {
+        }).catch(async err => {
             console.error(`[AGENT:${group.name}] Crashed:`, err);
-            const current = agents.get(agentId);
-            if (current) agents.set(agentId, { ...current, status: 'failed', message: err.message });
+            await db.agentRun.update({
+                where: { id: agentId },
+                data: {
+                    status: 'failed'
+                    // We'd ideally start updating state with error message, 
+                    // but we can trust runIndependentAgentLoop calls updateCallback with error info before throwing?
+                    // Actually, supervisor catches and returns state. So .catch here is for truly catastrophic failures.
+                }
+            });
         });
 
         res.json({ agentId, status: 'started' });
@@ -88,28 +141,75 @@ app.post('/api/agent/start', async (req, res) => {
 });
 
 // Get Agent Status
-app.get('/api/agent/:id', (req, res) => {
-    const state = agents.get(req.params.id);
-    if (!state) return res.status(404).json({ error: 'Agent not found' });
-    res.json(state);
+app.get('/api/agent/:id', async (req, res) => {
+    try {
+        const run = await db.agentRun.findUnique({ where: { id: req.params.id } });
+        if (!run) return res.status(404).json({ error: 'Agent not found' });
+
+        const state = JSON.parse(run.state);
+        res.json(state);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // Stop Agent
-app.post('/api/agent/:id/stop', (req, res) => {
-    // Implementing "Stop" is tricky with promises unless we pass an AbortSignal
-    // For now, we will just mark status as failed/cancelled
-    const state = agents.get(req.params.id);
-    if (state) {
-        agents.set(req.params.id, { ...state, status: 'failed', message: 'User Cancelled' });
+app.post('/api/agent/:id/stop', async (req, res) => {
+    try {
+        await db.agentRun.update({
+            where: { id: req.params.id },
+            data: { status: 'stopped' } // Logic to actually stop via AbortController is pending
+        });
+        res.json({ status: 'stopped' });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
     }
-    res.json({ status: 'stopped' });
 });
 
-// Proxy for E2B (if we still need to support browser-based execution for legacy reasons, 
+// Proxy for E2B (if we still need to support browser-based execution for legacy reasons,
 // strictly speaking we don't need this if we move everything to server, but good for hybrid)
 app.all(/^\/api\/e2b\/.*/, async (req, res) => {
     // Simple proxy if needed, otherwise ignore.
     res.status(501).send('Use server-side agents');
+});
+
+// TanStack AI Chat Endpoint
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { messages } = req.body;
+        // The SDK's `chat` function returns a stream.
+        // We need to pipe it to the response.
+        const toolsMap = createTools(defaultAdapterConfig);
+        const tools = Object.values(toolsMap);
+        const stream = await chat({
+            adapter,
+            model: 'gemini-3-pro-preview',
+            messages,
+            tools
+        });
+
+        // toStreamResponse usually returns a Response object (Web Standard).
+        // We need to convert it to Node's stream or pipe it.
+        const response = toStreamResponse(stream);
+
+        // Propagate headers
+        response.headers.forEach((value, key) => {
+            res.setHeader(key, value);
+        });
+
+        // Pipe body
+        if (response.body) {
+            // @ts-ignore - Readable.fromWeb matches Response.body but Types might be old
+            const nodeStream = (response.body as any).pipe ? response.body : require('stream').Readable.fromWeb(response.body);
+            nodeStream.pipe(res);
+        } else {
+            res.end();
+        }
+
+    } catch (e: any) {
+        console.error('Chat endpoint error:', e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.listen(PORT, () => {

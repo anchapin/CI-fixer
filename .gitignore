@@ -30,18 +30,23 @@ coverage
 playwright-report
 test-results
 
-# Debug logs
-e2e_debug_logs*.txt
-e2e_failure_logs.txt
-
-# Temporary Output Files
+# Debug logs & Temp files
+e2e_*.txt
 *_output.txt
 *_debug.txt
 temp_*.txt
-
-# E2B definitions
+debug_*.txt
+compile_error.txt
+local_*.txt
 e2b_*.txt
 
 # Debug scripts
 debug_*.js
 test-server.js
+
+/generated/prisma
+
+# Database
+*.db
+*.db-journal
+

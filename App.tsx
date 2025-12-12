@@ -10,6 +10,7 @@ import { ColumnWrapper } from './components/ColumnWrapper';
 import { Resizer } from './components/Resizer';
 import { AgentPhase, LogLine, CodeFile, AppConfig, ChatMessage, FileChange, RunGroup, AgentState } from './types';
 import { INITIAL_ERROR_LOG, BROKEN_CODE, SCENARIO_FAILURE_LOOP } from './constants';
+import { useChat, fetchHttpStream } from '@tanstack/ai-react';
 import { Play, RotateCcw, ShieldCheck, Zap, Wifi, Settings, Loader2, RefreshCw, FileText, Terminal, Activity } from 'lucide-react';
 import {
     getWorkflowLogs, getFileContent, diagnoseError, generateFix,
@@ -34,7 +35,31 @@ const App: React.FC = () => {
     const [agentStates, setAgentStates] = useState<Record<string, AgentState>>({});
 
     const [terminalLines, setTerminalLines] = useState<LogLine[]>([]);
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
+    // TanStack AI Integration
+    const { messages, append, isLoading, setMessages } = useChat({
+        connection: {
+            connect: ({ messages, data, signal }: any) => fetchHttpStream('/api/chat', {
+                headers: { 'Content-Type': 'application/json' },
+                body: { messages, data },
+                signal
+            }) as any
+        },
+        onError: (e) => addLog('ERROR', `Chat Error: ${e.message}`)
+    });
+
+    const [input, setInput] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!input.trim() || isLoading) return;
+        await append({ role: 'user', content: input });
+        setInput('');
+    };
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInput(e.target.value);
+    };
 
     // State for multi-file changes (CONSOLIDATED MASTER)
     const [consolidatedFileChanges, setConsolidatedFileChanges] = useState<Record<string, FileChange>>({});
@@ -152,14 +177,24 @@ const App: React.FC = () => {
     }, []);
 
     const addChatMessage = useCallback((sender: 'user' | 'agent', text: string) => {
-        const msg: ChatMessage = {
+        const role = sender === 'agent' ? 'assistant' : 'user';
+        const msg = {
             id: Math.random().toString(36).substr(2, 9),
-            sender,
-            text,
-            timestamp: new Date()
+            role: role as 'user' | 'assistant',
+            content: text
         };
-        setChatMessages(prev => [...prev, msg]);
-    }, []);
+        // setMessages does not support functional updates in this version
+        // We rely on 'messages' being in scope, but we must be careful about stale closures.
+        // For now, we will use a workaround or accept that useChat manages messages.
+        // Actually, preventing stale closures in useCallback requires adding 'messages' to deps.
+        // But 'messages' changes frequently.
+        // We will ignore precise history manipulation for logs for now and just console log it?
+        // No, we need it in the UI.
+        // We will try casting to any to bypass TS if it's a runtime support issue,
+        // but likely it's an API constraint.
+        // We will try using the latest messages via ref if needed, but for now:
+        setMessages([...messages, msg as any]);
+    }, [messages, setMessages]);
 
     // --- 4. Agent Execution (Server-Side) ---
     const startAgentRun = async (group: RunGroup, config: AppConfig, repoContext: string) => {
@@ -243,7 +278,7 @@ const App: React.FC = () => {
             const current = prev[groupId] || {};
             return {
                 ...prev,
-                [groupId]: { ...current, ...updates }
+                [groupId]: { ...current, ...updates } as AgentState
             };
         });
     }, []);
@@ -273,7 +308,7 @@ const App: React.FC = () => {
                     status: 'modified'
                 }
             } : {}
-        });
+        } as unknown as AgentState);
 
         // Also auto-select this agent so we see the change
         if (simStepIndex === 4) setSelectedAgentId(mockAgentId); // Switch view when code changes
@@ -328,7 +363,9 @@ const App: React.FC = () => {
             setTerminalLines([]);
             setConsolidatedFileChanges({});
             consolidatedRef.current = {}; // Reset ref
-            setChatMessages([]);
+            setConsolidatedFileChanges({});
+            consolidatedRef.current = {}; // Reset ref
+            setMessages([]);
             setSelectedChunkIds(new Set());
             setActiveGroups([]);
             setAgentStates({});
@@ -517,28 +554,8 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUserChat = async (msg: string) => {
-        addChatMessage('user', msg);
-        setIsProcessing(true);
-        try {
-            let context = "Global Command View.";
-            if (selectedAgentId && selectedAgentId !== 'CONSOLIDATED') {
-                const agent = agentStates[selectedAgentId];
-                if (agent) {
-                    context = `Agent: ${agent.name}\nStatus: ${agent.status}\nPhase: ${agent.phase}\nLog Summary: ${agent.activeLog?.slice(-500) || 'None'}`;
-                }
-            } else {
-                context = "Consolidated View. Managing all agents.";
-            }
+    // Handlers replaced by useChat hooks
 
-            const resp = await getAgentChatResponse(appConfig, msg, context);
-            addChatMessage('agent', resp);
-        } catch (e) {
-            addChatMessage('agent', "Comms Link Unstable. (LLM Error)");
-        } finally {
-            setIsProcessing(false);
-        }
-    };
 
     const reset = () => {
         setIsSimulating(false);
@@ -547,7 +564,7 @@ const App: React.FC = () => {
         setConsolidatedFileChanges({});
         consolidatedRef.current = {};
         setLogs(INITIAL_ERROR_LOG);
-        setChatMessages([]);
+        setMessages([]);
         setSelectedChunkIds(new Set());
         setActiveGroups([]);
         setAgentStates({});
@@ -611,7 +628,7 @@ const App: React.FC = () => {
             traceback: logs,
             terminal: terminalLines,
             agents: agentStates,
-            chat: chatMessages,
+            chat: messages,
             consolidatedFiles: consolidatedFileChanges
         };
 
@@ -812,10 +829,16 @@ const App: React.FC = () => {
                         </div>
                         <div className="flex-1 min-h-0 flex flex-col">
                             <ChatConsole
-                                messages={chatMessages}
-                                onSendMessage={handleUserChat}
+                                messages={messages.map((m: any) => ({
+                                    ...m,
+                                    role: m.role || 'data',
+                                    content: typeof m.content === 'string' ? m.content : (m.parts?.map((p: any) => p.text).join('') || '')
+                                }))}
+                                input={input}
+                                handleInputChange={handleInputChange}
+                                handleSubmit={handleSubmit}
                                 onReevaluate={handleReevaluateSelected}
-                                isProcessing={isProcessing}
+                                isLoading={isLoading}
                                 hasSelectedChunks={selectedChunkIds.size > 0}
                                 selectedAgentName={selectedAgentId === 'CONSOLIDATED' ? 'Swarm Overseer' : agentStates[selectedAgentId]?.name}
                             />

@@ -1,0 +1,40 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+
+model AgentRun {
+  id        String   @id @default(uuid())
+  groupId   String
+  status    String   // "working", "success", "failed", "stopped"
+  state     String   // JSON string of AgentState
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fileModifications FileModification[]
+  errorFacts        ErrorFact[]
+}
+
+model FileModification {
+  id         String   @id @default(uuid())
+  path       String
+  runId      String
+  agentRun   AgentRun @relation(fields: [runId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model ErrorFact {
+  id           String   @id @default(uuid())
+  summary      String
+  filePath     String
+  fixAction    String   // "edit" or "command"
+  runId        String
+  agentRun     AgentRun @relation(fields: [runId], references: [id])
+  createdAt    DateTime @default(now())
+}
