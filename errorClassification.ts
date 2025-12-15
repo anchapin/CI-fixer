@@ -66,6 +66,31 @@ const ERROR_PATTERNS: ErrorPattern[] = [
         suggestedAction: "Add cleanup step before build (e.g., 'docker system prune -af')"
     },
 
+    // Docker Daemon Errors
+    {
+        category: ErrorCategory.CONFIGURATION, // or Infrastructure
+        patterns: [
+            /Cannot connect to the Docker daemon/i,
+            /docker daemon is not running/i,
+            /docker: result of connection is not valid/i
+        ],
+        confidence: 0.95,
+        suggestedAction: "Ensure Docker service is running or use a runner with Docker support"
+    },
+
+    // HTTP 413 (Artifacts/Network)
+    {
+        category: ErrorCategory.NETWORK,
+        patterns: [
+            /413 Request Entity Too Large/i,
+            /413 Payload Too Large/i,
+            /entity too large/i,
+            /upload.*too large/i
+        ],
+        confidence: 0.95,
+        suggestedAction: "Increase upload limit, compress artifacts, or split upload"
+    },
+
     // Network Errors
     {
         category: ErrorCategory.NETWORK,
@@ -228,7 +253,14 @@ const ERROR_PATTERNS: ErrorPattern[] = [
             /execution time limit/i
         ],
         confidence: 0.9,
-        suggestedAction: "Increase timeout or optimize slow operations"
+        suggestedAction: "Increase timeout or optimize slow operations",
+        extractFiles: (log) => {
+            // Look for test files that were running around the timeout
+            // Heuristic: "Running tests in [file]" or similar output before timeout
+            // For now, look for standard test patterns if present in the chunk
+            const matches = log.match(/(?:test|spec)s?\/[a-zA-Z0-9_\-/]+\.(?:test|spec)\.[jt]sx?/g);
+            return matches ? [...new Set(matches)] : [];
+        }
     },
 
     // Configuration Errors

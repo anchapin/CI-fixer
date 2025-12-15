@@ -1,0 +1,242 @@
+import { GraphState, GraphContext, NodeHandler } from '../state.js';
+import { getWorkflowLogs } from '../../../services/github/GitHubService.js';
+import { thinLog, smartThinLog } from '../../../services/context-manager.js';
+import { toolScanDependencies } from '../../../services/sandbox/SandboxService.js';
+import { getCachedRepoContext } from '../../../services/context-compiler.js';
+import { generateRepoSummary, diagnoseError, refineProblemStatement } from '../../../services/analysis/LogAnalysisService.js';
+import { classifyErrorWithHistory, getErrorPriority } from '../../../errorClassification.js';
+import { db as globalDb } from '../../../db/client.js';
+import { hasBlockingDependencies, getBlockedErrors } from '../../../services/dependency-tracker.js';
+import { clusterError } from '../../../services/error-clustering.js';
+import { estimateComplexity, detectConvergence, isAtomic, explainComplexity } from '../../../services/complexity-estimator.js';
+import { withSpan, setAttributes, addEvent } from '../../../telemetry/tracing.js';
+
+export const analysisNode: NodeHandler = async (state, context) => {
+    return withSpan('analysis-node', async (span) => {
+        const { config, group, iteration } = state;
+        const { logCallback, sandbox, profile, dbClient } = context;
+
+        // Use injected dbClient or fall back to global db
+        const db = dbClient || globalDb;
+
+        const log = (level: string, msg: string) => logCallback(level as any, msg);
+
+        setAttributes(span, {
+            'iteration': iteration,
+            'has_feedback': state.feedback.length > 0,
+            'complexity_history_length': state.complexityHistory?.length || 0
+        });
+
+        log('INFO', `[AnalysisNode] Starting verification/analysis phase (Iteration ${iteration + 1})`);
+
+        let currentLogText = state.currentLogText;
+
+        // 0. LOG DISCOVERY (Only on first run or if explicitly requested refresh)
+        // In graph flow, we might want to refresh logs if verification failed in a way that suggests we need fresh logs
+        // For now, adhere to worker logic: if empty or specific retry condition
+        if (!currentLogText || currentLogText.includes("No failed job found")) {
+            let strategy: 'standard' | 'extended' | 'any_error' | 'force_latest' = 'standard';
+            if (iteration === 0) strategy = 'extended';
+            else if (iteration === 1) strategy = 'any_error';
+            else if (iteration === 2) strategy = 'force_latest';
+
+            if (iteration > 2 && currentLogText.includes("No failed job found")) {
+                return { status: 'failed', failureReason: "No failed job found in workflow after retries." };
+            }
+
+            log('INFO', `Fetching logs with strategy: ${strategy}`);
+            try {
+                const { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, strategy);
+
+                // Context Thinning
+                currentLogText = await smartThinLog(logText, 300);
+            } catch (e: any) {
+                log('ERROR', `Failed to fetch logs: ${e.message}`);
+                return { status: 'failed', failureReason: `Failed to fetch logs: ${e.message}` };
+            }
+        }
+
+        // Dependency Check (First iteration only)
+        let dependencyContext = "";
+        if (iteration === 0) {
+            const isDependencyIssue = currentLogText.includes("ModuleNotFoundError") ||
+                currentLogText.includes("ImportError") ||
+                currentLogText.includes("No module named") ||
+                currentLogText.includes("Missing dependency");
+
+            if (isDependencyIssue) {
+                log('TOOL', 'Invoking Dependency Inspector...');
+                const headSha = group.mainRun.head_sha || 'HEAD'; // Fallback
+                const depReport = await toolScanDependencies(config, headSha);
+                dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
+            }
+        }
+
+        // 1. DIAGNOSIS
+        const cachedSha = group.mainRun.head_sha || 'unknown';
+        const repoContext = await getCachedRepoContext(config, cachedSha, () => context.services.analysis.generateRepoSummary(config, sandbox));
+        const diagContext = (iteration === 0) ? repoContext + dependencyContext : repoContext;
+
+        // Classification (Stage 3)
+        const classified = await classifyErrorWithHistory(currentLogText, profile);
+
+        const classificationForDiagnosis = {
+            category: classified.category,
+            priority: getErrorPriority(classified.category),
+            confidence: classified.confidence,
+            affectedFiles: classified.affectedFiles,
+            suggestedAction: classified.suggestedAction
+        };
+
+        log('INFO', `Diagnosing error...`);
+        const diagnosis = await context.services.analysis.diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, state.feedback);
+
+        log('INFO', `Diagnosis: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
+
+        // AoT: Refine problem statement
+        let refinedStatement: string | undefined;
+        if (state.feedback.length > 0) {
+            log('VERBOSE', '[AoT] Refining problem statement from feedback...');
+            refinedStatement = await refineProblemStatement(
+                config,
+                diagnosis,
+                state.feedback,
+                state.refinedProblemStatement
+            );
+            log('VERBOSE', `[AoT] Refined: ${refinedStatement}`);
+        }
+
+        // AoT: Calculate complexity
+        const tempState = {
+            ...state,
+            classification: classified,
+            diagnosis,
+            refinedProblemStatement: refinedStatement
+        };
+        const complexity = estimateComplexity(tempState);
+        const complexityHistory = [...(state.complexityHistory || []), complexity];
+        const convergence = detectConvergence(complexityHistory);
+        const isAtomicState = isAtomic(complexity, complexityHistory);
+
+        log('INFO', `[AoT] ${explainComplexity(tempState, complexity)}`);
+        log('VERBOSE', `[AoT] Convergence: ${convergence.trend}, Atomic: ${isAtomicState}`);
+
+        // History check (Knowledge Graph) - MOVED AFTER diagnosis is created
+        if (iteration === 0) {
+            try {
+                // Find any previous attempts to fix this specific error in this file
+                const previousAttempt = await db.errorFact.findFirst({
+                    where: {
+                        summary: diagnosis.summary,
+                        filePath: diagnosis.filePath || '',
+                        // We check if we've seen this attempt in THIS run group or recent ones.
+                        // Ideally we check per-RunGroup but we want "Restart persistence".
+                        // So checking global history for this File Path is decent heuristic.
+                    }
+                });
+
+                if (previousAttempt) {
+                    log('WARN', `[Knowledge Graph] CAUTION: A similar error was diagnosed previously (Run ${previousAttempt.runId}). Be careful not to repeat mistakes.`);
+                    // Note: we can't easily push to 'feedback' here because feedback is in 'state' which is immutable input here
+                    // But we can return it in the result
+                }
+
+                // Record New Fact with enhanced tracking
+                const errorFact = await db.errorFact.create({
+                    data: {
+                        summary: diagnosis.summary,
+                        filePath: diagnosis.filePath || '',
+                        fixAction: diagnosis.fixAction,
+                        runId: group.id,
+                        status: 'in_progress',
+                        notes: JSON.stringify({
+                            initialDiagnosis: diagnosis.summary,
+                            classificationCategory: classified.category,
+                            confidence: classified.confidence,
+                            timestamp: new Date().toISOString(),
+                            // AoT metadata
+                            complexity,
+                            isAtomic: isAtomicState,
+                            refinedStatement
+                        })
+                    }
+                });
+
+                // Check for blocking dependencies
+                const isBlocked = await hasBlockingDependencies(errorFact.id);
+                if (isBlocked) {
+                    const blockers = await getBlockedErrors(errorFact.id);
+                    log('WARN', `[Dependency] This error is blocked by ${blockers[0]?.blockedBy.length || 0} unresolved error(s)`);
+                    if (blockers[0]?.blockedBy.length > 0) {
+                        log('INFO', `[Dependency] Blocked by: ${blockers[0].blockedBy.map(b => b.summary).join(', ')}`);
+                    }
+                    // Return early with blocked status
+                    return {
+                        currentLogText,
+                        classification: classified,
+                        diagnosis,
+                        problemComplexity: complexity,
+                        complexityHistory,
+                        refinedProblemStatement: refinedStatement,
+                        isAtomic: isAtomicState,
+                        status: 'failed',
+                        failureReason: 'Error is blocked by unresolved dependencies',
+                        currentNode: 'analysis' // Stay in analysis to retry later
+                    };
+                }
+
+                // Cluster error for cross-run pattern detection
+                try {
+                    await clusterError(
+                        errorFact.id,
+                        classified.category,
+                        classified.errorMessage,
+                        classified.affectedFiles
+                    );
+                } catch (e) {
+                    log('WARN', `[Clustering] Failed to cluster error: ${e}`);
+                }
+
+                // Store error fact ID in state for later updates
+                return {
+                    currentLogText,
+                    classification: classified,
+                    diagnosis,
+                    currentErrorFactId: errorFact.id,
+                    problemComplexity: complexity,
+                    complexityHistory,
+                    refinedProblemStatement: refinedStatement,
+                    isAtomic: isAtomicState,
+                    currentNode: 'planning'
+                };
+            } catch (e) {
+                log('WARN', `[KB] Failed to query/write facts: ${e}`);
+            }
+        }
+
+        addEvent(span, 'analysis-completed', {
+            classification_category: classified.category,
+            complexity,
+            is_atomic: isAtomicState
+        });
+
+        setAttributes(span, {
+            'classification.category': classified.category,
+            'diagnosis.action': diagnosis.fixAction,
+            'complexity': complexity,
+            'is_atomic': isAtomicState,
+            'next_node': 'planning'
+        });
+
+        return {
+            currentLogText, // Update in case we fetched new logs
+            classification: classified,
+            diagnosis,
+            problemComplexity: complexity,
+            complexityHistory,
+            refinedProblemStatement: refinedStatement,
+            isAtomic: isAtomicState,
+            currentNode: 'planning' // Transition to next node
+        };
+    });
+};

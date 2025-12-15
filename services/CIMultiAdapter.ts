@@ -1,6 +1,6 @@
 
 import { AIAdapter, Modality, StreamChunk } from '@tanstack/ai';
-import { unifiedGenerate } from '../services.js';
+import { unifiedGenerate } from './llm/LLMService.js';
 import { AppConfig } from '../types.js';
 
 // Generic Any used to bypass strict interface constraints for initial integration

@@ -1,0 +1,106 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Snapshot Tests > Error Classification Output > should match snapshot for dependency error classification 1`] = `
+{
+  "affectedFiles": [],
+  "category": "network",
+  "confidence": 0.9,
+  "suggestedAction": "Check network connectivity or add retry logic",
+}
+`;
+
+exports[`Snapshot Tests > Error Classification Output > should match snapshot for runtime error classification 1`] = `
+{
+  "affectedFiles": [],
+  "category": "runtime",
+  "confidence": 0.85,
+  "suggestedAction": "Debug runtime logic in the affected code",
+}
+`;
+
+exports[`Snapshot Tests > LLM Prompt Generation > should match snapshot for diagnosis prompt structure 1`] = `
+{
+  "logText": "Error: Division by zero
+  at calculate (app.ts:10:5)",
+  "previousAttempts": [],
+  "repoContext": "TypeScript project using Node.js",
+}
+`;
+
+exports[`Snapshot Tests > LLM Prompt Generation > should match snapshot for fix generation prompt structure 1`] = `
+{
+  "context": "Math utility function",
+  "diagnosis": {
+    "filePath": "app.ts",
+    "fixAction": "edit",
+    "summary": "Division by zero error",
+  },
+  "fileContent": "function calculate(a, b) { return a / b; }",
+}
+`;
+
+exports[`Snapshot Tests > Plan Formatting > should match snapshot for complex plan with multiple tasks 1`] = `
+"# Implementation Plan: Refactor authentication system
+
+## Tasks
+- [ ] Extract authentication logic to separate module
+- [ ] Add JWT token validation
+- [ ] Update tests
+"
+`;
+
+exports[`Snapshot Tests > Plan Formatting > should match snapshot for plan with rejected status 1`] = `
+"# Implementation Plan: Implement feature X
+
+## Tasks
+- [ ] Add feature
+"
+`;
+
+exports[`Snapshot Tests > Plan Formatting > should match snapshot for simple plan 1`] = `
+"# Implementation Plan: Fix TypeError in app.ts
+
+## Tasks
+- [ ] Add null check before accessing property
+- [ ] Add error handling
+"
+`;
+
+exports[`Snapshot Tests > State Transitions > should match snapshot for failure state 1`] = `
+{
+  "currentNode": "verification",
+  "failureReason": "Max iterations exceeded",
+  "iteration": 5,
+  "message": "Unable to fix the issue after 5 attempts",
+  "phase": "FAILURE",
+  "status": "failed",
+}
+`;
+
+exports[`Snapshot Tests > State Transitions > should match snapshot for state update structure 1`] = `
+{
+  "currentNode": "planning",
+  "diagnosis": {
+    "filePath": "app.ts",
+    "fixAction": "edit",
+    "summary": "Error in app.ts",
+  },
+  "fileReservations": [
+    "app.ts",
+    "utils.ts",
+  ],
+  "iteration": 1,
+  "phase": "PLANNING",
+  "status": "working",
+}
+`;
+
+exports[`Snapshot Tests > State Transitions > should match snapshot for success state 1`] = `
+{
+  "currentNode": "finish",
+  "iteration": 2,
+  "message": "Fix applied successfully",
+  "phase": "SUCCESS",
+  "status": "success",
+}
+`;

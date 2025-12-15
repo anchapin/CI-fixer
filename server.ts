@@ -6,13 +6,20 @@ import { runIndependentAgentLoop } from './agent.js';
 
 dotenv.config({ path: '.env.local' });
 
+// Initialize OpenTelemetry if enabled
+import { initTelemetry } from './telemetry/config.js';
+if (process.env.OTEL_EXPORTER_FILE || process.env.OTEL_EXPORTER_CONSOLE) {
+    initTelemetry('ci-fixer-server');
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 import { chat, toStreamResponse } from '@tanstack/ai';
 import { CIMultiAdapter } from './services/CIMultiAdapter.js';
-import { createTools } from './services.js';
+import { createTools } from './services/sandbox/SandboxService.js';
+import { defaultServices } from './services/container.js';
 
 const PORT = 3001;
 
@@ -103,11 +110,14 @@ app.post('/api/agent/start', async (req, res) => {
             // Logs are persisted via updateCallback (activeLog)
         };
 
+
+
         // Run asynchronously
         runIndependentAgentLoop(
             config,
             group,
             initialRepoContext,
+            defaultServices,
             updateCallback,
             logCallback
         ).then(async finalState => {
@@ -300,10 +310,33 @@ app.post('/api/chat', async (req, res) => {
         // We need to pipe it to the response.
         const toolsMap = createTools(defaultAdapterConfig);
         const tools = Object.values(toolsMap);
+
+        const systemMessage = {
+            role: 'system',
+            content: `You are an advanced Coding Agent with access to a 'Code Mode' sandbox.
+You have access to a TypeScript library \`agent_tools\` (pre-imported) with the following async functions:
+- \`readFile(path: string): Promise<string>\`
+- \`writeFile(path: string, content: string): Promise<string>\`
+- \`runCmd(command: string): Promise<string>\`
+- \`search(query: string): Promise<string[]>\`
+- \`listDir(path: string): Promise<string[]>\`
+
+You MUST use the \`run_code_mode_script\` tool for ALL file operations, searching, and command executions.
+When asked to investigate or fix something, write a TypeScript script using these tools.
+Example:
+\`\`\`typescript
+const files = await agent_tools.listDir('.');
+console.log(files);
+\`\`\`
+`
+        };
+
+        const finalMessages = [systemMessage, ...messages];
+
         const stream = await chat({
             adapter,
             model: 'gemini-3-pro-preview',
-            messages,
+            messages: finalMessages,
             tools
         });
 

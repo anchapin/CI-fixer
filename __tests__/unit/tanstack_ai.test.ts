@@ -6,13 +6,16 @@ import { createTools } from '../../services';
 import * as services from '../../services'; // for mocking unifiedGenerate
 
 // Mock unifiedGenerate to simulate LLM responses
-vi.mock('../../services', async (importOriginal) => {
+vi.mock('../../services/llm/LLMService', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...(actual as any),
         unifiedGenerate: vi.fn(),
     };
 });
+
+import { unifiedGenerate } from '../../services/llm/LLMService';
+
 
 describe('TanStack AI Integration', () => {
     it('should execute a tool via chat function', async () => {
@@ -47,7 +50,8 @@ describe('TanStack AI Integration', () => {
         // So this test is expected to FAIL or show we need to implement tool parsing in CIMultiAdapter.
 
         // For now, let's just inspect what CIMultiAdapter returns given a text response.
-        (services.unifiedGenerate as any).mockResolvedValue({ text: "Hello world" });
+        vi.mocked(unifiedGenerate).mockResolvedValue({ text: "Hello world" });
+
 
         const responseStream = await chat({
             adapter,
@@ -63,7 +67,7 @@ describe('TanStack AI Integration', () => {
 
         // 5. Test Tool Execution Path
         // Mock unifiedGenerate to return a tool call
-        (services.unifiedGenerate as any)
+        vi.mocked(unifiedGenerate)
             .mockResolvedValueOnce({
                 text: "",
                 toolCalls: [{

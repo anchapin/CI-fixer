@@ -27,6 +27,9 @@ model FileModification {
   id         String   @id @default(uuid())
   path       String
   runId      String
+  beforeContent String?
+  afterContent  String?
+  diff          String?
   agentRun   AgentRun @relation(fields: [runId], references: [id])
   createdAt  DateTime @default(now())
 }
@@ -39,6 +42,20 @@ model ErrorFact {
   runId        String
   agentRun     AgentRun @relation(fields: [runId], references: [id])
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // State tracking
+  status       String   @default("open") // "open", "in_progress", "resolved", "blocked"
+  
+  // Agent notes for context preservation
+  notes        String?  // JSON: { decisions: [], attempts: [], blockers: [] }
+  
+  // Relationships
+  blockedBy    ErrorDependency[] @relation("BlockedErrors")
+  blocking     ErrorDependency[] @relation("BlockingErrors")
+  
+  @@index([status])
+  @@index([runId, status])
 }
 
 // ============================================================================
@@ -66,6 +83,18 @@ model FixAttempt {
   durationMs   Int
   filesChanged String   // JSON array
   createdAt    DateTime @default(now())
+  
+  // ToolOrchestra: Multi-objective metrics
+  llmCost         Float    @default(0)      // API cost in USD
+  totalLatency    Int      @default(0)      // Wall-clock time in ms
+  llmTokensInput  Int      @default(0)      // Input tokens
+  llmTokensOutput Int      @default(0)      // Output tokens
+  toolCallCount   Int      @default(0)      // Number of tool invocations
+  toolsUsed       String?                   // JSON array of tool names
+  codeQuality     Float?                    // Lint score (0-100)
+  diffSize        Int?                      // Lines changed
+  reward          Float?                    // Calculated composite reward
+  modelUsed       String?                   // Which model was used
 }
 
 // ============================================================================
@@ -116,4 +145,71 @@ model ActionTemplate {
   createdAt       DateTime @default(now())
   
   @@index([errorCategory, filePattern])
+}
+
+// ============================================================================
+// DEPENDENCY TRACKING
+// ============================================================================
+
+model ErrorDependency {
+  id              String   @id @default(uuid())
+  sourceErrorId   String   // The error that depends on another
+  targetErrorId   String   // The error that must be resolved first
+  relationshipType String  // "blocks", "discovered_from", "related", "parent_child"
+  createdAt       DateTime @default(now())
+  metadata        String?  // JSON: additional context about the relationship
+  
+  sourceError     ErrorFact @relation("BlockedErrors", fields: [sourceErrorId], references: [id])
+  targetError     ErrorFact @relation("BlockingErrors", fields: [targetErrorId], references: [id])
+  
+  @@index([sourceErrorId])
+  @@index([targetErrorId])
+  @@index([relationshipType])
+}
+
+// ============================================================================
+// CROSS-RUN ERROR CLUSTERING
+// ============================================================================
+
+model ErrorCluster {
+  id               String   @id @default(uuid())
+  fingerprint      String   @unique // Hash of error characteristics
+  category         String
+  occurrenceCount  Int      @default(1)
+  firstSeen        DateTime @default(now())
+  lastSeen         DateTime @default(now())
+  errorFactIds     String   // JSON array of ErrorFact IDs
+  commonPattern    String?  // Extracted common pattern
+  
+  @@index([fingerprint])
+  @@index([category])
+}
+
+// ============================================================================
+// TOOLORCHESTRA: USER PREFERENCES & TRAJECTORY OPTIMIZATION
+// ============================================================================
+
+model RepositoryPreferences {
+  id          String   @id @default(uuid())
+  repoUrl     String   @unique
+  preferences String                  // JSON preferences object
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FixTrajectory {
+  id              String   @id @default(uuid())
+  errorCategory   String
+  complexity      Int
+  toolSequence    String                    // JSON array of tool names
+  success         Boolean
+  totalCost       Float
+  totalLatency    Int
+  reward          Float
+  occurrenceCount Int      @default(1)
+  createdAt       DateTime @default(now())
+  lastUsed        DateTime @default(now())
+  
+  @@index([errorCategory, complexity])
+  @@index([success])
 }

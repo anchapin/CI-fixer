@@ -73,12 +73,14 @@ export function generateErrorFingerprint(
 /**
  * Extracts a reusable fix pattern from a successful agent run.
  * Stores the pattern for future similarity matching.
+ * @param dbClient - Optional database client for testing (defaults to global prisma)
  */
 export async function extractFixPattern(
     runId: string,
     classifiedError: ClassifiedError,
     filesChanged: FileChange[],
-    commandsUsed: string[]
+    commandsUsed: string[],
+    dbClient = prisma
 ): Promise<void> {
     const fingerprint = generateErrorFingerprint(
         classifiedError.category,
@@ -97,7 +99,7 @@ export async function extractFixPattern(
     };
 
     // Check if pattern already exists
-    const existing = await prisma.fixPattern.findFirst({
+    const existing = await dbClient.fixPattern.findFirst({
         where: {
             errorFingerprint: fingerprint,
             errorCategory: classifiedError.category
@@ -106,7 +108,7 @@ export async function extractFixPattern(
 
     if (existing) {
         // Update success count
-        await prisma.fixPattern.update({
+        await dbClient.fixPattern.update({
             where: { id: existing.id },
             data: {
                 successCount: existing.successCount + 1,
@@ -115,7 +117,7 @@ export async function extractFixPattern(
         });
     } else {
         // Create new pattern
-        await prisma.fixPattern.create({
+        await dbClient.fixPattern.create({
             data: {
                 errorFingerprint: fingerprint,
                 errorCategory: classifiedError.category,
@@ -127,7 +129,7 @@ export async function extractFixPattern(
     }
 
     // Also create/update ErrorSolution entry
-    const existingSolution = await prisma.errorSolution.findFirst({
+    const existingSolution = await dbClient.errorSolution.findFirst({
         where: { errorFingerprint: fingerprint }
     });
 
@@ -135,7 +137,7 @@ export async function extractFixPattern(
         const newTimesApplied = existingSolution.timesApplied + 1;
         const newSuccessRate = ((existingSolution.successRate * existingSolution.timesApplied) + 1.0) / newTimesApplied;
 
-        await prisma.errorSolution.update({
+        await dbClient.errorSolution.update({
             where: { id: existingSolution.id },
             data: {
                 timesApplied: newTimesApplied,
@@ -144,7 +146,7 @@ export async function extractFixPattern(
             }
         });
     } else {
-        await prisma.errorSolution.create({
+        await dbClient.errorSolution.create({
             data: {
                 errorFingerprint: fingerprint,
                 solution: JSON.stringify(fixTemplate),
@@ -205,11 +207,14 @@ function calculateSimilarity(str1: string, str2: string): number {
 
 /**
  * Finds similar historical fixes for a given error.
+ * First checks Markdown runbooks, then falls back to database patterns.
  * Returns matches sorted by similarity score.
+ * @param dbClient - Optional database client for testing (defaults to global prisma)
  */
 export async function findSimilarFixes(
     classifiedError: ClassifiedError,
-    limit: number = 5
+    limit: number = 5,
+    dbClient = prisma
 ): Promise<FixPatternMatch[]> {
     const currentFingerprint = generateErrorFingerprint(
         classifiedError.category,
@@ -217,8 +222,46 @@ export async function findSimilarFixes(
         classifiedError.affectedFiles
     );
 
+    // 1. Try Markdown runbooks first (human-curated, faster)
+    try {
+        const { searchRunbooks } = await import('./knowledge-base/markdown-loader.js');
+
+        const runbookMatches = await searchRunbooks({
+            category: classifiedError.category,
+            fingerprint: currentFingerprint
+        });
+
+        if (runbookMatches.length > 0) {
+            // Convert runbooks to FixPatternMatch format
+            const matches: FixPatternMatch[] = runbookMatches.map(runbook => ({
+                pattern: {
+                    id: runbook.metadata.fingerprint,
+                    errorFingerprint: runbook.metadata.fingerprint,
+                    errorCategory: runbook.metadata.category,
+                    filePath: 'runbook',
+                    fixTemplate: JSON.stringify({
+                        action: 'edit',
+                        solution: runbook.solution,
+                        codeTemplate: runbook.codeTemplate
+                    }),
+                    successCount: runbook.metadata.success_count,
+                    lastUsed: new Date(runbook.metadata.last_updated)
+                },
+                similarity: runbook.metadata.fingerprint === currentFingerprint ? 1.0 : 0.8,
+                successCount: runbook.metadata.success_count
+            }));
+
+            if (matches.length >= limit) {
+                return matches.slice(0, limit);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to load runbooks, falling back to database:', error);
+    }
+
+    // 2. Fall back to database patterns
     // First, try exact match
-    const exactMatches = await prisma.fixPattern.findMany({
+    const exactMatches = await dbClient.fixPattern.findMany({
         where: {
             errorFingerprint: currentFingerprint,
             errorCategory: classifiedError.category
@@ -236,7 +279,7 @@ export async function findSimilarFixes(
     }
 
     // If no exact match, find similar patterns in same category
-    const categoryMatches = await prisma.fixPattern.findMany({
+    const categoryMatches = await dbClient.fixPattern.findMany({
         where: {
             errorCategory: classifiedError.category
         },
@@ -270,14 +313,17 @@ export async function findSimilarFixes(
     return matches;
 }
 
+
 /**
  * Updates success statistics for a fix pattern after verification.
+ * @param dbClient - Optional database client for testing (defaults to global prisma)
  */
 export async function updateFixPatternStats(
     fingerprint: string,
-    success: boolean
+    success: boolean,
+    dbClient = prisma
 ): Promise<void> {
-    const solution = await prisma.errorSolution.findFirst({
+    const solution = await dbClient.errorSolution.findFirst({
         where: { errorFingerprint: fingerprint }
     });
 
@@ -286,7 +332,7 @@ export async function updateFixPatternStats(
         const successIncrement = success ? 1.0 : 0.0;
         const newSuccessRate = ((solution.successRate * solution.timesApplied) + successIncrement) / newTimesApplied;
 
-        await prisma.errorSolution.update({
+        await dbClient.errorSolution.update({
             where: { id: solution.id },
             data: {
                 timesApplied: newTimesApplied,
@@ -299,9 +345,10 @@ export async function updateFixPatternStats(
 /**
  * Gets all fix patterns with high success rates.
  * Useful for reviewing what fixes work best.
+ * @param dbClient - Optional database client for testing (defaults to global prisma)
  */
-export async function getTopFixPatterns(limit: number = 20) {
-    return await prisma.fixPattern.findMany({
+export async function getTopFixPatterns(limit: number = 20, dbClient = prisma) {
+    return await dbClient.fixPattern.findMany({
         orderBy: [
             { successCount: 'desc' },
             { lastUsed: 'desc' }

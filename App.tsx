@@ -188,7 +188,7 @@ const App: React.FC = () => {
         // For now, we will use a workaround or accept that useChat manages messages.
         // Actually, preventing stale closures in useCallback requires adding 'messages' to deps.
         // But 'messages' changes frequently.
-        // We will ignore precise history manipulation for logs for now and just console log it?
+        // We will ignore precise history manipulation// No edits to App.tsx for now, avoiding scope creep.onsole log it?
         // No, we need it in the UI.
         // We will try casting to any to bypass TS if it's a runtime support issue,
         // but likely it's an API constraint.
@@ -629,7 +629,8 @@ const App: React.FC = () => {
             terminal: terminalLines,
             agents: agentStates,
             chat: messages,
-            consolidatedFiles: consolidatedFileChanges
+            consolidatedFiles: consolidatedFileChanges,
+            repoSummary: repoSummary
         };
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });

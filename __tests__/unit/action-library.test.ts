@@ -280,4 +280,86 @@ describe('Action Library', () => {
             expect(found).toBeDefined();
         });
     });
+
+    describe('getActionTemplates', () => {
+        it('should return all templates when no category specified', async () => {
+            const { getActionTemplates } = await import('../../services/action-library.js');
+            const templates = await getActionTemplates();
+
+            expect(templates.length).toBeGreaterThanOrEqual(3); // At least our seeded templates
+        });
+
+        it('should filter by error category', async () => {
+            const { getActionTemplates } = await import('../../services/action-library.js');
+            const templates = await getActionTemplates('syntax');
+
+            expect(templates.length).toBeGreaterThan(0);
+            templates.forEach(t => {
+                expect(t.errorCategory).toBe('syntax');
+            });
+        });
+
+        it('should order by frequency then success rate', async () => {
+            const { getActionTemplates } = await import('../../services/action-library.js');
+            const templates = await getActionTemplates();
+
+            // Verify ordering
+            for (let i = 0; i < templates.length - 1; i++) {
+                const current = templates[i];
+                const next = templates[i + 1];
+
+                // Higher frequency should come first, or same frequency with higher success rate
+                if (current.frequency === next.frequency) {
+                    expect(current.successRate).toBeGreaterThanOrEqual(next.successRate);
+                } else {
+                    expect(current.frequency).toBeGreaterThanOrEqual(next.frequency);
+                }
+            }
+        });
+    });
+
+    describe('seedActionLibrary', () => {
+        it('should seed common action templates', async () => {
+            const db = getTestDb();
+            const { seedActionLibrary } = await import('../../services/action-library.js');
+
+            // Clear existing templates
+            await db.actionTemplate.deleteMany({});
+
+            // Seed the library
+            await seedActionLibrary();
+
+            // Verify templates were created
+            const templates = await db.actionTemplate.findMany({});
+            expect(templates.length).toBeGreaterThan(0);
+
+            // Verify some expected templates
+            const depTemplate = templates.find(t =>
+                t.errorCategory === 'dependency' && t.filePattern === 'package.json'
+            );
+            expect(depTemplate).toBeDefined();
+            expect(depTemplate!.actionType).toBe('install_deps');
+
+            const syntaxTemplate = templates.find(t =>
+                t.errorCategory === 'syntax' && t.filePattern === '*.ts'
+            );
+            expect(syntaxTemplate).toBeDefined();
+        });
+
+        it('should not duplicate existing templates', async () => {
+            const db = getTestDb();
+            const { seedActionLibrary } = await import('../../services/action-library.js');
+
+            // Seed once
+            await seedActionLibrary();
+            const countAfterFirst = await db.actionTemplate.count();
+
+            // Seed again
+            await seedActionLibrary();
+            const countAfterSecond = await db.actionTemplate.count();
+
+            // Count should be the same (no duplicates)
+            expect(countAfterSecond).toBe(countAfterFirst);
+        });
+    });
 });

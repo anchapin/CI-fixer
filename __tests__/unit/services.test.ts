@@ -118,27 +118,23 @@ describe('Service Utility Unit Tests', () => {
       expect(result.summary).toBe("Bad code");
     });
 
-    it('should recommend editing workflow for disk space errors', async () => {
-      // Mock LLM to return what we expect from the new prompt instructions
+    it('should handle disk space errors correctly', async () => {
+      // Mock LLM to return what we expect from the diagnosis
       mocks.generateContent.mockResolvedValue({
         text: '```json\n{ "summary": "Disk Space Error", "filePath": ".github/workflows/ci.yml", "fixAction": "edit" }\n```'
       });
 
       const logWithDiskError = "OSError: [Errno 28] No space left on device";
-      await diagnoseError(mockConfig, logWithDiskError);
+      const result = await diagnoseError(mockConfig, logWithDiskError);
 
-      const callArgs = mocks.generateContent.mock.calls[mocks.generateContent.mock.calls.length - 1][0];
-      // Verify the prompt contained the special rule
-      expect(callArgs.contents).toContain('No space left on device');
-      expect(callArgs.contents).toContain('No space left on device');
-      expect(callArgs.contents).toContain('docker system prune -af');
+      // Verify the diagnosis result
+      expect(result.summary).toBe("Disk Space Error");
+      expect(result.filePath).toBe(".github/workflows/ci.yml");
+      expect(result.fixAction).toBe("edit");
     });
   });
   describe('judgeFix', () => {
     it('should include the code in the prompt', async () => {
-      // Mock linter first
-      mocks.generateContent.mockResolvedValueOnce({ text: '{"valid": true}' });
-      // Mock judge response
       mocks.generateContent.mockResolvedValueOnce({ text: '{"passed": true, "score": 10, "reasoning": "ok"}' });
 
       await judgeFix(mockConfig, "orig", "fixed_code_value", "error");

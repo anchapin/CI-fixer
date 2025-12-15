@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AgentPhase, AgentState } from '../types';
-import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock, Terminal, Brain, Repeat } from 'lucide-react';
+import { Code, CheckCircle, Search, Beaker, Library, GitBranch, Wrench, ShieldAlert, Lock, Unlock, Terminal, Brain, Repeat, ChevronDown, ChevronUp } from 'lucide-react';
+import { MetricsDisplay } from './MetricsDisplay';
 
 interface AgentStatusProps {
     agentStates: Record<string, AgentState>;
@@ -36,6 +37,20 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
         );
     }
 
+    const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
+
+    const toggleExpand = (agentId: string) => {
+        setExpandedAgents(prev => {
+            const next = new Set(prev);
+            if (next.has(agentId)) {
+                next.delete(agentId);
+            } else {
+                next.add(agentId);
+            }
+            return next;
+        });
+    };
+
     return (
         <div className="w-full space-y-3 px-2">
             {/* Header Row */}
@@ -65,8 +80,8 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                         <div className="flex flex-col justify-center overflow-hidden">
                             <div className="flex items-center gap-2">
                                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-shadow ${isSuccess ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' :
-                                        isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' :
-                                            'bg-cyan-500 animate-pulse'
+                                    isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' :
+                                        'bg-cyan-500 animate-pulse'
                                     }`} />
                                 <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`} title={agent.name}>
                                     {agent.name}
@@ -113,10 +128,10 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                                     return (
                                         <div key={step.id} className="flex flex-col items-center justify-center w-6 relative">
                                             <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isCurrent
-                                                    ? (isFailed ? 'bg-rose-500 scale-125' : 'bg-cyan-400 scale-125 shadow-[0_0_8px_#22d3ee]')
-                                                    : isPassed
-                                                        ? 'bg-slate-600'
-                                                        : 'bg-slate-800 border border-slate-700'
+                                                ? (isFailed ? 'bg-rose-500 scale-125' : 'bg-cyan-400 scale-125 shadow-[0_0_8px_#22d3ee]')
+                                                : isPassed
+                                                    ? 'bg-slate-600'
+                                                    : 'bg-slate-800 border border-slate-700'
                                                 }`} />
                                         </div>
                                     );
@@ -125,16 +140,50 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                         </div>
 
                         {/* Iteration Count */}
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center gap-1">
                             <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${agent.iteration > 0
-                                    ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50 shadow-[0_0_5px_rgba(168,85,247,0.2)]'
-                                    : 'text-slate-600'
+                                ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50 shadow-[0_0_5px_rgba(168,85,247,0.2)]'
+                                : 'text-slate-600'
                                 }`}>
                                 {agent.iteration > 0 && <Repeat className="w-2 h-2" />}
                                 v{agent.iteration + 1}
                             </span>
+                            {/* Expand/Collapse Button */}
+                            {(agent.totalCost || agent.rewardHistory?.length) && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleExpand(agent.groupId);
+                                    }}
+                                    className="p-0.5 hover:bg-slate-700 rounded transition-colors"
+                                >
+                                    {expandedAgents.has(agent.groupId) ? (
+                                        <ChevronUp className="w-3 h-3 text-slate-400" />
+                                    ) : (
+                                        <ChevronDown className="w-3 h-3 text-slate-400" />
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
+                    
+                    {/* Expanded Metrics Panel */ }
+                {
+                    expandedAgents.has(agent.groupId) && (
+                        <div className="col-span-3 mt-2 animate-[fadeIn_0.3s_ease-out]">
+                            <MetricsDisplay
+                                metrics={{
+                                    totalCost: agent.totalCost,
+                                    totalLatency: agent.totalLatency,
+                                    selectedTools: agent.selectedTools,
+                                    selectedModel: agent.selectedModel,
+                                    rewardHistory: agent.rewardHistory,
+                                    budgetRemaining: agent.budgetRemaining
+                                }}
+                            />
+                        </div>
+                    )
+                }
                 );
             })}
 
@@ -143,8 +192,8 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                 <div
                     onClick={() => onSelectAgent('CONSOLIDATED')}
                     className={`flex items-center justify-center gap-2 p-2 mt-4 rounded border border-dashed cursor-pointer transition-all ${selectedAgentId === 'CONSOLIDATED'
-                            ? 'bg-purple-900/20 border-purple-500/50 text-purple-300'
-                            : 'border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-600'
+                        ? 'bg-purple-900/20 border-purple-500/50 text-purple-300'
+                        : 'border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-600'
                         }`}
                 >
                     <GitBranch className="w-3 h-3" />

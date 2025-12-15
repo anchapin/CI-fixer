@@ -66,6 +66,17 @@ export async function parseDependencies(
 }
 
 /**
+ * Extracts immediate dependencies for a given file content.
+ */
+export async function getImmediateDependencies(
+    filePath: string,
+    content: string,
+    language: string
+): Promise<string[]> {
+    return parseDependencies(filePath, content, language);
+}
+
+/**
  * Normalizes an import path relative to the importing file.
  * Handles ./ and ../ prefixes, and adds file extensions if missing.
  */
@@ -74,7 +85,21 @@ function normalizeImportPath(importPath: string, importerPath: string): string {
     let normalized = importPath.replace(/\.(js|ts)$/, '');
 
     // If it's a relative import, resolve it
-    if (normalized.startsWith('./') || normalized.startsWith('../')) {
+    if (normalized.startsWith('./') || normalized.startsWith('../') || (normalized.startsWith('.') && !normalized.startsWith('/'))) {
+        // Handle Python .foo or ..foo by converting to ./foo or ../foo
+        if (normalized.startsWith('.') && !normalized.startsWith('./') && !normalized.startsWith('../')) {
+            const match = normalized.match(/^(\.+)(.*)/);
+            if (match) {
+                const dots = match[1].length;
+                const rest = match[2];
+                if (dots === 1) {
+                    normalized = './' + rest;
+                } else {
+                    normalized = '../'.repeat(dots - 1) + rest;
+                }
+            }
+        }
+
         const importerDir = importerPath.split('/').slice(0, -1);
         const importParts = normalized.split('/');
 
@@ -115,14 +140,16 @@ export async function buildDependencyGraph(
         const deps = await parseDependencies(file.name, file.content, file.language);
 
         // Filter to only include files that exist in our file list
-        const validDeps = deps.filter(dep => {
-            return files.some(f =>
+        const validDeps = deps.map(dep => {
+            // Find matching file
+            const match = files.find(f =>
                 f.name === dep ||
                 f.name === `${dep}.ts` ||
                 f.name === `${dep}.js` ||
                 f.name.startsWith(dep)
             );
-        });
+            return match ? match.name : null;
+        }).filter((d): d is string => d !== null);
 
         nodes.set(file.name, validDeps);
     }

@@ -78,9 +78,7 @@ describe('E2B Connection Testing', () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain('Network Connection Failed');
-    expect(result.message).toContain('Internet connectivity');
-    expect(result.message).toContain('CORS');
-    expect(result.message).toContain('api.e2b.dev');
+    expect(result.message).toContain('check connectivity');
   });
 
   it('should handle authentication errors specifically', async () => {

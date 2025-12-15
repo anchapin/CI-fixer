@@ -5,6 +5,23 @@ import { SimulationSandbox } from '../../sandbox.js';
 import { AppConfig, RunGroup } from '../../types.js';
 import { setupInMemoryDb, getTestDb } from '../helpers/vitest-setup.js';
 
+// Mock database client to use test database
+vi.mock('../../db/client.js', async () => {
+    const { getTestDb } = await import('../helpers/vitest-setup.js');
+    return {
+        db: new Proxy({}, {
+            get(target, prop) {
+                const testDb = getTestDb();
+                const value = (testDb as any)[prop];
+                if (typeof value === 'function') {
+                    return value.bind(testDb);
+                }
+                return value;
+            }
+        })
+    };
+});
+
 // Setup test database
 setupInMemoryDb();
 
@@ -47,9 +64,42 @@ vi.mock('../../errorClassification.js', () => ({
     isCascadingError: vi.fn().mockReturnValue(false)
 }));
 
-// Mock services to avoid external API calls
-vi.mock('../../services.js', async (importOriginal: any) => {
-    const actual = await importOriginal();
+// Mock direct imports used by Nodes
+vi.mock('../../services/analysis/LogAnalysisService.js', () => ({
+    diagnoseError: vi.fn().mockResolvedValue({
+        summary: "No space left on device",
+        fixAction: "edit",
+        filePath: ".github/workflows/deploy.yml",
+        reproductionCommand: "npm test"
+    }),
+    generateDetailedPlan: vi.fn().mockResolvedValue({ goal: "Fix space issue", tasks: [], approved: true }),
+    generateFix: vi.fn().mockResolvedValue("steps:\n  - run: docker system prune -af\n  - run: npm install"),
+    judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 9, reasoning: "Good fix" }),
+    runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: "Build Success" }),
+    generateRepoSummary: vi.fn().mockResolvedValue("Repo Context"),
+    formatPlanToMarkdown: vi.fn().mockReturnValue("Plan MD")
+}));
+
+vi.mock('../../services/github/GitHubService', () => ({
+    getWorkflowLogs: vi.fn().mockResolvedValue({ logText: "Error: No space left on device\nModuleNotFoundError", headSha: "sha123", jobName: "test-job" }),
+    findClosestFile: vi.fn().mockResolvedValue({
+        file: { content: "steps:\n  - run: npm install", language: "yaml", name: "deploy.yml" },
+        path: ".github/workflows/deploy.yml"
+    })
+}));
+
+vi.mock('../../services/sandbox/SandboxService.js', () => ({
+    toolCodeSearch: vi.fn().mockResolvedValue([".github/workflows/deploy.yml"]),
+    toolWebSearch: vi.fn().mockResolvedValue("Use docker prune"),
+    toolLintCheck: vi.fn().mockResolvedValue({ valid: true }),
+    toolSemanticCodeSearch: vi.fn().mockResolvedValue([]),
+    toolScanDependencies: vi.fn().mockResolvedValue("Deps OK"),
+    extractFileOutline: vi.fn().mockReturnValue("Outline")
+}));
+
+// We need to mock prepareSandbox explicitly since Supervisor calls it
+vi.mock('../../services/sandbox/SandboxService.js', async (importOriginal) => {
+    const actual: any = await importOriginal();
     return {
         ...actual,
         prepareSandbox: vi.fn().mockImplementation(async () => {
@@ -57,25 +107,18 @@ vi.mock('../../services.js', async (importOriginal: any) => {
             await sandbox.init();
             return sandbox;
         }),
-        getWorkflowLogs: vi.fn().mockResolvedValue({ logText: "Error: No space left on device\nModuleNotFoundError", headSha: "sha123", jobName: "test-job" }),
-        diagnoseError: vi.fn().mockResolvedValue({
-            summary: "No space left on device",
-            fixAction: "edit",
-            filePath: ".github/workflows/deploy.yml",
-            reproductionCommand: "npm test"
-        }),
-        generateDetailedPlan: vi.fn().mockResolvedValue({ goal: "Fix space issue", tasks: [], approved: true }),
-        findClosestFile: vi.fn().mockResolvedValue({
-            file: { content: "steps:\n  - run: npm install", language: "yaml", name: "deploy.yml" },
-            path: ".github/workflows/deploy.yml"
-        }),
         toolCodeSearch: vi.fn().mockResolvedValue([".github/workflows/deploy.yml"]),
         toolWebSearch: vi.fn().mockResolvedValue("Use docker prune"),
-        generateFix: vi.fn().mockResolvedValue("steps:\n  - run: docker system prune -af\n  - run: npm install"),
         toolLintCheck: vi.fn().mockResolvedValue({ valid: true }),
-        judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 9, reasoning: "Good fix" }),
-        runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: "Build Success" }),
-        generateRepoSummary: vi.fn().mockResolvedValue("Repo Context"), // Mock the generator
+        toolSemanticCodeSearch: vi.fn().mockResolvedValue([]),
+        toolScanDependencies: vi.fn().mockResolvedValue("Deps OK"),
+    };
+});
+
+// Mock services.js if needed
+vi.mock('../../services.js', async (importOriginal: any) => {
+    return {
+        ...await importOriginal(),
     };
 });
 
@@ -85,7 +128,18 @@ vi.mock('../../services/context-compiler.js', () => ({
     summarizeLogs: vi.fn().mockResolvedValue("Log Summary")
 }));
 
+vi.mock('../../services/llm/LLMService', () => ({
+    LLMService: vi.fn().mockImplementation(() => ({
+        // Mock methods of LLMService if needed
+        // For example:
+        // callLLM: vi.fn().mockResolvedValue("LLM response"),
+    }))
+}));
+
 describe('Agent Supervisor-Worker Integration', () => {
+    // Increase timeout for this suite
+    vi.setConfig({ testTimeout: 60000 });
+
     it('should coordinate Supervisor and Worker to complete a fix', async () => {
         // Seed the database with the run
         const db = getTestDb();
@@ -116,10 +170,24 @@ describe('Agent Supervisor-Worker Integration', () => {
         const updateState = vi.fn();
         const logCallback = vi.fn();
 
+        // Create proper ServiceContainer structure
+        const GitHubService = await import('../../services/github/GitHubService.js');
+        const LogAnalysisService = await import('../../services/analysis/LogAnalysisService.js');
+        const SandboxService = await import('../../services/sandbox/SandboxService.js');
+        const LLMService = await import('../../services/llm/LLMService.js');
+
+        const testServices = {
+            github: GitHubService,
+            analysis: LogAnalysisService,
+            sandbox: SandboxService,
+            llm: LLMService
+        };
+
         const state = await runIndependentAgentLoop(
             config,
             group,
             "Initial Context",
+            testServices as any,
             updateState,
             logCallback
         );
@@ -130,8 +198,8 @@ describe('Agent Supervisor-Worker Integration', () => {
         // Check logs to verify Supervisor -> Worker flow
         const calls = logCallback.mock.calls.map(c => c[1]);
         expect(calls.some(c => c.includes('Initializing Supervisor Environment'))).toBe(true);
-        expect(calls.some(c => c.includes('Spawning Worker Agent'))).toBe(true);
-        expect(calls.some(c => c.includes('[Worker] Starting analysis'))).toBe(true);
-        expect(calls.some(c => c.includes('Worker succeeded'))).toBe(true);
+        expect(calls.some(c => c.includes('Spawning Graph Agent'))).toBe(true);
+        expect(calls.some(c => c.includes('[AnalysisNode] Starting verification/analysis'))).toBe(true);
+        expect(calls.some(c => c.includes('Task Complete'))).toBe(true);
     });
 });

@@ -41,13 +41,36 @@ local_*.txt
 e2b_*.txt
 test_report*.txt
 
+# Code Mode & Temp Scripts
+current_task.*
+temp_check.*
+__pycache__/
+.ci-fixer/
+inspect_*.ts
+
 # Debug scripts
 debug_*.js
 test-server.js
 
 /generated/prisma
 
+
 # Database
 *.db
 *.db-journal
+
+
+# Extensive Test & Debug Outputs
+all_tests_*.txt
+final_*.txt
+test_*.txt
+test-*.txt
+coverage_*.txt
+graph_test_*.txt
+services_*_*.txt
+tanstack_test_*.txt
+*_results.json
+arxiv_paper.html
+debug_assertion.txt
+
 

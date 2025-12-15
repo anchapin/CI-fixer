@@ -123,6 +123,23 @@ export interface AgentPlan {
   judgeFeedback?: string;
 }
 
+// AoT Phase 2: DAG Decomposition
+export interface ErrorNode {
+  id: string;
+  problem: string; // Concise problem description
+  category: string; // Error category (DEPENDENCY, SYNTAX, etc.)
+  affectedFiles: string[];
+  dependencies: string[]; // IDs of prerequisite nodes
+  complexity: number; // Estimated complexity
+  priority: number; // Execution priority (1=highest)
+}
+
+export interface ErrorDAG {
+  nodes: ErrorNode[];
+  edges: Array<{ from: string; to: string }>; // Dependency edges
+  rootProblem: string; // Original problem statement
+}
+
 export interface AgentState {
   groupId: string;
   name: string;
@@ -135,4 +152,13 @@ export interface AgentState {
   currentPlan?: AgentPlan; // New: Store the active plan
   fileReservations?: string[]; // New: Files currently locked by this agent
   activeLog?: string; // New: The active log chunk being analyzed by this agent
+  dbClient?: any; // Injectable database client for test isolation
+
+  // ToolOrchestra Metrics
+  totalCost?: number;
+  totalLatency?: number;
+  selectedTools?: string[];
+  selectedModel?: string;
+  rewardHistory?: number[];
+  budgetRemaining?: number;
 }

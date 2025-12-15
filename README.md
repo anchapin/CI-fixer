@@ -13,7 +13,9 @@ The application architecture has evolved to separate concerns for better stabili
 -   **Frontend (React/Vite)**: Provides the interactive chat interface, specialized diff views, terminal output, and real-time settings management.
 -   **Backend (Node.js/Express)**: Manages the agent's lifecycle, state persistence (**SQLite/Prisma**), and orchestrates interactions with external tools.
 -   **Execution Engine**: Pluggable sandbox environment supporting both Cloud (E2B) and Local (Docker) execution strategies.
--   **Agent Core**: Implements a **Supervisor-Worker** pattern where a Supervisor manages the environment and delegates sub-tasks to Worker Agents that execute "Understand -> Edit -> Verify" loops.
+-   **Agent Core**: Implements a **Graph-Based** architecture where a coordinator orchestrates specialized nodes (Analysis, Decomposition, Planning, Execution, Verification) to solve complex problems.
+-   **Knowledge Base**: A self-learning memory system that fingerprints errors and retrieves successful fix patterns from historical data and runbooks to speed up resolution.
+-   **Context Engine**: Uses AST-based dependency graph analysis to understand code relationships and intelligently isolate relevant files.
 
 ## 🚀 Getting Started
 
@@ -65,5 +67,8 @@ Runs the agent's reproduction steps in a container on your local machine.
 
 The project includes a comprehensive test suite:
 
--   **Unit/Integration Tests**: `npm test`
+-   **All Tests**: `npm test`
+-   **Unit Tests**: `npm run test:unit`
+-   **Integration Tests**: `npm run test:integration`
+-   **Coverage Report**: `npm run test:coverage`
 -   **E2E Tests**: `npm run test:e2e` (Playwright)

@@ -4,11 +4,16 @@ import { SandboxEnvironment } from '../sandbox.js';
 import { getCachedRepoContext } from '../services/context-compiler.js';
 import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange } from '../types.js';
 import {
-    getWorkflowLogs, toolScanDependencies, diagnoseError,
-    findClosestFile, toolCodeSearch, generateDetailedPlan,
-    toolWebSearch, generateFix, toolLintCheck, judgeFix, runSandboxTest,
-    generateRepoSummary, DiagnosisResult
-} from '../services.js';
+    toolScanDependencies, toolCodeSearch, toolWebSearch, toolLintCheck,
+    prepareSandbox
+} from '../services/sandbox/SandboxService.js';
+import {
+    getWorkflowLogs, findClosestFile
+} from '../services/github/GitHubService.js';
+import {
+    diagnoseError, generateDetailedPlan, generateFix, judgeFix,
+    generateRepoSummary, DiagnosisResult, runSandboxTest
+} from '../services/analysis/LogAnalysisService.js';
 import {
     validateFileExists, validateCommand, type RepositoryProfile
 } from '../validation.js';
@@ -19,13 +24,24 @@ import {
 import { recordFixAttempt, recordAgentMetrics } from '../services/metrics.js';
 import { extractFixPattern, findSimilarFixes } from '../services/knowledge-base.js';
 import { getSuggestedActions } from '../services/action-library.js';
+import { getImmediateDependencies } from '../services/dependency-analyzer.js';
+import { thinLog, formatHistorySummary, formatPlanToMarkdown, type IterationSummary } from '../services/context-manager.js';
+import {
+    recordErrorDependency, hasBlockingDependencies, markErrorInProgress,
+    markErrorResolved, getBlockedErrors
+} from '../services/dependency-tracker.js';
+import { recordDecision, recordAttempt as recordNoteAttempt, formatNotesForPrompt } from '../services/notes-manager.js';
+import { clusterError } from '../services/error-clustering.js';
+
+import { ServiceContainer } from '../services/container.js';
 
 export async function runWorkerTask(
     config: AppConfig,
     group: RunGroup,
-    sandbox: SandboxEnvironment | undefined, // In simulation mode this might be undefined, but we should enforce it being passed
-    profile: RepositoryProfile | undefined, // Repository profiling context
+    sandbox: SandboxEnvironment | undefined,
+    profile: RepositoryProfile | undefined,
     initialRepoContext: string,
+    services: ServiceContainer,
     updateStateCallback: (groupId: string, state: Partial<AgentState>) => void,
     logCallback: (level: LogLine['level'], content: string, agentId?: string, agentName?: string) => void
 ): Promise<AgentState> {
@@ -58,12 +74,20 @@ export async function runWorkerTask(
 
         // Initial Log Retrieval
         let { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, 'standard');
+
+        // [STAGE 3] Context Thinning: Prevent massive logs from overflowing context
+        logText = thinLog(logText, 300); // Keep max 300 lines
+
         let currentLogText = logText;
+        // [STAGE 3] Context Preservation: Store original error to prevent drift
+        const initialLogText = logText;
 
         // Loop State
         let diagnosis: DiagnosisResult = { summary: "", filePath: "", fixAction: 'edit', reproductionCommand: undefined };
         let targetFile: { file: any, path: string } | null = null;
         const feedbackHistory: string[] = [];
+        const iterationSummaries: IterationSummary[] = []; // [New] Structured history
+        let currentErrorFactId: string | null = null; // Track current error fact for dependency linking
 
         // Classification & Validation State (Stage 1: Passive)
         const classifiedErrors: ClassifiedError[] = [];
@@ -132,11 +156,11 @@ export async function runWorkerTask(
                 suggestedAction: classifiedErrors[classifiedErrors.length - 1].suggestedAction
             } : undefined;
 
-            diagnosis = await diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis);
+            diagnosis = await diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, feedbackHistory);
 
             log('INFO', `Diagnosis [v${i + 1}]: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
 
-            // [Knowledge Graph] Check History
+            // [Knowledge Graph] Check History & Create Error Fact
             if (i === 0) { // Check only on first pass to avoid spamming self-loops
                 try {
                     // Find any previous attempts to fix this specific error in this file
@@ -144,11 +168,6 @@ export async function runWorkerTask(
                         where: {
                             summary: diagnosis.summary,
                             filePath: diagnosis.filePath || '',
-                            // Check globally or per-repo? Schema doesn't have Repo.
-                            // We check if we've seen this attempt in THIS run group or recent ones.
-                            // Ideally we check per-RunGroup but we want "Restart persistence".
-                            // So checking global history for this File Path is decent heuristic.
-                            // We assume file paths are unique per project context.
                         }
                     });
 
@@ -157,15 +176,32 @@ export async function runWorkerTask(
                         feedbackHistory.push(`[History] You have previously encountered this error in '${diagnosis.filePath}'. Ensure your new fix is different.`);
                     }
 
-                    // Record New Fact
-                    await db.errorFact.create({
+                    // Record New Fact with enhanced tracking
+                    const errorFact = await db.errorFact.create({
                         data: {
                             summary: diagnosis.summary,
                             filePath: diagnosis.filePath || '',
                             fixAction: diagnosis.fixAction,
-                            runId: group.id
+                            runId: group.id,
+                            status: 'in_progress',
+                            notes: JSON.stringify({
+                                initialDiagnosis: diagnosis.summary,
+                                timestamp: new Date().toISOString()
+                            })
                         }
                     });
+                    currentErrorFactId = errorFact.id;
+
+                    // Check for blocking dependencies
+                    const isBlocked = await hasBlockingDependencies(errorFact.id);
+                    if (isBlocked) {
+                        const blockers = await getBlockedErrors(errorFact.id);
+                        log('WARN', `[Dependency] This error is blocked by ${blockers[0]?.blockedBy.length || 0} unresolved error(s)`);
+                        if (blockers[0]?.blockedBy.length > 0) {
+                            log('INFO', `[Dependency] Blocked by: ${blockers[0].blockedBy.map(b => b.summary).join(', ')}`);
+                        }
+                        continue; // Skip to next iteration
+                    }
                 } catch (e) { console.error("[KB] Failed to query/write facts", e); }
             }
 
@@ -176,6 +212,20 @@ export async function runWorkerTask(
             // [ENHANCED] Error Classification with Knowledge Base
             const classified = await classifyErrorWithHistory(currentLogText, profile);
             classifiedErrors.push(classified);
+
+            // Cluster error for cross-run pattern detection
+            if (currentErrorFactId && i === 0) {
+                try {
+                    await clusterError(
+                        currentErrorFactId,
+                        classified.category,
+                        classified.errorMessage,
+                        classified.affectedFiles
+                    );
+                } catch (e) {
+                    log('WARN', `[Clustering] Failed to cluster error: ${e}`);
+                }
+            }
 
             // Check for historical matches
             if (classified.historicalMatches && classified.historicalMatches.length > 0) {
@@ -321,10 +371,24 @@ export async function runWorkerTask(
                 targetFile = await findClosestFile(config, diagnosis.filePath);
                 if (!targetFile) {
                     log('WARN', `File '${diagnosis.filePath}' not found. Searching repo...`);
-                    const query = (diagnosis.filePath && diagnosis.filePath.length > 2) ? diagnosis.filePath : diagnosis.summary.substring(0, 100);
-                    const searchResults = await toolCodeSearch(config, query, sandbox);
+                    // [STAGE 3] Improved Search Strategy: Use basename first
+                    const basename = diagnosis.filePath ? diagnosis.filePath.split('/').pop() : diagnosis.summary.substring(0, 30);
+                    const query = (basename && basename.length > 3) ? basename : diagnosis.filePath;
+                    const cleanQuery = query || "error";
+
+                    // [g3-feature] Use structure search if query looks like a symbol (no extension)
+                    const isSymbol = cleanQuery && !cleanQuery.includes('.') && !cleanQuery.includes('/');
+                    let searchResults = await toolCodeSearch(config, cleanQuery, sandbox, isSymbol ? 'def' : 'ref');
+
+                    // Fallback to reference search if definition search yielded nothing
+                    if (searchResults.length === 0 && isSymbol) {
+                        searchResults = await toolCodeSearch(config, cleanQuery, sandbox, 'ref');
+                    }
+
                     if (searchResults.length > 0) {
                         log('INFO', `Search found potential match: ${searchResults[0]}`);
+                        // Update diagnosis to reflect the actual file found
+                        diagnosis.filePath = searchResults[0];
                         targetFile = await findClosestFile(config, searchResults[0]);
                     }
                 }
@@ -334,11 +398,26 @@ export async function runWorkerTask(
                     if (diagnosis.summary.toLowerCase().includes("no such file") ||
                         diagnosis.summary.toLowerCase().includes("not found") ||
                         diagnosis.summary.toLowerCase().includes("missing")) {
-                        log('INFO', `Target file missing. CREATE mode: ${diagnosis.filePath || 'new_file'}`);
-                        targetFile = {
-                            path: diagnosis.filePath || 'new_file.txt',
-                            file: { name: diagnosis.filePath?.split('/').pop() || 'new_file.txt', language: 'text', content: "" }
-                        };
+
+                        // [STAGE 3] Double check with code search before giving up
+                        log('INFO', `File not found in expected location. Searching repo...`);
+                        const searchRes = await toolCodeSearch(config, diagnosis.filePath || diagnosis.summary.substring(0, 50), sandbox);
+                        if (searchRes.length > 0) {
+                            log('INFO', `Found similar file: ${searchRes[0]}. Using that.`);
+                            targetFile = await findClosestFile(config, searchRes[0]);
+                        } else {
+                            // Only trigger create mode if explicitly requested or very confident
+                            if (diagnosis.fixAction === 'edit' && !diagnosis.summary.toLowerCase().includes("create")) {
+                                log('WARN', "Target file missing and no replacement found. Asking for re-diagnosis...");
+                                feedbackHistory.push(`File '${diagnosis.filePath}' not found in repo. Do not edit it unless you create it.`);
+                                continue;
+                            }
+                            log('INFO', `Target file missing. CREATE mode: ${diagnosis.filePath || 'new_file.txt'}`);
+                            targetFile = {
+                                path: diagnosis.filePath || 'new_file.txt',
+                                file: { name: diagnosis.filePath?.split('/').pop() || 'new_file.txt', language: 'text', content: "" }
+                            };
+                        }
                     } else {
                         log('ERROR', `Could not locate source file for error: ${diagnosis.summary}`);
                         return { ...currentState, status: 'failed', message: "Target file not found." };
@@ -352,7 +431,21 @@ export async function runWorkerTask(
 
             currentState.phase = AgentPhase.PLAN;
             updateStateCallback(group.id, { ...currentState });
-            if (targetFile) await generateDetailedPlan(config, diagnosis.summary, targetFile.path);
+            if (targetFile) {
+                const plan = await generateDetailedPlan(config, diagnosis.summary, targetFile.path);
+
+                // [g3-feature] Persistent Planning
+                if (sandbox) {
+                    try {
+                        const planMd = formatPlanToMarkdown(plan);
+                        await sandbox.runCommand('mkdir -p .ci-fixer'); // Ensure dir exists
+                        await sandbox.writeFile('.ci-fixer/current_plan.md', planMd);
+                        log('INFO', 'Persisted implementation plan to .ci-fixer/current_plan.md');
+                    } catch (e) {
+                        log('WARN', `Failed to save plan artifact: ${e}`);
+                    }
+                }
+            }
 
             // 3. IMPLEMENTATION
             currentState.phase = AgentPhase.IMPLEMENT;
@@ -374,6 +467,41 @@ export async function runWorkerTask(
 
                     if (cmdResult.exitCode !== 0) {
                         log('WARN', `Command failed: ${cmdResult.output}`);
+
+                        // Detect secondary issues revealed by command failure
+                        const secondaryError = await classifyErrorWithHistory(cmdResult.output, profile);
+                        if (secondaryError.category !== classified.category && currentErrorFactId) {
+                            log('INFO', `[Discovery] Found secondary issue: ${secondaryError.category}`);
+
+                            try {
+                                // Create new error fact for discovered issue
+                                const discoveredFact = await db.errorFact.create({
+                                    data: {
+                                        summary: secondaryError.errorMessage,
+                                        filePath: secondaryError.affectedFiles[0] || '',
+                                        fixAction: 'edit',
+                                        runId: group.id,
+                                        status: 'open',
+                                        notes: JSON.stringify({
+                                            discoveredDuring: diagnosis.summary,
+                                            discoveryContext: 'command_execution',
+                                            command: cmd
+                                        })
+                                    }
+                                });
+
+                                // Record discovered-from relationship
+                                await recordErrorDependency({
+                                    sourceErrorId: discoveredFact.id,
+                                    targetErrorId: currentErrorFactId,
+                                    relationshipType: 'discovered_from',
+                                    metadata: { command: cmd, iteration: i }
+                                });
+                            } catch (e) {
+                                log('WARN', `[Discovery] Failed to record secondary issue: ${e}`);
+                            }
+                        }
+
                         feedbackHistory.push(`Command '${cmd}' failed: ${cmdResult.output}`);
                         currentLogText = cmdResult.output;
                         continue;
@@ -389,12 +517,39 @@ export async function runWorkerTask(
 
             } else if (targetFile) {
                 let extraContext = "";
-                if (feedbackHistory.length > 0) {
+                if (iterationSummaries.length > 0) {
+                    extraContext += formatHistorySummary(iterationSummaries) + "\n";
+                }
+                // Fallback to raw history if needed, or if summary missed details
+                if (feedbackHistory.length > 0 && iterationSummaries.length === 0) {
                     extraContext += `\n\nPREVIOUS ATTEMPTS FAILED. REVIEW FEEDBACK:\n${feedbackHistory.join('\n')}\n`;
                 }
                 if (i > 0) {
                     const webResult = await toolWebSearch(config, diagnosis.summary);
                     extraContext += `\nWEB SEARCH RESULTS:\n${webResult}`;
+                }
+
+                // [Phase 3] Automatic Dependency Context
+                try {
+                    const deps = await getImmediateDependencies(targetFile.path, targetFile.file.content, targetFile.file.language);
+                    if (deps.length > 0) {
+                        log('INFO', `Found ${deps.length} dependencies. Fetching context...`);
+                        let depContext = "\n\n=== AUTOMATIC CONTEXT: DEPENDENCIES ===\n";
+                        let addedCount = 0;
+                        for (const dep of deps) {
+                            if (addedCount >= 3) break; // Limit to top 3 to avoid token explosion
+                            const depFile = await findClosestFile(config, dep);
+                            if (depFile) {
+                                // Trim content
+                                const content = thinLog(depFile.file.content, 50); // Keep it brief
+                                depContext += `\n--- FILE: ${depFile.path} ---\n${content}\n`;
+                                addedCount++;
+                            }
+                        }
+                        if (addedCount > 0) extraContext += depContext;
+                    }
+                } catch (e: any) {
+                    log('WARN', `Failed to fetch dependency context: ${e.message}`);
                 }
 
                 const fixCode = await generateFix(config, {
@@ -448,20 +603,50 @@ export async function runWorkerTask(
                     currentState.phase = AgentPhase.VERIFY;
                     updateStateCallback(group.id, { ...currentState });
 
-                    // We must write the file first!
-                    // Assuming services 'runSandboxTest' usually writes it? No, in 'runSandboxTest' it does.
-                    // But here we are doing local verification BEFORE 'runSandboxTest'.
-                    // So we must write the file manually using sandbox
+                    // [STAGE 3] Smart Verification for CI Files
+                    const isCIFile = targetFile.path.startsWith('.github/workflows/');
+
                     log('VERBOSE', 'Applying fix to sandbox for verification...');
                     await sandbox.writeFile(targetFile.path, fixCode);
 
                     log('INFO', `Verifying fix with reproduction command...`);
                     const res = await sandbox.runCommand(diagnosis.reproductionCommand);
+
                     if (res.exitCode !== 0) {
-                        log('WARN', `Local Verification Failed! The fix did not make the test pass.`);
-                        feedbackHistory.push(`Local Verification Failed: ${res.stdout}\n${res.stderr}`);
-                        currentLogText = res.stdout + "\n" + res.stderr; // Feed back
-                        continue;
+                        if (isCIFile) {
+                            // Analyze if it's an environment issue
+                            const verifyClassification = await classifyErrorWithHistory(res.stdout + res.stderr, profile);
+                            const envCategories = ['environment', 'setup', 'infrastructure', 'memory', 'disk'];
+
+                            // [STAGE 3] YAML Syntax Error Detection
+                            if ((res.stderr + res.stdout).includes('YAML Syntax Error') ||
+                                (res.stderr + res.stdout).includes('syntax error') ||
+                                (res.stderr + res.stdout).includes('mapping values are not allowed')) {
+                                log('WARN', `Local Verification Failed: YAML Syntax Error detected.`);
+                                feedbackHistory.push(`YAML Syntax Error in ${targetFile.path}: ${res.stderr.substring(0, 300)}`);
+                                currentLogText = initialLogText + "\n\n[VERIFICATION ERROR]\n" + res.stderr; // Append to original context
+                                continue;
+                            }
+
+                            if (envCategories.includes(verifyClassification.category.toLowerCase()) ||
+                                (res.stderr + res.stdout).includes('No space left') ||
+                                (res.stderr + res.stdout).includes('docker: command not found')) {
+                                log('WARN', `Verification failed due to environment mismatch (${verifyClassification.category}). Treating as SUCCESS.`);
+                                log('INFO', `Environment Warning: ${verifyClassification.suggestedAction}`);
+                            } else {
+                                log('WARN', `Local Verification Failed (Logic Error)! Retrying...`);
+                                feedbackHistory.push(`Local Verification Failed: ${res.stdout}\n${res.stderr}`);
+                                // [STAGE 3] Context Preservation
+                                currentLogText = initialLogText + "\n\n[VERIFICATION FAILURE]\n" + res.stdout + "\n" + res.stderr;
+                                continue;
+                            }
+                        } else {
+                            log('WARN', `Local Verification Failed! The fix did not make the test pass.`);
+                            feedbackHistory.push(`Local Verification Failed: ${res.stdout}\n${res.stderr}`);
+                            // [STAGE 3] Context Preservation
+                            currentLogText = initialLogText + "\n\n[VERIFICATION FAILURE]\n" + res.stdout + "\n" + res.stderr;
+                            continue;
+                        }
                     } else {
                         log('SUCCESS', `Local Verification Passed!`);
                     }
@@ -485,12 +670,26 @@ export async function runWorkerTask(
             try {
                 await recordFixAttempt(
                     group.id,
-                    i,
+                    i + 1,
                     diagnosis.fixAction,
                     implementationSuccess,
                     iterationDuration,
                     attemptFiles
                 );
+
+                // [New] Record Structured Summary for Context Manager
+                iterationSummaries.push({
+                    iteration: i,
+                    diagnosis: diagnosis.summary,
+                    action: diagnosis.fixAction,
+                    targetParams: diagnosis.fixAction === 'command'
+                        ? (diagnosis.suggestedCommand || 'unknown command')
+                        : (targetFile?.path || 'unknown file'),
+                    result: implementationSuccess ? 'success' : 'failure',
+                    outcomeSummary: implementationSuccess
+                        ? "Implementation successful. Proceeding to verification."
+                        : (feedbackHistory[feedbackHistory.length - 1] || "Implementation failed.")
+                });
             } catch (e) {
                 log('WARN', `Failed to record fix attempt: ${e}`);
             }
@@ -509,6 +708,21 @@ export async function runWorkerTask(
                     currentState.fileReservations = [];
                     updateStateCallback(group.id, { ...currentState });
                     log('SUCCESS', `Worker succeeded.`);
+
+                    // Mark error as resolved
+                    if (currentErrorFactId) {
+                        try {
+                            await markErrorResolved(currentErrorFactId, {
+                                resolution: 'fixed',
+                                filesChanged: Object.keys(currentState.files),
+                                iterations: i + 1,
+                                finalApproach: diagnosis.fixAction
+                            });
+                            log('VERBOSE', `[Dependency] Marked error as resolved`);
+                        } catch (e) {
+                            log('WARN', `Failed to mark error resolved: ${e}`);
+                        }
+                    }
 
                     // Record success metrics
                     const totalTime = Date.now() - runStartTime;
@@ -544,7 +758,15 @@ export async function runWorkerTask(
                 } else {
                     log('WARN', `Sandbox Test Failed: ${testResult.logs.substring(0, 100)}...`);
                     feedbackHistory.push(`Test Failed: ${testResult.logs.substring(0, 200)}`);
-                    currentLogText = testResult.logs;
+                    // [STAGE 3] Context Preservation for retries
+                    // [STAGE 3] Context Preservation for retries
+                    currentLogText = initialLogText + "\n\n[TEST FAILURE]\n" + thinLog(testResult.logs, 100);
+
+                    // Update the last summary to reflect verification failure
+                    if (iterationSummaries.length > 0) {
+                        iterationSummaries[iterationSummaries.length - 1].result = 'failure';
+                        iterationSummaries[iterationSummaries.length - 1].outcomeSummary = `Verification failed: ${testResult.logs.substring(0, 100)}...`;
+                    }
                 }
             }
         }

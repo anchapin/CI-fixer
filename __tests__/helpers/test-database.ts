@@ -72,13 +72,11 @@ export class TestDatabaseManager {
         return this.prisma;
     }
 
-    /**
-     * Clears all data from the database (useful for test isolation)
-     */
     async clearAllData(): Promise<void> {
         if (!this.prisma) return;
 
         const tablenames = [
+            'ErrorDependency',  // Must be deleted before ErrorFact (foreign key)
             'FixAttempt',
             'AgentMetrics',
             'ErrorFact',
@@ -86,6 +84,7 @@ export class TestDatabaseManager {
             'ActionTemplate',
             'ErrorSolution',
             'FixPattern',
+            'ErrorCluster',
             'AgentRun'
         ];
 

@@ -76,7 +76,7 @@ describe('Services Coverage Verification', () => {
 
             const callArgs = fetchSpy.mock.calls[0];
             const body = JSON.parse(callArgs[1]?.body as string);
-            expect(body.messages[0].content).toContain('=== REPOSITORY PROFILE ===');
+            expect(body.messages[0].content).toContain('Repository Profile:');
         });
     });
 

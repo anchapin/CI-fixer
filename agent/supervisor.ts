@@ -1,14 +1,17 @@
 
-import { prepareSandbox } from '../services.js';
-import { runWorkerTask } from './worker.js';
+import { prepareSandbox } from '../services/sandbox/SandboxService.js';
+import { runGraphAgent } from './graph/coordinator.js';
 import { SandboxEnvironment, SimulationSandbox } from '../sandbox.js';
 import { AppConfig, RunGroup, AgentState, LogLine } from '../types.js';
 import { analyzeRepository, formatProfileSummary, type RepositoryProfile } from '../validation.js';
+
+import { ServiceContainer } from '../services/container.js';
 
 export async function runSupervisorAgent(
     config: AppConfig,
     group: RunGroup,
     initialRepoContext: string,
+    services: ServiceContainer,
     updateStateCallback: (groupId: string, state: Partial<AgentState>) => void,
     logCallback: (level: LogLine['level'], content: string, agentId?: string, agentName?: string) => void
 ): Promise<AgentState> {
@@ -21,7 +24,7 @@ export async function runSupervisorAgent(
         try {
             logCallback('INFO', 'Initializing Supervisor Environment (Shared Sandbox)...', group.id, group.name);
             const sha = group.mainRun.head_sha || undefined;
-            sandbox = await prepareSandbox(config, config.repoUrl, sha);
+            sandbox = await services.sandbox.prepareSandbox(config, config.repoUrl, sha);
             logCallback('SUCCESS', `Sandbox Ready (${sandbox.getId()}).`, group.id, group.name);
         } catch (e: any) {
             logCallback('ERROR', `Sandbox Init Failed: ${e.message}. Falling back to Simulation.`, group.id, group.name);
@@ -34,7 +37,7 @@ export async function runSupervisorAgent(
         try {
             logCallback('INFO', 'Profiling repository structure...', group.id, group.name);
             const [owner, repo] = config.repoUrl.split('/').slice(-2);
-            const sha = group.mainRun.head_sha || 'main';
+            const sha = group.mainRun.head_sha || 'main'; // Fix shadowing of sha if needed
             profile = await analyzeRepository(owner, repo, sha, config.githubToken);
 
             const summary = formatProfileSummary(profile);
@@ -44,17 +47,16 @@ export async function runSupervisorAgent(
             profile = undefined; // Graceful degradation
         }
 
-        // 3. Delegate to Worker (Centralized Coordination)
-        // In the future, this Supervisor can plan sub-tasks and spawn multiple workers.
-        // For now, it delegates the entire goal to a single worker.
-        logCallback('INFO', 'Spawning Worker Agent...', group.id, group.name);
+        // 3. Delegate to Graph Agent
+        logCallback('INFO', 'Spawning Graph Agent...', group.id, group.name);
 
-        const result = await runWorkerTask(
+        const result = await runGraphAgent(
             config,
             group,
             sandbox,
             profile,
             initialRepoContext,
+            services,
             updateStateCallback,
             logCallback
         );
