@@ -46,7 +46,8 @@ vi.mock('../../../../services/sandbox/SandboxService.js', () => ({
     toolCodeSearch: vi.fn().mockResolvedValue(['src/app.ts']),
     toolSemanticCodeSearch: vi.fn().mockResolvedValue([]),
     toolWebSearch: vi.fn().mockResolvedValue(''),
-    toolLintCheck: vi.fn().mockResolvedValue({ valid: true })
+    toolLintCheck: vi.fn().mockResolvedValue({ valid: true }),
+    runDevShellCommand: vi.fn().mockResolvedValue({ output: 'success', exitCode: 0 })
 }));
 
 vi.mock('../../../../services/analysis/LogAnalysisService.js', () => ({
@@ -283,6 +284,7 @@ describe('Graph State Machine Flow Tests', () => {
                     filePath: null,
                     fixAction: 'command',
                     suggestedCommand: 'npm install lodash',
+                    reproductionCommand: 'node -e "require(\'lodash\')"',
                     summary: 'Missing dependency'
                 })
                 .atNode('verification')

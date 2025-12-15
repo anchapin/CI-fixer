@@ -699,7 +699,7 @@ export async function runWorkerTask(
                 currentState.phase = AgentPhase.TESTING;
                 updateStateCallback(group.id, { ...currentState });
 
-                const testResult = await runSandboxTest(config, group, i, true, activeFileChange, diagnosis.summary, logCallback, currentState.files, sandbox);
+                const testResult = await runSandboxTest(config, group, i, true, activeFileChange, diagnosis.summary, logCallback, currentState.files, sandbox, diagnosis.reproductionCommand);
 
                 if (testResult.passed) {
                     currentState.status = 'success';

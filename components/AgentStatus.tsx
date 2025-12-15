@@ -70,120 +70,121 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                 const hasLocks = agent.fileReservations && agent.fileReservations.length > 0;
 
                 return (
-                    <div
-                        key={agent.groupId}
-                        onClick={() => onSelectAgent(agent.groupId)}
-                        className={`grid grid-cols-[80px_1fr_40px] gap-2 items-center group cursor-pointer rounded p-1 transition-all ${isSelected ? 'bg-slate-800 ring-1 ring-cyan-500/50' : 'hover:bg-slate-900'
-                            }`}
-                    >
-                        {/* Agent Name Badge */}
-                        <div className="flex flex-col justify-center overflow-hidden">
-                            <div className="flex items-center gap-2">
-                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-shadow ${isSuccess ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' :
-                                    isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' :
-                                        'bg-cyan-500 animate-pulse'
-                                    }`} />
-                                <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`} title={agent.name}>
-                                    {agent.name}
-                                </span>
-                            </div>
-                            {/* File Lock Indicator */}
-                            {hasLocks && (
-                                <div className="flex items-center gap-1 mt-0.5 animate-[fadeIn_0.3s_ease-out]">
-                                    <Lock className="w-2 h-2 text-amber-500" />
-                                    <span className="text-[8px] font-mono text-amber-500 truncate max-w-[70px]">
-                                        {agent.fileReservations![0].split('/').pop()}
+                    <React.Fragment key={agent.groupId}>
+                        <div
+                            onClick={() => onSelectAgent(agent.groupId)}
+                            className={`grid grid-cols-[80px_1fr_40px] gap-2 items-center group cursor-pointer rounded p-1 transition-all ${isSelected ? 'bg-slate-800 ring-1 ring-cyan-500/50' : 'hover:bg-slate-900'
+                                }`}
+                        >
+                            {/* Agent Name Badge */}
+                            <div className="flex flex-col justify-center overflow-hidden">
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-shadow ${isSuccess ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' :
+                                        isFailed ? 'bg-rose-500 shadow-[0_0_5px_#f43f5e]' :
+                                            'bg-cyan-500 animate-pulse'
+                                        }`} />
+                                    <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`} title={agent.name}>
+                                        {agent.name}
                                     </span>
                                 </div>
-                            )}
-                        </div>
+                                {/* File Lock Indicator */}
+                                {hasLocks && (
+                                    <div className="flex items-center gap-1 mt-0.5 animate-[fadeIn_0.3s_ease-out]">
+                                        <Lock className="w-2 h-2 text-amber-500" />
+                                        <span className="text-[8px] font-mono text-amber-500 truncate max-w-[70px]">
+                                            {agent.fileReservations![0].split('/').pop()}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
 
-                        {/* Progress Track */}
-                        <div className="relative h-6 bg-slate-900/50 rounded-full border border-slate-800 flex items-center px-1">
-                            <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-slate-800 -z-0" />
+                            {/* Progress Track */}
+                            <div className="relative h-6 bg-slate-900/50 rounded-full border border-slate-800 flex items-center px-1">
+                                <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-slate-800 -z-0" />
 
-                            <div className="w-full flex justify-between z-10 relative">
-                                {steps.map((step, idx) => {
-                                    const stepIndex = steps.findIndex(s => s.id === step.id);
-                                    const currentIndex = steps.findIndex(s => s.id === agent.phase);
+                                <div className="w-full flex justify-between z-10 relative">
+                                    {steps.map((step, idx) => {
+                                        const stepIndex = steps.findIndex(s => s.id === step.id);
+                                        const currentIndex = steps.findIndex(s => s.id === agent.phase);
 
-                                    let isPassed = false;
-                                    if (isSuccess) isPassed = true;
-                                    else if (isFailed && agent.phase === AgentPhase.FAILURE) {
-                                        // If failed globally, assume we passed up to the point of failure? 
-                                        // Actually, stick to gray.
-                                        isPassed = false;
-                                    }
-                                    else if (currentIndex > stepIndex) isPassed = true;
+                                        let isPassed = false;
+                                        if (isSuccess) isPassed = true;
+                                        else if (isFailed && agent.phase === AgentPhase.FAILURE) {
+                                            // If failed globally, assume we passed up to the point of failure? 
+                                            // Actually, stick to gray.
+                                            isPassed = false;
+                                        }
+                                        else if (currentIndex > stepIndex) isPassed = true;
 
-                                    // Visual logic for skipped steps (Plan Approval is often skipped in automated mode)
-                                    if (step.id === AgentPhase.PLAN_APPROVAL && (
-                                        agent.phase === AgentPhase.ACQUIRE_LOCK ||
-                                        agent.phase === AgentPhase.IMPLEMENT ||
-                                        currentIndex > stepIndex
-                                    )) isPassed = true;
+                                        // Visual logic for skipped steps (Plan Approval is often skipped in automated mode)
+                                        if (step.id === AgentPhase.PLAN_APPROVAL && (
+                                            agent.phase === AgentPhase.ACQUIRE_LOCK ||
+                                            agent.phase === AgentPhase.IMPLEMENT ||
+                                            currentIndex > stepIndex
+                                        )) isPassed = true;
 
-                                    const isCurrent = agent.phase === step.id;
+                                        const isCurrent = agent.phase === step.id;
 
-                                    return (
-                                        <div key={step.id} className="flex flex-col items-center justify-center w-6 relative">
-                                            <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isCurrent
-                                                ? (isFailed ? 'bg-rose-500 scale-125' : 'bg-cyan-400 scale-125 shadow-[0_0_8px_#22d3ee]')
-                                                : isPassed
-                                                    ? 'bg-slate-600'
-                                                    : 'bg-slate-800 border border-slate-700'
-                                                }`} />
-                                        </div>
-                                    );
-                                })}
+                                        return (
+                                            <div key={step.id} className="flex flex-col items-center justify-center w-6 relative">
+                                                <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isCurrent
+                                                    ? (isFailed ? 'bg-rose-500 scale-125' : 'bg-cyan-400 scale-125 shadow-[0_0_8px_#22d3ee]')
+                                                    : isPassed
+                                                        ? 'bg-slate-600'
+                                                        : 'bg-slate-800 border border-slate-700'
+                                                    }`} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Iteration Count */}
+                            <div className="flex items-center justify-center gap-1">
+                                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${agent.iteration > 0
+                                    ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50 shadow-[0_0_5px_rgba(168,85,247,0.2)]'
+                                    : 'text-slate-600'
+                                    }`}>
+                                    {agent.iteration > 0 && <Repeat className="w-2 h-2" />}
+                                    v{agent.iteration + 1}
+                                </span>
+                                {/* Expand/Collapse Button */}
+                                {(agent.totalCost || agent.rewardHistory?.length) && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleExpand(agent.groupId);
+                                        }}
+                                        className="p-0.5 hover:bg-slate-700 rounded transition-colors"
+                                    >
+                                        {expandedAgents.has(agent.groupId) ? (
+                                            <ChevronUp className="w-3 h-3 text-slate-400" />
+                                        ) : (
+                                            <ChevronDown className="w-3 h-3 text-slate-400" />
+                                        )}
+                                    </button>
+                                )}
                             </div>
                         </div>
 
-                        {/* Iteration Count */}
-                        <div className="flex items-center justify-center gap-1">
-                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${agent.iteration > 0
-                                ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50 shadow-[0_0_5px_rgba(168,85,247,0.2)]'
-                                : 'text-slate-600'
-                                }`}>
-                                {agent.iteration > 0 && <Repeat className="w-2 h-2" />}
-                                v{agent.iteration + 1}
-                            </span>
-                            {/* Expand/Collapse Button */}
-                            {(agent.totalCost || agent.rewardHistory?.length) && (
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleExpand(agent.groupId);
-                                    }}
-                                    className="p-0.5 hover:bg-slate-700 rounded transition-colors"
-                                >
-                                    {expandedAgents.has(agent.groupId) ? (
-                                        <ChevronUp className="w-3 h-3 text-slate-400" />
-                                    ) : (
-                                        <ChevronDown className="w-3 h-3 text-slate-400" />
-                                    )}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    
-                    {/* Expanded Metrics Panel */ }
-                {
-                    expandedAgents.has(agent.groupId) && (
-                        <div className="col-span-3 mt-2 animate-[fadeIn_0.3s_ease-out]">
-                            <MetricsDisplay
-                                metrics={{
-                                    totalCost: agent.totalCost,
-                                    totalLatency: agent.totalLatency,
-                                    selectedTools: agent.selectedTools,
-                                    selectedModel: agent.selectedModel,
-                                    rewardHistory: agent.rewardHistory,
-                                    budgetRemaining: agent.budgetRemaining
-                                }}
-                            />
-                        </div>
-                    )
-                }
+                        {/* Expanded Metrics Panel */}
+                        {
+                            expandedAgents.has(agent.groupId) && (
+                                <div className="col-span-3 mt-2 animate-[fadeIn_0.3s_ease-out]">
+                                    <MetricsDisplay
+                                        metrics={{
+                                            totalCost: agent.totalCost,
+                                            totalLatency: agent.totalLatency,
+                                            selectedTools: agent.selectedTools,
+                                            selectedModel: agent.selectedModel,
+                                            rewardHistory: agent.rewardHistory,
+                                            budgetRemaining: agent.budgetRemaining
+                                        }}
+                                    />
+                                </div>
+                            )
+                        }
+                    </React.Fragment>
                 );
             })}
 

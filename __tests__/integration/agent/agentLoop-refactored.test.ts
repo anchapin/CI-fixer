@@ -228,7 +228,8 @@ describe('Agent Loop Integration (Refactored)', () => {
                 summary: 'Missing dependency',
                 filePath: '',
                 fixAction: 'command',
-                suggestedCommand: 'npm install lodash'
+                suggestedCommand: 'npm install lodash',
+                reproductionCommand: 'node -e "require(\'lodash\')"'
             });
 
             // Mock successful execution

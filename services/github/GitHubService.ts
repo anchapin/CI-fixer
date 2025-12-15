@@ -144,12 +144,41 @@ export async function getFileContent(config: AppConfig, path: string): Promise<C
     };
 }
 
-export async function findClosestFile(config: AppConfig, filePath: string): Promise<{ file: CodeFile, path: string } | null> {
+export async function findClosestFile(config: AppConfig, filePath: string, sandbox?: any): Promise<{ file: CodeFile, path: string } | null> {
     if (!filePath) return null;
     try {
         const file = await getFileContent(config, filePath);
         return { file, path: filePath };
     } catch (e) {
+        // Fallback: Check sandbox if provided
+        if (sandbox) {
+            try {
+                // We assume sandbox has readFile or fileExists
+                // Since sandbox interface might vary, we try readFile
+                const content = await sandbox.readFile(filePath);
+                if (content !== undefined && content !== null) {
+                    const extension = filePath.split('.').pop() || 'txt';
+                    let language = 'text';
+                    if (['js', 'jsx', 'ts', 'tsx'].includes(extension)) language = 'javascript';
+                    else if (['py'].includes(extension)) language = 'python';
+                    else if (extension === 'dockerfile' || filePath.includes('Dockerfile')) language = 'dockerfile';
+                    else if (['yml', 'yaml'].includes(extension)) language = 'yaml';
+                    else if (['json'].includes(extension)) language = 'json';
+
+                    return {
+                        file: {
+                            name: filePath.split('/').pop() || filePath,
+                            language,
+                            content,
+                            sha: 'sandbox-version'
+                        },
+                        path: filePath
+                    };
+                }
+            } catch (sandboxErr) {
+                // Ignore sandbox error, return null
+            }
+        }
         return null;
     }
 }

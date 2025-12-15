@@ -56,10 +56,21 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
         // For command-based fixes, no file modifications is expected behavior
         if (diagnosis?.fixAction === 'command') {
             log('SUCCESS', '[Verification] Command fix completed. No file modifications expected.');
-            // If we reached here, either:
-            // 1. Reproduction command passed (lines 24-42), or
-            // 2. No reproduction command exists
-            // In both cases, we can consider this a success
+
+            // CRITICAL CHANGE: We only assume success if we actually passed a reproduction command (lines 28-45).
+            // If we are here, it means reproductionCommand was either successful OR it didn't exist.
+
+            if (!diagnosis.reproductionCommand) {
+                log('WARN', '[Verification] No reproduction command provided to verify this fix.');
+                return {
+                    feedback: [...state.feedback, 'Action executed, but no `reproductionCommand` was available to verify the fix. Please provide a reproduction command to confirm the issue is resolved.'],
+                    iteration: iteration + 1,
+                    currentNode: 'analysis'
+                };
+            }
+
+            // If we had a reproduction command, and we didn't return early in step 2 (failure),
+            // then it passed. So this is a valid success.
             return {
                 status: 'success',
                 currentNode: 'finish'

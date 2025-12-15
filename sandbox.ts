@@ -36,7 +36,7 @@ export class DockerSandbox implements SandboxEnvironment {
     private path: any;
     private os: any;
 
-    constructor(imageName: string = 'node:20-bullseye') {
+    constructor(imageName: string = 'nikolaik/python-nodejs:python3.11-nodejs20-bullseye') {
         this.imageName = imageName;
         this.containerName = `agent-${Math.random().toString(36).substr(2, 9)}`;
     }
@@ -288,7 +288,7 @@ export class SimulationSandbox implements SandboxEnvironment {
 
 export function createSandbox(config: AppConfig): SandboxEnvironment {
     if (config.executionBackend === 'docker_local') {
-        return new DockerSandbox(config.dockerImage || 'node:20-bullseye');
+        return new DockerSandbox(config.dockerImage || 'nikolaik/python-nodejs:python3.11-nodejs20-bullseye');
     }
     if (config.devEnv === 'e2b' && config.e2bApiKey) {
         return new E2BSandbox(config.e2bApiKey);

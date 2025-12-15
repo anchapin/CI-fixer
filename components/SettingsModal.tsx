@@ -31,7 +31,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         sandboxTimeoutMinutes: 15,
         logLevel: 'info',
         executionBackend: 'e2b',
-        dockerImage: 'node:20-bullseye'
+        dockerImage: 'nikolaik/python-nodejs:python3.11-nodejs20-bullseye'
     });
 
     const [isLoadingRuns, setIsLoadingRuns] = useState(false);
@@ -62,7 +62,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 githubToken: currentConfig.githubToken || process.env.GITHUB_TOKEN || '',
                 repoUrl: currentConfig.repoUrl || '',
                 executionBackend: currentConfig.executionBackend || 'e2b',
-                dockerImage: currentConfig.dockerImage || 'node:20-bullseye'
+                dockerImage: currentConfig.dockerImage || 'nikolaik/python-nodejs:python3.11-nodejs20-bullseye'
             });
             if (currentConfig.selectedRuns) {
                 setFoundRuns(currentConfig.selectedRuns);
@@ -412,14 +412,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                         </label>
                                         <input
                                             type="text"
-                                            value={formData.dockerImage || 'node:20-bullseye'}
+                                            value={formData.dockerImage || 'nikolaik/python-nodejs:python3.11-nodejs20-bullseye'}
                                             onChange={e => setFormData({ ...formData, dockerImage: e.target.value })}
                                             className="w-full bg-slate-900 border border-blue-900/50 rounded px-2 py-1.5 text-xs text-blue-100 focus:border-blue-500/50"
-                                            placeholder="e.g. node:20-bullseye"
+                                            placeholder="e.g. nikolaik/python-nodejs:python3.11-nodejs20-bullseye"
                                         />
                                         <p className="text-[9px] text-slate-500">
                                             Ensure Docker Desktop is running and the image is available.
                                         </p>
+
+                                        <div className="pt-2 border-t border-slate-800 mt-2">
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await fetch('http://localhost:3001/api/sandbox/cleanup', { method: 'POST' });
+                                                        const data = await res.json();
+                                                        if (data.count > 0) {
+                                                            alert(`Successfully removed ${data.count} stuck containers.`);
+                                                        } else {
+                                                            alert('No stuck containers found.');
+                                                        }
+                                                    } catch (e) {
+                                                        alert('Failed to cleanup containers. Check console.');
+                                                        console.error(e);
+                                                    }
+                                                }}
+                                                className="w-full bg-red-950/30 hover:bg-red-900/50 border border-red-900/50 text-red-400 px-3 py-2 rounded text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <AlertTriangle className="w-3 h-3" />
+                                                Force Remove Stuck Containers
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 

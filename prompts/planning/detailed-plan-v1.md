@@ -57,6 +57,7 @@ Return **strictly valid JSON** with this structure:
 **Guidelines:**
 - Break complex fixes into 3-5 discrete tasks
 - Each task should be independently testable
+- **Environment Checks**: For import/runtime errors, explicitly check config files (`vite.config.ts`, `tsconfig.json`)
 - Use clear, imperative language ("Add import", "Update function")
 - Set all tasks to `"status": "pending"`
 - Set `"approved": true` by default

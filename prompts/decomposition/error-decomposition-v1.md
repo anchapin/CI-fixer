@@ -72,6 +72,7 @@ Return JSON with this structure:
 5. **Complexity**: Estimate 1-10 for each sub-problem
 6. **Independent Nodes**: Nodes with no dependencies should have the same priority
 7. **No Cycles**: Ensure dependency graph is acyclic
+8. **Idempotent Commands**: If suggesting commands, prefer idempotent ones (ln -sf, mkdir -p)
 
 ### Examples
 

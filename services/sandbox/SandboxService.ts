@@ -62,13 +62,29 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
 
     let cloneUrl = repoUrl;
     if (config.githubToken && !repoUrl.includes('@')) {
-        const cleanUrl = repoUrl.replace('https://', '');
+        let cleanUrl = repoUrl.replace('https://', '').replace('http://', '');
+
+        // If it looks like "owner/repo" (no dots in the first part), assume github.com
+        const parts = cleanUrl.split('/');
+        if (parts.length === 2 && !parts[0].includes('.')) {
+            cleanUrl = `github.com/${cleanUrl}`;
+        }
+
         cloneUrl = `https://oauth2:${config.githubToken}@${cleanUrl}`;
     }
 
     console.log(`[Sandbox] Cloning ${repoUrl}...`);
+
+    // Ensure workspace is empty before cloning to avoid "destination path '.' already exists"
     try {
-        await sandbox.runCommand(`git clone ${cloneUrl} .`);
+        await sandbox.runCommand('rm -rf ./* ./.??*');
+    } catch (e) { /* ignore cleanup errors */ }
+
+    try {
+        const cloneRes = await sandbox.runCommand(`git clone ${cloneUrl} .`);
+        if (cloneRes.exitCode !== 0) {
+            throw new Error(`Git clone failed (Exit Code ${cloneRes.exitCode}): ${cloneRes.stderr}`);
+        }
     } catch (e: any) {
         throw new Error(`Failed to clone repo in sandbox: ${e.message}`);
     }
@@ -96,19 +112,39 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
 
     try {
         console.log('[Sandbox] Checking for dependencies...');
-        const check = await sandbox.runCommand('ls package.json requirements.txt');
+        const check = await sandbox.runCommand('ls package.json requirements.txt pnpm-lock.yaml pnpm-workspace.yaml');
         const output = check.stdout;
 
         console.log('[Sandbox] Installing LSP Tools (pyright, typescript)...');
         await sandbox.runCommand('npm install -g typescript pyright || pip install pyright');
 
-        if (output.includes('package.json')) {
-            console.log('[Sandbox] Installing Node dependencies...');
+        if (output.includes('pnpm-lock.yaml') || output.includes('pnpm-workspace.yaml')) {
+            console.log('[Sandbox] Detected pnpm configuration. Installing pnpm...');
+            await sandbox.runCommand('npm install -g pnpm');
+            console.log('[Sandbox] Installing Node dependencies (pnpm)...');
+            await sandbox.runCommand('pnpm install');
+        } else if (output.includes('package.json')) {
+            console.log('[Sandbox] Installing Node dependencies (npm)...');
             await sandbox.runCommand('npm install');
         } else if (output.includes('requirements.txt')) {
             console.log('[Sandbox] Installing Python dependencies...');
             await sandbox.runCommand('pip install -r requirements.txt');
         }
+
+        // Check for Bun
+        if (output.includes('bun.lockb') || (output.includes('package.json') && output.includes('"bun"'))) {
+            console.log('[Sandbox] Detected Bun configuration. Installing bun...');
+            await sandbox.runCommand('curl -fsSL https://bun.sh/install | bash');
+            // Add bun to path persistently
+            console.log('[Sandbox] Installing Bun dependencies...');
+            await sandbox.runCommand('echo \'export BUN_INSTALL="$HOME/.bun"\' >> ~/.bashrc && echo \'export PATH="$BUN_INSTALL/bin:$PATH"\' >> ~/.bashrc && source ~/.bashrc && export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH" && bun install');
+        }
+
+        // Install common tools if missing (Docker)
+        // Note: This requires root/sudo, assuming sandbox user has rights or is root
+        console.log('[Sandbox] Ensuring Docker CLI is available...');
+        await sandbox.runCommand('apt-get update && apt-get install -y docker.io');
+
     } catch (e: any) {
         console.warn('[Sandbox] Dependency installation warning (continuing):', e);
     }

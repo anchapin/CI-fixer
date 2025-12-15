@@ -13,7 +13,8 @@ import { TrajectoryAnalyzer } from '../../../services/analytics/trajectory-analy
 import { withNodeTracing } from './tracing-wrapper.js'; // Retained as it's used below
 
 const planningNodeHandler: NodeHandler = async (state, context) => {
-    const { config, group, diagnosis, classification, errorDAG, solvedNodes } = state;
+    const { config, group, diagnosis: initialDiagnosis, classification, errorDAG, solvedNodes } = state;
+    let diagnosis = initialDiagnosis;
     const { logCallback, sandbox, services, dbClient } = context;
 
     // ToolOrchestra: Initialize orchestration services
@@ -123,7 +124,9 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
         // Continue with normal planning flow using node diagnosis
         // (Fall through to existing planning logic below)
         // We'll temporarily override diagnosis for this node
-        state = { ...state, diagnosis: nodeDiagnosis };
+        diagnosis = nodeDiagnosis;
+        // Optimization: Propagate this new diagnosis to the state return so ExecutionNode sees it too
+        // We will add it to the return object at the end of the function.
     }
 
     if (!diagnosis) {
@@ -134,7 +137,7 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
     let targetFile: { file: any, path: string } | null = null;
     let fileReservations: string[] = [];
 
-    if (diagnosis.fixAction === 'edit') {
+    if (diagnosis.fixAction === 'edit' || diagnosis.fixAction === 'create') {
         const filePath = diagnosis.filePath;
 
         // Attempt to find the file
@@ -143,16 +146,15 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
             // Validate Existence
             try {
                 // If we had a way to check GH existence cheaply, do it here.
-                // For now, rely on findClosestFile which checks repo content
+                // For now, rely on findClosestFile which checks repo content and sandbox
             } catch (e) { }
 
-            console.error('[Planning] About to call services.github.findClosestFile for:', filePath);
-            console.error('[Planning] services.github.findClosestFile is:', typeof services.github.findClosestFile);
-            targetFile = await services.github.findClosestFile(config, filePath);
-            console.error('[Planning] findClosestFile result for', filePath, 'is', targetFile ? 'found' : 'null');
-            if (targetFile) console.error('[Planning] targetFile.path:', targetFile.path);
+            // Retrieve target file
+            targetFile = await services.github.findClosestFile(config, filePath, sandbox);
 
-            if (!targetFile) {
+            if (targetFile) {
+                log('INFO', `[Planning] Found file: ${targetFile.path}`);
+            } else {
                 log('WARN', `File ${filePath} not found. Searching...`);
 
                 // Search Logic (Semantic)
@@ -171,24 +173,43 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
 
                 if (searchRes.length > 0) {
                     log('INFO', `Found similar file: ${searchRes[0]}`);
-                    targetFile = await services.github.findClosestFile(config, searchRes[0]);
+                    targetFile = await services.github.findClosestFile(config, searchRes[0], sandbox);
                     // Update diagnosis path to match reality
-                    state.diagnosis!.filePath = searchRes[0];
+                    if (state.diagnosis) {
+                        state.diagnosis.filePath = searchRes[0];
+                    }
                 }
             }
 
             // Creation fallback
-            if (!targetFile && (diagnosis.summary.toLowerCase().includes('create') || diagnosis.summary.toLowerCase().includes('no such file'))) {
+            // If still not found, and action implies creation, set it up
+            if (!targetFile && (diagnosis.fixAction === 'create' || diagnosis.summary.toLowerCase().includes('create') || diagnosis.summary.toLowerCase().includes('no such file'))) {
                 log('INFO', `Creating new file: ${filePath}`);
                 targetFile = {
                     path: filePath,
-                    file: { name: filePath.split('/').pop(), language: 'text', content: '' }
+                    file: { name: filePath.split('/').pop() || 'newfile', language: 'text', content: '' }
                 };
             }
         }
 
         if (targetFile) {
             fileReservations.push(targetFile.path);
+            // Proactively store in state.files to ensure Execution has it
+            if (!state.files) state.files = {};
+            // Only set if not already modified? No, this is planning, so we set initial state for this iteration if needed.
+            // But state.files might have history. We usually want to load the *current* content.
+            // Since we just fetched it (from SB or GH), this is the "latest" base.
+            // CAUTION: If we loop, we don't want to overwrite uncommitted mods? 
+            // Usually Planning -> Execution -> Verification is one pass.
+            // Let's safe set:
+            if (!state.files[targetFile.path]) {
+                state.files[targetFile.path] = {
+                    path: targetFile.path,
+                    original: targetFile.file,
+                    status: 'unchanged'
+                };
+            }
+            log('VERBOSE', `[Planning] Reserved file ${targetFile.path}`);
         } else if (diagnosis.fixAction === 'edit') {
             log('WARN', 'Could not locate target file. Proceeding with caution (might be general fix).');
         }
@@ -239,7 +260,9 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
         selectedModel,
         budgetRemaining,
         totalCostAccumulated,
-        llmMetrics
+        llmMetrics,
+        // Ensure the possibly updated diagnosis (from DAG logic) is passed on
+        diagnosis
     };
 };
 

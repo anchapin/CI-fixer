@@ -21,7 +21,7 @@ export async function retryWithBackoff<T>(
         } catch (e: any) {
             lastError = e;
             // Stop retrying if the error explicitly says so
-            if (e.noRetry) throw e;
+            if (e.noRetry || e.name === 'AbortError') throw e;
 
             const delay = baseDelay * Math.pow(2, i);
             console.warn(`[Retry] Attempt ${i + 1}/${retries} failed. Retrying in ${delay}ms...`, e.message);
@@ -124,51 +124,53 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
             : Array.isArray(params.contents) ? params.contents : [{ role: 'user', content: JSON.stringify(params.contents) }];
 
         return retryWithBackoff(async () => {
-            const response = await fetch(`${baseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
-                    'User-Agent': 'CI-Fixer/1.0.0 (compatible; Z.ai-DevPack)'
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: messages,
-                    temperature: params.config?.temperature || 0.1
-                })
-            });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), (config as any).llmTimeout || 300000); // Default 300s (5m)
 
-            if (!response.ok) {
-                const errText = await response.text();
-                if (response.status >= 500 || response.status === 429) {
-                    throw new Error(`Provider API Server/Rate Error ${response.status}: ${errText}`);
+            try {
+                const response = await fetch(`${baseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'User-Agent': 'CI-Fixer/1.0.0 (compatible; Z.ai-DevPack)'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: messages,
+                        temperature: params.config?.temperature || 0.1
+                    }),
+                    signal: controller.signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    if (response.status >= 500 || response.status === 429) {
+                        throw new Error(`Provider API Server/Rate Error ${response.status}: ${errText}`);
+                    }
+                    const clientError: any = new Error(`Provider API Client Error ${response.status}: ${errText}`);
+                    clientError.noRetry = true;
+                    throw clientError;
                 }
-                const clientError: any = new Error(`Provider API Client Error ${response.status}: ${errText}`);
-                clientError.noRetry = true;
-                throw clientError;
+                const data = await response.json();
+                return {
+                    text: data.choices?.[0]?.message?.content || "",
+                    toolCalls: data.choices?.[0]?.message?.tool_calls,
+                    metrics: {
+                        tokensInput: estimateTokens(params.contents),
+                        tokensOutput: estimateTokens(data.choices?.[0]?.message?.content || ''),
+                        cost: 0,
+                        latency: Date.now() - startTime,
+                        model
+                    }
+                };
+            } finally {
+                clearTimeout(timeoutId);
             }
-
-            const data = await response.json();
-            const message = data.choices?.[0]?.message;
-            const latency = Date.now() - startTime;
-
-            // Calculate metrics
-            const tokensInput = estimateTokens(params.contents);
-            const tokensOutput = estimateTokens(message?.content || '');
-            const metrics: LLMCallMetrics = {
-                tokensInput,
-                tokensOutput,
-                cost: calculateCost(model, tokensInput, tokensOutput),
-                latency,
-                model
-            };
-
-            return {
-                text: message?.content || "",
-                toolCalls: message?.tool_calls,
-                metrics
-            };
         }, 5, 2000).catch(e => {
+            if (e.name === 'AbortError' || e.message === 'AbortError') {
+                throw new Error(`LLM Generation Timed Out after ${(config as any).llmTimeout || 120000}ms`);
+            }
             throw new Error(`LLM Generation Failed after retries: ${e.message}`);
         });
     }

@@ -2,6 +2,23 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { pushMultipleFilesToGitHub } from '../../services';
 import { AppConfig } from '../../types';
 
+// Mock retryWithBackoff to avoid test timeouts
+vi.mock('../../services/llm/LLMService', () => ({
+    retryWithBackoff: async (operation: any, retries: number = 3) => {
+        let lastError;
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await operation();
+            } catch (e: any) {
+                lastError = e;
+                if (e.noRetry) throw e;
+            }
+        }
+        throw lastError;
+    },
+    // We might need to mock other exports if they are used, but for this test file likely not
+}));
+
 describe('Git Push Concurrency', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 

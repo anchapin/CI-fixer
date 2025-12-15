@@ -2,6 +2,33 @@ import { describe, it, expect, vi } from 'vitest';
 import { testE2BConnection } from '../../services';
 import { Sandbox } from '@e2b/code-interpreter';
 
+// Mock retryWithBackoff
+vi.mock('../../services/llm/LLMService', () => ({
+  retryWithBackoff: async (operation: any, retries: number = 3) => {
+    let lastError;
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await operation();
+      } catch (e: any) {
+        lastError = e;
+        if (e.noRetry) throw e;
+      }
+    }
+    throw lastError;
+  },
+  validateE2BApiKey: (key: string) => { // We need to keep the original behavior or mock it? 
+    // testE2BConnection uses validateE2BApiKey. 
+    // Wait, validateE2BApiKey is exported from SandboxService, NOT LLMService. 
+    // retryWithBackoff IS exported from LLMService.
+    // But SandboxService imports retryWithBackoff from LLMService.
+    // So mocking LLMService is correct.
+    return { valid: true, message: 'valid' };
+  }
+}));
+// Wait, validateE2BApiKey is NOT in LLMService.
+// So I don't need to mock it in the LLMService mock.
+
+
 // Mock the E2B Sandbox
 vi.mock('@e2b/code-interpreter', () => ({
   Sandbox: {

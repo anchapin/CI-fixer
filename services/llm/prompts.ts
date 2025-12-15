@@ -4,20 +4,20 @@
  */
 
 export interface FixPromptContext {
-    filePath: string;
-    errorMessage: string;
-    errorCategory: string;
-    errorLine?: number;
-    rootCause: string;
-    fileContent: string;
-    language: string;
-    examplePattern: string;
+  filePath: string;
+  errorMessage: string;
+  errorCategory: string;
+  errorLine?: number;
+  rootCause: string;
+  fileContent: string;
+  language: string;
+  examplePattern: string;
 }
 
 export interface DiagnosisPromptContext {
-    errorLog: string;
-    repoContext?: string;
-    feedbackHistory?: string[];
+  errorLog: string;
+  repoContext?: string;
+  feedbackHistory?: string[];
 }
 
 /**
@@ -25,11 +25,11 @@ export interface DiagnosisPromptContext {
  * Ensures complete, valid code without truncation
  */
 export function generateFixPrompt(context: FixPromptContext): string {
-    const locationInfo = context.errorLine
-        ? `- **Location**: Line ${context.errorLine}`
-        : '';
+  const locationInfo = context.errorLine
+    ? `- **Location**: Line ${context.errorLine}`
+    : '';
 
-    return `You are an expert software engineer fixing a ${context.errorCategory} error.
+  return `You are an expert software engineer fixing a ${context.errorCategory} error.
 
 ## Task
 Fix the error in \`${context.filePath}\` by generating complete, valid code.
@@ -70,7 +70,7 @@ Now provide the complete fixed code:`;
  * Improves accuracy and ensures structured JSON output
  */
 export function generateDiagnosisPrompt(context: DiagnosisPromptContext): string {
-    const fewShotExamples = `
+  const fewShotExamples = `
 ## Example 1: Dependency Error
 **Log**: "Error: Cannot find module 'express'"
 **Diagnosis**:
@@ -108,15 +108,15 @@ export function generateDiagnosisPrompt(context: DiagnosisPromptContext): string
 }
 \`\`\``;
 
-    const repoContextSection = context.repoContext
-        ? `\n## Repository Context\n${context.repoContext}\n`
-        : '';
+  const repoContextSection = context.repoContext
+    ? `\n## Repository Context\n${context.repoContext}\n`
+    : '';
 
-    const feedbackSection = context.feedbackHistory?.length
-        ? `\n## Previous Attempts\n${context.feedbackHistory.join('\n')}\n`
-        : '';
+  const feedbackSection = context.feedbackHistory?.length
+    ? `\n## Previous Attempts\n${context.feedbackHistory.join('\n')}\n`
+    : '';
 
-    return `You are an expert at diagnosing CI/CD errors. Analyze the error log and provide a structured diagnosis.
+  return `You are an expert at diagnosing CI/CD errors. Analyze the error log and provide a structured diagnosis.
 
 ${fewShotExamples}
 
@@ -126,7 +126,16 @@ Analyze this error log:
 ${context.errorLog}
 \`\`\`
 ${repoContextSection}${feedbackSection}
-Provide diagnosis in the same JSON format. Be specific about the file path and fix action.
+Provide diagnosis in the same JSON format.
+CRITICAL INSTRUCTIONS FOR "suggestedCommand":
+- Must contain ONLY the actual shell command.
+- DO NOT add prefixes like "Run:", "Command:", "Action:", or "Try:".
+- DO NOT add explanations like "Install missing package:" inside the string.
+- DO NOT use markdown code blocks inside the JSON string.
+- CORRECT: "npm install express"
+- INCORRECT: "Run npm install express"
+- INCORRECT: "Fix: 'npm install express'"
+
 Respond with ONLY the JSON object, no additional text.`;
 }
 
@@ -135,7 +144,7 @@ Respond with ONLY the JSON object, no additional text.`;
  * Uses step-by-step reasoning for better results
  */
 export function generateChainOfThoughtPrompt(context: FixPromptContext): string {
-    return `You are an expert software engineer. Fix this complex error using step-by-step reasoning.
+  return `You are an expert software engineer. Fix this complex error using step-by-step reasoning.
 
 ## Error
 **Type**: ${context.errorCategory}

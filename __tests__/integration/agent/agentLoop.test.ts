@@ -287,7 +287,8 @@ describe('Agent Loop Integration', () => {
       summary: "Missing dependency",
       filePath: "",
       fixAction: 'command',
-      suggestedCommand: "npm install foo"
+      suggestedCommand: "npm install foo",
+      reproductionCommand: "npm list foo"
     });
 
     vi.mocked(LogAnalysisService.runSandboxTest).mockResolvedValue({ passed: true, logs: "Tests Passed" });
@@ -295,7 +296,8 @@ describe('Agent Loop Integration', () => {
     const state = await runIndependentAgentLoop(mockConfig, mockGroup, "", testServices, updateStateCallback, logCallback);
 
     expect(state.status).toBe('success');
-    expect(mockRunCommand).toHaveBeenCalledWith("npm install foo");
+    // Called twice: once for execution ("npm install foo"), once for verification ("npm list foo")
+    expect(mockRunCommand).toHaveBeenCalledTimes(2);
 
     // Should skip findClosestFile and generateFix
     expect(GitHubService.findClosestFile).not.toHaveBeenCalled();
@@ -342,8 +344,9 @@ describe('Agent Loop Integration', () => {
 
   it('should retry when command execution fails', async () => {
     const mockRunCommand = vi.fn()
-      .mockResolvedValueOnce({ stdout: 'Permission denied', stderr: '', exitCode: 1 })
-      .mockResolvedValueOnce({ stdout: 'success', stderr: '', exitCode: 0 });
+      .mockResolvedValueOnce({ stdout: 'Permission denied', stderr: '', exitCode: 1 }) // Exec 1 (Fail)
+      .mockResolvedValueOnce({ stdout: 'success', stderr: '', exitCode: 0 })           // Exec 2 (Pass)
+      .mockResolvedValueOnce({ stdout: 'verified', stderr: '', exitCode: 0 });         // Verify 2 (Pass)
 
     vi.mocked(SandboxService.prepareSandbox).mockResolvedValueOnce({
       getId: () => 'mock-sandbox',
@@ -355,12 +358,18 @@ describe('Agent Loop Integration', () => {
       getWorkDir: () => '/mock'
     } as any);
 
-    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({ summary: "Cmd Error", filePath: "", fixAction: 'command', suggestedCommand: "ls" });
+    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
+      summary: "Cmd Error",
+      filePath: "",
+      fixAction: 'command',
+      suggestedCommand: "ls",
+      reproductionCommand: "ls -la"
+    });
 
     const state = await runIndependentAgentLoop(mockConfig, mockGroup, "", testServices, updateStateCallback, logCallback);
 
     expect(state.status).toBe('success');
-    expect(mockRunCommand).toHaveBeenCalledTimes(1);
+    expect(mockRunCommand).toHaveBeenCalledTimes(3);
   });
 
   it('should fallback to CREATE file mode when file is missing and error implies missing file', async () => {

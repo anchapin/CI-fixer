@@ -172,11 +172,64 @@ export async function diagnoseError(
         }
         if (result.primaryError && !result.summary) result.summary = result.primaryError;
 
+        // Defensive parsing for hallucinated commands
+        let cleanCommand = result.suggestedCommand;
+        if (cleanCommand) {
+            // 0. Handle Markdown Code Blocks
+            cleanCommand = cleanCommand.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+
+            // 1. Handle Multiline - prefer the line that looks most like a shell command
+            const lines = cleanCommand.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length > 1) {
+                // Heuristic: If one line starts with a known shell command, pick it.
+                const shellKeywords = ['npm', 'pnpm', 'yarn', 'git', 'docker', 'pip', 'python', 'node', 'sh', 'bash', 'rm', 'cp', 'mv', 'ls', 'echo', 'grep', 'cat', 'pytest', 'jest'];
+                const cmdLine = lines.find(l => shellKeywords.some(k => l.startsWith(k)));
+                if (cmdLine) cleanCommand = cmdLine;
+                else cleanCommand = lines[lines.length - 1]; // Fallback to last line
+            }
+
+            // 2. Strip known "Label: " prefixes (Case insensitive)
+            // Keywords: Action, Command, Run, Execute, Shell, Bash, Step, Fix, Solution, Suggestion, Code, Note, Try running, To fix this
+            const prefixRegex = /^(Action|Command|Run|Execute|Shell|Bash|Step|Fix|Solution|Suggestion|Code|Note|Try running|To fix this|I suggest|You should run)(\s*(:|-)\s*|\s+)/i;
+            cleanCommand = cleanCommand.replace(prefixRegex, '');
+
+            // 3. Handle "Description: Command" (Unquoted or Quoted)
+            // If there's a colon, and the part BEFORE the colon is descriptive (multiple words, no shell symbols),
+            // and the part AFTER is the command.
+            if (cleanCommand.includes(':') && !cleanCommand.includes('://') && !cleanCommand.includes('scp ')) {
+                const parts = cleanCommand.split(':');
+                const firstPart = parts[0].trim();
+                const rest = parts.slice(1).join(':').trim();
+
+                const shellKeywords = ['npm', 'pnpm', 'yarn', 'git', 'docker', 'pip', 'python', 'node', 'sh', 'bash', 'rm', 'cp', 'mv', 'ls', 'echo', 'grep', 'cat', 'pytest', 'jest', 'vitest'];
+
+                // Heuristic: If first part has spaces and > 1 word, it's likely a description
+                // BUT: Check if it starts with a known shell keyword. If so, it is likely the command itself (e.g. echo 'Msg: Val')
+                const firstWord = firstPart.split(/\s+/)[0].toLowerCase();
+
+                if (firstPart.split(/\s+/).length > 1 && rest.length > 0 && !shellKeywords.includes(firstWord)) {
+                    // Check if rest is quoted
+                    const quotedMatch = rest.match(/^(['"`])(.*)\1$/);
+                    if (quotedMatch) cleanCommand = quotedMatch[2];
+                    else cleanCommand = rest;
+                }
+            }
+
+            // 4. Clean surrounding quotes (Again, just in case)
+            if ((cleanCommand.startsWith('"') && cleanCommand.endsWith('"')) ||
+                (cleanCommand.startsWith("'") && cleanCommand.endsWith("'")) ||
+                (cleanCommand.startsWith("`") && cleanCommand.endsWith("`"))) {
+                if (cleanCommand.length > 1) cleanCommand = cleanCommand.slice(1, -1);
+            }
+
+            cleanCommand = cleanCommand.trim();
+        }
+
         return {
             summary: result.summary || "Diagnosis Failed",
             filePath: result.filePath || "",
             fixAction: result.fixAction || "edit",
-            suggestedCommand: result.suggestedCommand,
+            suggestedCommand: cleanCommand,
             reproductionCommand: result.reproductionCommand,
             confidence: result.confidence || 0.5
         };
@@ -361,7 +414,7 @@ export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, erro
     return { approved: true, feedback: "Plan looks good." };
 }
 
-export async function runSandboxTest(config: AppConfig, group: RunGroup, iteration: number, isRealMode: boolean, fileChange: FileChange, errorGoal: string, logCallback: any, fileMap: any, sandbox?: SandboxEnvironment): Promise<{ passed: boolean, logs: string }> {
+export async function runSandboxTest(config: AppConfig, group: RunGroup, iteration: number, isRealMode: boolean, fileChange: FileChange, errorGoal: string, logCallback: any, fileMap: any, sandbox?: SandboxEnvironment, testCommand?: string): Promise<{ passed: boolean, logs: string }> {
     if (config.checkEnv === 'e2b' || (sandbox)) {
         if (!sandbox) return { passed: false, logs: "Sandbox not available." };
 
@@ -369,13 +422,18 @@ export async function runSandboxTest(config: AppConfig, group: RunGroup, iterati
         try {
             await sandbox.writeFile(fileChange.path, fileChange.modified.content);
 
-            let testCmd = "npm test";
-            const lsCheck = await sandbox.runCommand("ls package.json requirements.txt");
-            if (lsCheck.stdout.includes('requirements.txt') && !lsCheck.stdout.includes('package.json')) {
-                testCmd = "pytest";
+            let cmd = "npm test";
+            if (testCommand) {
+                cmd = testCommand;
+            } else {
+                // Fallback auto-detection
+                const lsCheck = await sandbox.runCommand("ls package.json requirements.txt");
+                if (lsCheck.stdout.includes('requirements.txt') && !lsCheck.stdout.includes('package.json')) {
+                    cmd = "pytest";
+                }
             }
 
-            const result = await sandbox.runCommand(testCmd);
+            const result = await sandbox.runCommand(cmd);
             const fullLog = result.stdout + "\n" + result.stderr;
 
             if (result.exitCode !== 0) return { passed: false, logs: fullLog };

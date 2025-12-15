@@ -118,6 +118,7 @@ Generate a MINIMAL, DIRECT fix that:
 2. Makes the smallest possible change
 3. Preserves all existing functionality
 4. Uses the same coding style
+5. **IMPORTANT**: If generating a Dockerfile, DO NOT include inline comments (starting with #) inside multi-line RUN instructions (after \\). This breaks the build.
 
 Respond in JSON format:
 \`\`\`json

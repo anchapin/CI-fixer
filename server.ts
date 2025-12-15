@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { AgentState, AgentPhase, AppConfig, RunGroup, LogLine } from './types.js';
 import { runIndependentAgentLoop } from './agent.js';
 
-dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env.local', override: true });
 
 // Initialize OpenTelemetry if enabled
 import { initTelemetry } from './telemetry/config.js';
@@ -58,6 +58,9 @@ app.post('/api/agent/start', async (req, res) => {
             group: RunGroup,
             initialRepoContext: string
         };
+
+
+
 
         if (!config || !group) {
             return res.status(400).json({ error: 'Missing config or group' });
@@ -146,7 +149,7 @@ app.post('/api/agent/start', async (req, res) => {
 
     } catch (e: any) {
         console.error('Failed to start agent:', e);
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: e.message, stack: e.stack });
     }
 });
 
@@ -173,6 +176,37 @@ app.post('/api/agent/:id/stop', async (req, res) => {
         res.json({ status: 'stopped' });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// Manual Sandbox Cleanup
+app.post('/api/sandbox/cleanup', async (req, res) => {
+    try {
+        // Only works for local docker for now, but the command is safe to run even if no docker
+        // (it will just fail or do nothing).  We heavily rely on 'docker' being in path.
+
+        console.log('[Sandbox] Manual cleanup requested. Removing "agent-*" containers...');
+        const cp = await import('child_process');
+        const util = await import('util');
+        const execAsync = util.promisify(cp.exec);
+
+        // 1. List
+        const { stdout: listOut } = await execAsync('docker ps -q --filter "name=agent-"');
+        const ids = listOut.trim().split('\n').filter(Boolean);
+
+        if (ids.length === 0) {
+            console.log('[Sandbox] No stuck containers found.');
+            return res.json({ count: 0, message: "No stuck containers found." });
+        }
+
+        // 2. Remove
+        const { stdout: rmOut } = await execAsync(`docker rm -f ${ids.join(' ')}`);
+        console.log(`[Sandbox] Removed ${ids.length} containers.`);
+
+        res.json({ count: ids.length, ids });
+    } catch (e: any) {
+        console.error('[Sandbox] Cleanup failed:', e);
+        res.status(500).json({ error: `Cleanup failed: ${e.message}` });
     }
 });
 

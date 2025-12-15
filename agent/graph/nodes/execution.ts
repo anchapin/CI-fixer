@@ -29,41 +29,86 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
         if (sandbox) {
             const res = await sandbox.runCommand(cmd);
             if (res.exitCode !== 0) {
-                log('WARN', `Command failed: ${res.stderr}`);
-                // In graph, maybe we reflect? For now, standard fail behavior
-                // We push this to feedback logic in Verification node usually, 
-                // but since we aren't creating a file, "Verification" phase might be skipped or adapted.
-                // Let's assume we go to Verification to test the side effects.
+                // Self-Healing: Check for missing tools
+                if (res.stderr.includes('command not found') || res.stderr.includes('not found')) {
+                    const missingToolMatch = res.stderr.match(/: (.*?): (command )?not found/);
+                    const missingTool = missingToolMatch ? missingToolMatch[1] : null;
+
+                    if (missingTool) {
+                        log('WARN', `Detected missing tool: ${missingTool}. Attempting self-healing...`);
+                        const toolMap: Record<string, string> = {
+                            'docker': 'docker.io',
+                            'pip': 'python3-pip',
+                            'npm': 'nodejs',
+                            'git': 'git',
+                            'curl': 'curl',
+                            'zip': 'zip',
+                            'unzip': 'unzip'
+                        };
+                        const packageToInstall = toolMap[missingTool];
+                        if (packageToInstall) {
+                            const installCmd = `apt-get update && apt-get install -y ${packageToInstall}`;
+                            log('TOOL', `Self-Healing: Installing ${packageToInstall}...`);
+                            const installRes = await sandbox.runCommand(installCmd);
+                            if (installRes.exitCode === 0) {
+                                log('SUCCESS', `Successfully installed ${packageToInstall}. Retrying original command...`);
+                                const retryRes = await sandbox.runCommand(cmd);
+                                if (retryRes.exitCode === 0) {
+                                    implementationSuccess = true;
+                                    // Success path, implicitly continues.
+                                } else {
+                                    log('WARN', `Retry failed: ${retryRes.stderr}`);
+                                    return {
+                                        feedback: [...state.feedback, `Command Failed (Exit Code ${retryRes.exitCode}) after installing missing tool:\nStdout: ${retryRes.stdout}\nStderr: ${retryRes.stderr}`],
+                                        iteration: iteration + 1,
+                                        currentNode: 'analysis'
+                                    };
+                                }
+                            } else {
+                                log('WARN', `Self-healing installation failed: ${installRes.stderr}`);
+                            }
+                        }
+                    }
+                }
+
+                if (!implementationSuccess) {
+                    log('WARN', `Command failed: ${res.stderr}`);
+                    return {
+                        feedback: [...state.feedback, `Command Failed (Exit Code ${res.exitCode}):\nStdout: ${res.stdout}\nStderr: ${res.stderr}`],
+                        iteration: iteration + 1,
+                        currentNode: 'analysis'
+                    };
+                }
             } else {
                 implementationSuccess = true;
             }
         }
     }
     // B. EDIT FIX
-    else if (fileReservations.length > 0) {
-        const targetPath = fileReservations[0];
-        // We need to fetch the file content again or rely on what we found in Planning?
-        // Planning used findClosestFile but didn't store the content in state efficiently (only inside the function scope).
-        // Let's assume we fetch it or Planning should have put it in state.temporaryFileCache or similar.
-        // For simplicity, we re-fetch via GitHubService helper if needed, or assume we have it.
-        // For this impl, I'll use a placeholder "fetch" since I don't want to import everything again.
-        // Real implementation: Planning should pass the `File` object in state.
-
-        // HACK: We will assume we can get content. 
-        // In the real worker.ts, it was local variable `targetFile`.
-        // I should have put it in `state`. Let's assume I fix Planning to put it in `state.targetFile` (which I need to add to interface).
-        // Check `state.ts`. I didn't add it. I should add `activeFile` to State.
-        // For now, I will use a mock "read from sandbox" since we are in connected mode usually?
-        // Or better, add `targetFile` to `GraphState`. I will do that in the "Refactor State" step.
-        // Proceeding with assumption `state.files[targetPath]` might hold it if we pre-loaded it?
+    else if (fileReservations.length > 0 || (diagnosis.fixAction === 'edit' && diagnosis.filePath)) {
+        const targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath;
         log('INFO', `[Execution] Implementing fix for ${targetPath}`);
 
         // Read current content
+        // Try to get from State first (populated by Planning)
         let currentContent = "";
-        if (sandbox) {
+
+        // Helper to safely check nested properties
+        const existingFile = state.files && state.files[targetPath];
+
+        if (existingFile && existingFile.original) {
+            currentContent = existingFile.original.content;
+            log('VERBOSE', `[Execution] Loaded content from state for ${targetPath}`);
+        } else if (sandbox) {
+            // Fallback to sandbox read (e.g. if fileReservations was empty or state missing)
             try {
                 currentContent = await sandbox.readFile(targetPath);
-            } catch (e) { log('WARN', `Read failed: ${e}`); }
+                log('VERBOSE', `[Execution] Read content from sandbox for ${targetPath}`);
+            } catch (e) {
+                log('WARN', `Read failed: ${e}`);
+                // If read failed, and we are editing, we might be in trouble. 
+                // But assume maybe we are creating it or it's empty.
+            }
         }
 
         // Generate Code Fix
@@ -105,9 +150,14 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
         }
 
         if (sandbox) {
+            log('INFO', `[Execution] Writing ${fixCode.length} bytes to ${targetPath} in sandbox...`);
             await sandbox.writeFile(targetPath, fixCode);
             implementationSuccess = true;
+        } else {
+            log('WARN', `[Execution] Sandbox not available. Cannot write file.`);
         }
+    } else {
+        log('WARN', `[Execution] No file reservations and no filePath in diagnosis. Skipping edit.`);
     }
 
     // Update State

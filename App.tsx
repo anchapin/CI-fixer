@@ -625,11 +625,20 @@ const App: React.FC = () => {
                 e2bApiKey: appConfig.e2bApiKey ? '***REDACTED***' : '',
                 tavilyApiKey: appConfig.tavilyApiKey ? '***REDACTED***' : '',
             } : null,
+            state: {
+                globalPhase,
+                selectedAgentId,
+                isSimulating,
+                isRealMode,
+                activeGroups,
+                simStepIndex
+            },
             traceback: logs,
             terminal: terminalLines,
             agents: agentStates,
             chat: messages,
             consolidatedFiles: consolidatedFileChanges,
+            selectedChunkIds: Array.from(selectedChunkIds),
             repoSummary: repoSummary
         };
 
