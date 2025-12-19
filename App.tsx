@@ -2,21 +2,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LogInput } from './components/LogInput';
 import { AgentStatus } from './components/AgentStatus';
+import { LearningDashboard } from './components/LearningDashboard';
 import { TerminalOutput } from './components/TerminalOutput';
 import { DiffView } from './components/DiffView';
 import { SettingsModal } from './components/SettingsModal';
 import { ChatConsole } from './components/ChatConsole';
 import { ColumnWrapper } from './components/ColumnWrapper';
 import { Resizer } from './components/Resizer';
-import { AgentPhase, LogLine, CodeFile, AppConfig, ChatMessage, FileChange, RunGroup, AgentState } from './types';
+import { AgentPhase, LogLine, AppConfig, FileChange, RunGroup, AgentState } from './types';
 import { INITIAL_ERROR_LOG, BROKEN_CODE, SCENARIO_FAILURE_LOOP } from './constants';
 import { useChat, fetchHttpStream } from '@tanstack/ai-react';
-import { Play, RotateCcw, ShieldCheck, Zap, Wifi, Settings, Loader2, RefreshCw, FileText, Terminal, Activity } from 'lucide-react';
+import { Play, RotateCcw, ShieldCheck, Zap, Wifi, Settings, Loader2, RefreshCw, FileText, Terminal, Activity, Brain } from 'lucide-react';
 import {
-    getWorkflowLogs, getFileContent, diagnoseError, generateFix,
-    pushMultipleFilesToGitHub, getAgentChatResponse, groupFailedRuns,
-    judgeFix, runSandboxTest, searchRepoFile, findClosestFile, generateRepoSummary, generatePostMortem,
-    toolCodeSearch, toolLintCheck, toolScanDependencies, toolWebSearch, toolFindReferences,
+    groupFailedRuns,
+    generateRepoSummary,
 } from './services';
 
 const App: React.FC = () => {
@@ -76,6 +75,7 @@ const App: React.FC = () => {
     const [isSimulating, setIsSimulating] = useState(false);
     const [simStepIndex, setSimStepIndex] = useState(0);
 
+    const [showDashboard, setShowDashboard] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [appConfig, setAppConfig] = useState<AppConfig | null>(() => {
         const saved = localStorage.getItem('riv_app_config'); // Unique key to avoid collisions
@@ -714,6 +714,15 @@ const App: React.FC = () => {
                 </div>
                 <div className="mt-4 md:mt-0 flex gap-4">
                     <button
+                        onClick={() => setShowDashboard(!showDashboard)}
+                        className={`px-4 py-2 rounded border font-mono text-sm flex items-center transition-all ${showDashboard 
+                            ? 'bg-purple-900/40 border-purple-500 text-purple-300' 
+                            : 'border-slate-700 hover:bg-slate-900 text-slate-400 hover:text-white'}`}
+                    >
+                        <Brain className="w-4 h-4 mr-2" />
+                        {showDashboard ? "OPERATIONS" : "DASHBOARD"}
+                    </button>
+                    <button
                         onClick={() => setIsSettingsOpen(true)}
                         className="px-3 py-2 rounded border border-slate-700 hover:bg-slate-900 text-slate-400 hover:text-white transition-all"
                     >
@@ -743,120 +752,128 @@ const App: React.FC = () => {
                 </div>
             </header>
 
-            {/* Dynamic Grid Layout */}
-            <div
-                ref={containerRef}
-                className="flex-1 min-h-0 p-4 md:p-6 grid overflow-hidden"
-                style={{ gridTemplateColumns: getGridTemplate(), gridTemplateRows: '100%' }}
-            >
-                {/* Column 0: Logs */}
-                <ColumnWrapper
-                    title="System Logs"
-                    icon={<FileText className="w-5 h-5" />}
-                    collapsed={collapsedCols[0]}
-                    onToggle={() => toggleCollapse(0)}
-                >
-                    <LogInput logs={logs} onChange={setLogs} readOnly={isSimulating} />
-                </ColumnWrapper>
+            {/* Main Content Area */}
+            <main className="flex-1 min-h-0 relative overflow-hidden">
+                {showDashboard ? (
+                    <div className="absolute inset-0 animate-[fadeIn_0.3s_ease-out]">
+                        <LearningDashboard />
+                    </div>
+                ) : (
+                    /* Dynamic Grid Layout */
+                    <div
+                        ref={containerRef}
+                        className="h-full p-4 md:p-6 grid overflow-hidden"
+                        style={{ gridTemplateColumns: getGridTemplate(), gridTemplateRows: '100%' }}
+                    >
+                        {/* Column 0: Logs */}
+                        <ColumnWrapper
+                            title="System Logs"
+                            icon={<FileText className="w-5 h-5" />}
+                            collapsed={collapsedCols[0]}
+                            onToggle={() => toggleCollapse(0)}
+                        >
+                            <LogInput logs={logs} onChange={setLogs} readOnly={isSimulating} />
+                        </ColumnWrapper>
 
-                {/* Resizer 0 */}
-                <Resizer isVisible={!collapsedCols[0] && !collapsedCols[1]} onMouseDown={startResizing(0)} />
+                        {/* Resizer 0 */}
+                        <Resizer isVisible={!collapsedCols[0] && !collapsedCols[1]} onMouseDown={startResizing(0)} />
 
-                {/* Column 1: Agent & Diff */}
-                <ColumnWrapper
-                    title="Agent Operations"
-                    icon={<Activity className="w-5 h-5" />}
-                    collapsed={collapsedCols[1]}
-                    onToggle={() => toggleCollapse(1)}
-                >
-                    <div className="flex flex-col h-full min-h-0 gap-4">
-                        <div className="flex-none pt-2">
-                            {/* Pass the dynamic map of agent states */}
-                            <AgentStatus
-                                agentStates={agentStates}
-                                globalPhase={globalPhase}
-                                selectedAgentId={selectedAgentId}
-                                onSelectAgent={setSelectedAgentId}
-                            />
-                        </div>
-                        <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden">
-                            <DiffView
-                                files={getActiveFiles()}
-                                selectedChunkIds={selectedChunkIds}
-                                onToggleChunkSelection={handleToggleChunkSelection}
-                                onRevertChunk={handleUpdateFileContent}
-                                viewContext={getActiveViewContext()}
-                            />
-
-                            {/* Only show deploy button if we are in CONSOLIDATED view and there are changes */}
-                            {selectedAgentId === 'CONSOLIDATED' && Object.keys(consolidatedFileChanges).length > 0 && (
-                                <div className="absolute bottom-6 right-6 flex gap-3 animate-[fadeIn_0.5s_ease-out] z-50">
-                                    {selectedChunkIds.size > 0 && (
-                                        <button
-                                            onClick={handleReevaluateSelected}
-                                            disabled={isProcessing}
-                                            className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-3 rounded shadow-lg font-bold flex items-center gap-2 transition-all disabled:opacity-50"
-                                        >
-                                            <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
-                                            Reevaluate ({selectedChunkIds.size})
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={handleDeployFix}
-                                        disabled={isDeploying || isProcessing}
-                                        className={`px-6 py-3 rounded shadow-lg font-bold flex items-center gap-2 group transition-all disabled:opacity-50 disabled:cursor-wait ${globalPhase === AgentPhase.PARTIAL_SUCCESS
-                                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                                            : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                            }`}
-                                    >
-                                        {isDeploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>}
-                                        {getPushLabel()}
-                                        {!isDeploying && <Play className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
-                                    </button>
+                        {/* Column 1: Agent & Diff */}
+                        <ColumnWrapper
+                            title="Agent Operations"
+                            icon={<Activity className="w-5 h-5" />}
+                            collapsed={collapsedCols[1]}
+                            onToggle={() => toggleCollapse(1)}
+                        >
+                            <div className="flex flex-col h-full min-h-0 gap-4">
+                                <div className="flex-none pt-2">
+                                    {/* Pass the dynamic map of agent states */}
+                                    <AgentStatus
+                                        agentStates={agentStates}
+                                        globalPhase={globalPhase}
+                                        selectedAgentId={selectedAgentId}
+                                        onSelectAgent={setSelectedAgentId}
+                                    />
                                 </div>
-                            )}
-                        </div>
+                                <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden">
+                                    <DiffView
+                                        files={getActiveFiles()}
+                                        selectedChunkIds={selectedChunkIds}
+                                        onToggleChunkSelection={handleToggleChunkSelection}
+                                        onRevertChunk={handleUpdateFileContent}
+                                        viewContext={getActiveViewContext()}
+                                    />
+
+                                    {/* Only show deploy button if we are in CONSOLIDATED view and there are changes */}
+                                    {selectedAgentId === 'CONSOLIDATED' && Object.keys(consolidatedFileChanges).length > 0 && (
+                                        <div className="absolute bottom-6 right-6 flex gap-3 animate-[fadeIn_0.5s_ease-out] z-50">
+                                            {selectedChunkIds.size > 0 && (
+                                                <button
+                                                    onClick={handleReevaluateSelected}
+                                                    disabled={isProcessing}
+                                                    className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-3 rounded shadow-lg font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                                                >
+                                                    <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                                                    Reevaluate ({selectedChunkIds.size})
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={handleDeployFix}
+                                                disabled={isDeploying || isProcessing}
+                                                className={`px-6 py-3 rounded shadow-lg font-bold flex items-center gap-2 group transition-all disabled:opacity-50 disabled:cursor-wait ${globalPhase === AgentPhase.PARTIAL_SUCCESS
+                                                    ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                                    }`}
+                                            >
+                                                {isDeploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>}
+                                                {getPushLabel()}
+                                                {!isDeploying && <Play className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </ColumnWrapper>
+
+                        {/* Resizer 1 */}
+                        <Resizer isVisible={!collapsedCols[1] && !collapsedCols[2]} onMouseDown={startResizing(1)} />
+
+                        {/* Column 2: Terminal & Chat */}
+                        <ColumnWrapper
+                            title="Terminal & Comms"
+                            icon={<Terminal className="w-5 h-5" />}
+                            collapsed={collapsedCols[2]}
+                            onToggle={() => toggleCollapse(2)}
+                        >
+                            <div className="flex flex-col h-full gap-4">
+                                <div className="flex-1 min-h-0 flex flex-col">
+                                    <TerminalOutput
+                                        lines={terminalLines}
+                                        activeGroups={activeGroups}
+                                        logLevel={appConfig?.logLevel || 'info'}
+                                    />
+                                </div>
+                                <div className="flex-1 min-h-0 flex flex-col">
+                                    <ChatConsole
+                                        messages={messages.map((m: any) => ({
+                                            ...m,
+                                            role: m.role || 'data',
+                                            content: typeof m.content === 'string' ? m.content : (m.parts?.map((p: any) => p.text).join('') || '')
+                                        }))}
+                                        input={input}
+                                        handleInputChange={handleInputChange}
+                                        handleSubmit={handleSubmit}
+                                        onReevaluate={handleReevaluateSelected}
+                                        isLoading={isLoading}
+                                        hasSelectedChunks={selectedChunkIds.size > 0}
+                                        selectedAgentName={selectedAgentId === 'CONSOLIDATED' ? 'Swarm Overseer' : agentStates[selectedAgentId]?.name}
+                                    />
+                                </div>
+                            </div>
+                        </ColumnWrapper>
                     </div>
-                </ColumnWrapper>
-
-                {/* Resizer 1 */}
-                <Resizer isVisible={!collapsedCols[1] && !collapsedCols[2]} onMouseDown={startResizing(1)} />
-
-                {/* Column 2: Terminal & Chat */}
-                <ColumnWrapper
-                    title="Terminal & Comms"
-                    icon={<Terminal className="w-5 h-5" />}
-                    collapsed={collapsedCols[2]}
-                    onToggle={() => toggleCollapse(2)}
-                >
-                    <div className="flex flex-col h-full gap-4">
-                        <div className="flex-1 min-h-0 flex flex-col">
-                            <TerminalOutput
-                                lines={terminalLines}
-                                activeGroups={activeGroups}
-                                logLevel={appConfig?.logLevel || 'info'}
-                            />
-                        </div>
-                        <div className="flex-1 min-h-0 flex flex-col">
-                            <ChatConsole
-                                messages={messages.map((m: any) => ({
-                                    ...m,
-                                    role: m.role || 'data',
-                                    content: typeof m.content === 'string' ? m.content : (m.parts?.map((p: any) => p.text).join('') || '')
-                                }))}
-                                input={input}
-                                handleInputChange={handleInputChange}
-                                handleSubmit={handleSubmit}
-                                onReevaluate={handleReevaluateSelected}
-                                isLoading={isLoading}
-                                hasSelectedChunks={selectedChunkIds.size > 0}
-                                selectedAgentName={selectedAgentId === 'CONSOLIDATED' ? 'Swarm Overseer' : agentStates[selectedAgentId]?.name}
-                            />
-                        </div>
-                    </div>
-                </ColumnWrapper>
-
-            </div>
+                )}
+            </main>
         </div>
     );
 };
