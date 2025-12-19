@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:ci": "npm run test:coverage && playwright test",
+    "benchmark": "tsx scripts/run_benchmark.ts",
     "view-traces": "tsx scripts/view-traces.ts",
     "prepare": "husky"
   },
