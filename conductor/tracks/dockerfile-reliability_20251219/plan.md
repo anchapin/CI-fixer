@@ -1,12 +1,12 @@
 # Plan: Enhanced Dockerfile Repair Reliability
 
-## Phase 1: Knowledge & Prompting Improvements
+## Phase 1: Knowledge & Prompting Improvements [checkpoint: cba05cb]
 - [x] Task: Update `prompts/execution/code-fix-v1.md` to include explicit Dockerfile syntax rules (no inline comments in RUN, flag accuracy). 1a7aa45
 - [x] Task: Create `runbooks/docker/syntax-errors.md` documenting common pitfalls (typos, comment errors) and their solutions. 1a7aa45
 - [x] Task: Write unit tests for `services/repair-agent/patch-generation.ts` to verify Dockerfile constraint enforcement. d10e9bd
 - [x] Task: Implement Dockerfile-specific logic in `services/repair-agent/patch-generation.ts` to avoid known bad patterns. d10e9bd
 - [x] Task: Integrate `cspell` into the post-processing pipeline to flag misspelled words. 7fad0ae
-- [ ] Task: Conductor - User Manual Verification 'Knowledge & Prompting Improvements' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Knowledge & Prompting Improvements' (Protocol in workflow.md) cba05cb
 
 ## Phase 2: Sandbox & Validation Tooling
 - [ ] Task: Update `services/sandbox/SandboxService.ts` to ensure `hadolint` is installed during sandbox initialization.
