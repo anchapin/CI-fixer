@@ -146,6 +146,11 @@ Respond with ONLY the JSON object.`;
         reasoning: 'Parse error'
     });
 
+    // Post-process if Dockerfile
+    if (isDockerfile(faultLocation.file)) {
+        result.code = postProcessDockerfile(result.code);
+    }
+
     return {
         id: 'direct-' + Date.now(),
         code: result.code,
@@ -187,6 +192,7 @@ Generate a CONSERVATIVE fix that:
 2. Includes null/undefined checks
 3. Adds validation where needed
 4. Is safe and defensive
+5. **IMPORTANT**: If generating a Dockerfile, DO NOT include inline comments (starting with #) inside multi-line RUN instructions (after \\). This breaks the build.
 
 Respond in JSON format:
 \`\`\`json
@@ -213,6 +219,11 @@ Respond with ONLY the JSON object.`;
         confidence: 0.0,
         reasoning: 'Parse error'
     });
+
+    // Post-process if Dockerfile
+    if (isDockerfile(faultLocation.file)) {
+        result.code = postProcessDockerfile(result.code);
+    }
 
     return {
         id: 'conservative-' + Date.now(),
@@ -255,6 +266,7 @@ Generate an ALTERNATIVE fix that:
 2. May refactor the approach
 3. Could be more elegant or efficient
 4. Still preserves functionality
+5. **IMPORTANT**: If generating a Dockerfile, DO NOT include inline comments (starting with #) inside multi-line RUN instructions (after \\). This breaks the build.
 
 Respond in JSON format:
 \`\`\`json
@@ -282,6 +294,11 @@ Respond with ONLY the JSON object.`;
         reasoning: 'Parse error'
     });
 
+    // Post-process if Dockerfile
+    if (isDockerfile(faultLocation.file)) {
+        result.code = postProcessDockerfile(result.code);
+    }
+
     return {
         id: 'alternative-' + Date.now(),
         code: result.code,
@@ -290,6 +307,47 @@ Respond with ONLY the JSON object.`;
         strategy: 'alternative',
         reasoning: result.reasoning
     };
+}
+
+/**
+ * Helper to identify Dockerfiles
+ */
+function isDockerfile(filename: string): boolean {
+    const f = filename.toLowerCase();
+    return f === 'dockerfile' || f.endsWith('.dockerfile') || f.includes('dockerfile.');
+}
+
+/**
+ * Post-processes Dockerfile code to ensure syntax compliance
+ */
+function postProcessDockerfile(code: string): string {
+    const lines = code.split('\n');
+    const resultLines: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+
+        // 1. Remove inline comments in multi-line RUN commands
+        if (trimmedLine.startsWith('#')) {
+            // Check if previous line ended with \
+            const prevLine = i > 0 ? lines[i - 1].trim() : "";
+            if (prevLine.endsWith('\\')) {
+                // This is an inline comment inside a multi-line command chain.
+                // Removing it prevents Docker build errors.
+                continue;
+            }
+        }
+
+        // 2. Fix common apt-get flag typos
+        let processedLine = line.replace(/--no-installfrrecommends/g, '--no-install-recommends');
+        processedLine = processedLine.replace(/--no-install-recommends\b/g, '--no-install-recommends'); // handle potential double dashes or partials if needed, though regex above is specific
+        processedLine = processedLine.replace(/--no-install-recommend\b/g, '--no-install-recommends');
+
+        resultLines.push(processedLine);
+    }
+
+    return resultLines.join('\n');
 }
 
 /**
