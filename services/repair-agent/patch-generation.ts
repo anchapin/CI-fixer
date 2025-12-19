@@ -146,10 +146,8 @@ Respond with ONLY the JSON object.`;
         reasoning: 'Parse error'
     });
 
-    // Post-process if Dockerfile
-    if (isDockerfile(faultLocation.file)) {
-        result.code = postProcessDockerfile(result.code);
-    }
+    // Post-process patch for common errors
+    result.code = postProcessPatch(faultLocation.file, result.code);
 
     return {
         id: 'direct-' + Date.now(),
@@ -220,10 +218,8 @@ Respond with ONLY the JSON object.`;
         reasoning: 'Parse error'
     });
 
-    // Post-process if Dockerfile
-    if (isDockerfile(faultLocation.file)) {
-        result.code = postProcessDockerfile(result.code);
-    }
+    // Post-process patch for common errors
+    result.code = postProcessPatch(faultLocation.file, result.code);
 
     return {
         id: 'conservative-' + Date.now(),
@@ -294,10 +290,8 @@ Respond with ONLY the JSON object.`;
         reasoning: 'Parse error'
     });
 
-    // Post-process if Dockerfile
-    if (isDockerfile(faultLocation.file)) {
-        result.code = postProcessDockerfile(result.code);
-    }
+    // Post-process patch for common errors
+    result.code = postProcessPatch(faultLocation.file, result.code);
 
     return {
         id: 'alternative-' + Date.now(),
@@ -318,9 +312,35 @@ function isDockerfile(filename: string): boolean {
 }
 
 /**
- * Post-processes Dockerfile code to ensure syntax compliance
+ * Master post-processor for all generated patches
  */
-function postProcessDockerfile(code: string): string {
+function postProcessPatch(filename: string, code: string): string {
+    let processed = code;
+
+    // 1. Fix common flag typos (Applied to all files as they might contain shell commands)
+    processed = cleanShellFlags(processed);
+
+    // 2. Dockerfile-specific cleaning
+    if (isDockerfile(filename)) {
+        processed = stripDockerfileInlineComments(processed);
+    }
+
+    return processed;
+}
+
+/**
+ * Fixes common typos in shell command flags
+ */
+function cleanShellFlags(code: string): string {
+    // Generic regex for --no-install-recommends typos
+    // Handles variations like: --no-install-recommend, --no-installrecommends, --no-installfrrecommends, --no-install-recomends
+    return code.replace(/--no-install[- ]*(?:fr)?recom+ends?\b/gi, '--no-install-recommends');
+}
+
+/**
+ * Removes inline comments in multi-line RUN commands which break Docker builds
+ */
+function stripDockerfileInlineComments(code: string): string {
     const lines = code.split('\n');
     const resultLines: string[] = [];
 
@@ -328,23 +348,14 @@ function postProcessDockerfile(code: string): string {
         const line = lines[i];
         const trimmedLine = line.trim();
 
-        // 1. Remove inline comments in multi-line RUN commands
         if (trimmedLine.startsWith('#')) {
-            // Check if previous line ended with \
             const prevLine = i > 0 ? lines[i - 1].trim() : "";
             if (prevLine.endsWith('\\')) {
-                // This is an inline comment inside a multi-line command chain.
-                // Removing it prevents Docker build errors.
+                // Inline comment inside multi-line command - skip it
                 continue;
             }
         }
-
-        // 2. Fix common apt-get flag typos
-        let processedLine = line.replace(/--no-installfrrecommends/g, '--no-install-recommends');
-        processedLine = processedLine.replace(/--no-install-recommends\b/g, '--no-install-recommends'); // handle potential double dashes or partials if needed, though regex above is specific
-        processedLine = processedLine.replace(/--no-install-recommend\b/g, '--no-install-recommends');
-
-        resultLines.push(processedLine);
+        resultLines.push(line);
     }
 
     return resultLines.join('\n');
