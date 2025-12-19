@@ -111,6 +111,7 @@ describe('Verification Node', () => {
 
         expect(validateSpy).toHaveBeenCalledWith(expect.anything(), 'Dockerfile', mockSandbox);
         expect(result.currentNode).toBe('analysis');
-        expect(result.feedback![0]).toMatch(/Dockerfile Validation Failed/);
+        expect(result.feedback![0]).toContain('Dockerfile Validation Failed for Dockerfile:');
+        expect(result.feedback![0]).toContain('[ERROR] Line 2: comment error (SC100)');
     });
 });
