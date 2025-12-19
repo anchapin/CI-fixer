@@ -73,10 +73,10 @@ export async function runWorkerTask(
         log('INFO', `[Worker] Starting analysis for workflow: ${group.name}`);
 
         // Initial Log Retrieval
-        const { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, 'standard');
+        const { logText: rawLogText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, 'standard');
 
         // [STAGE 3] Context Thinning: Prevent massive logs from overflowing context
-        logText = thinLog(logText, 300); // Keep max 300 lines
+        const logText = thinLog(rawLogText, 300); // Keep max 300 lines
 
         let currentLogText = logText;
         // [STAGE 3] Context Preservation: Store original error to prevent drift
