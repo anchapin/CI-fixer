@@ -1,0 +1,8 @@
+{
+  "track_id": "dockerfile-reliability_20251219",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2025-12-19T16:23:00Z",
+  "updated_at": "2025-12-19T16:23:00Z",
+  "description": "Improve CI-fixer's ability to autonomously repair Dockerfiles by preventing common syntax errors like typos and invalid comments."
+}
