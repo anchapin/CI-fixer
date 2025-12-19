@@ -6,6 +6,7 @@ import { runDevShellCommand } from '../sandbox/SandboxService.js';
 import { filterLogs, summarizeLogs } from '../context-compiler.js';
 import { getWorkflowLogs, pushMultipleFilesToGitHub } from '../github/GitHubService.js';
 import { ContextManager, ContextPriority } from '../context-manager.js';
+import { postProcessPatch } from '../repair-agent/post-processor.js';
 
 const MODEL_SMART = "gemini-3-pro-preview";
 const MODEL_FAST = "gemini-2.5-flash";
@@ -349,7 +350,12 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
             fullCode += clean;
         });
 
-        return fullCode.trim();
+        const rawCode = fullCode.trim();
+        
+        // Apply automated post-processing (flags, Docker comments, spell-check)
+        const processedCode = postProcessPatch(context.filePath || 'file.txt', rawCode);
+        
+        return processedCode;
     } catch (e: any) {
         console.error('[generateFix] Error:', e);
         throw new Error(`Failed to generate fix: ${e.message}`);
