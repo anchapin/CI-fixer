@@ -8,11 +8,11 @@
 - [x] Task: Integrate `cspell` into the post-processing pipeline to flag misspelled words. 7fad0ae
 - [x] Task: Conductor - User Manual Verification 'Knowledge & Prompting Improvements' (Protocol in workflow.md) cba05cb
 
-## Phase 2: Sandbox & Validation Tooling
+## Phase 2: Sandbox & Validation Tooling [checkpoint: 99c6df6]
 - [x] Task: Update `services/sandbox/SandboxService.ts` to ensure `hadolint` is installed during sandbox initialization. 74535f5
 - [x] Task: Write unit tests for a new `DockerfileValidator` service or utility. 3b6253b
 - [x] Task: Implement `DockerfileValidator` that executes `hadolint` and `docker build` (parsability check). 3b6253b
-- [~] Task: Integrate `DockerfileValidator` into the agent's verification workflow (likely in `services/repair-agent/` or a graph node).
+- [x] Task: Integrate `DockerfileValidator` into the agent's verification workflow (likely in `services/repair-agent/` or a graph node). 99c6df6
 - [ ] Task: Conductor - User Manual Verification 'Sandbox & Validation Tooling' (Protocol in workflow.md)
 
 ## Phase 3: Feedback Loop Integration
