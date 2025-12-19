@@ -1,7 +1,7 @@
 # Track Plan: Establish Core Reliability & Quality Standards
 
 ## Phase 1: Quality Infrastructure Setup
-- [ ] Task: Configure Vitest and Playwright
+- [x] Task: Configure Vitest and Playwright a7df476
     - [ ] Subtask: Review and update `vitest.config.ts` to ensure comprehensive coverage collection.
     - [ ] Subtask: Verify `playwright.config.ts` matches the current project structure.
     - [ ] Subtask: Create a `test:ci` script in `package.json` that runs all tests and lints.
