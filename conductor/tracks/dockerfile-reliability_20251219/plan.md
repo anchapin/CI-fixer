@@ -16,8 +16,8 @@
 - [x] Task: Conductor - User Manual Verification 'Sandbox & Validation Tooling' (Protocol in workflow.md) 6882aaf
 
 ## Phase 3: Feedback Loop Integration
-- [ ] Task: Write tests to ensure validation failures (from Hadolint/Docker) are correctly formatted for agent consumption.
-- [ ] Task: Update the agent's feedback logic to present syntax errors back to the LLM for iterative correction.
+- [x] Task: Write tests to ensure validation failures (from Hadolint/Docker) are correctly formatted for agent consumption. 428ff00
+- [~] Task: Update the agent's feedback logic to present syntax errors back to the LLM for iterative correction.
 - [ ] Task: Verify the agent can successfully recover from a self-introduced Dockerfile syntax error in a simulated environment.
 - [ ] Task: Conductor - User Manual Verification 'Feedback Loop Integration' (Protocol in workflow.md)
 
