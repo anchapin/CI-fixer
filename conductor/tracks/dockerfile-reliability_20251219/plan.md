@@ -5,6 +5,7 @@
 - [x] Task: Create `runbooks/docker/syntax-errors.md` documenting common pitfalls (typos, comment errors) and their solutions. 1a7aa45
 - [x] Task: Write unit tests for `services/repair-agent/patch-generation.ts` to verify Dockerfile constraint enforcement. d10e9bd
 - [x] Task: Implement Dockerfile-specific logic in `services/repair-agent/patch-generation.ts` to avoid known bad patterns. d10e9bd
+- [x] Task: Integrate `cspell` into the post-processing pipeline to flag misspelled words. 7fad0ae
 - [ ] Task: Conductor - User Manual Verification 'Knowledge & Prompting Improvements' (Protocol in workflow.md)
 
 ## Phase 2: Sandbox & Validation Tooling
