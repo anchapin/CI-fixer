@@ -143,4 +143,27 @@ describe('Analysis Node', () => {
 
         expect(mockServices.analysis.refineProblemStatement).toHaveBeenCalled();
     });
+
+    it('should correctly handle Dockerfile validation feedback', async () => {
+        const dockerFeedback = 'Dockerfile Validation Failed for Dockerfile:\n[ERROR] Line 2: comment error (SC100)';
+        mockState.feedback = [dockerFeedback];
+        mockState.iteration = 1;
+
+        await analysisNode(mockState, mockContext);
+
+        expect(mockServices.analysis.diagnoseError).toHaveBeenCalledWith(
+            expect.anything(), // config
+            expect.anything(), // currentLogText
+            expect.anything(), // diagContext
+            expect.anything(), // profile
+            expect.anything(), // classificationForDiagnosis
+            expect.arrayContaining([dockerFeedback]) // feedbackHistory
+        );
+        expect(mockServices.analysis.refineProblemStatement).toHaveBeenCalledWith(
+            expect.anything(), // config
+            expect.objectContaining({ summary: 'Diagnosis' }), // diagnosis
+            expect.arrayContaining([dockerFeedback]), // feedback
+            undefined // previousStatement
+        );
+    });
 });
