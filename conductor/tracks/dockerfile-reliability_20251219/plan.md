@@ -9,7 +9,7 @@
 - [x] Task: Conductor - User Manual Verification 'Knowledge & Prompting Improvements' (Protocol in workflow.md) cba05cb
 
 ## Phase 2: Sandbox & Validation Tooling
-- [ ] Task: Update `services/sandbox/SandboxService.ts` to ensure `hadolint` is installed during sandbox initialization.
+- [x] Task: Update `services/sandbox/SandboxService.ts` to ensure `hadolint` is installed during sandbox initialization. 74535f5
 - [ ] Task: Write unit tests for a new `DockerfileValidator` service or utility.
 - [ ] Task: Implement `DockerfileValidator` that executes `hadolint` and `docker build` (parsability check).
 - [ ] Task: Integrate `DockerfileValidator` into the agent's verification workflow (likely in `services/repair-agent/` or a graph node).
