@@ -173,10 +173,44 @@ describe('Agent Loop Integration', () => {
       analysis: LogAnalysisService,
       sandbox: SandboxService,
       llm: LLMService,
+      context: {
+        smartThinLog: vi.fn().mockImplementation(async (log) => log),
+        thinLog: vi.fn().mockImplementation((log) => log),
+        formatHistorySummary: vi.fn().mockReturnValue('History'),
+        formatPlanToMarkdown: vi.fn().mockReturnValue('Plan'),
+        markNodeSolved: vi.fn().mockReturnValue({ solvedNodes: [] }),
+      },
+      classification: {
+        classifyErrorWithHistory: vi.fn().mockResolvedValue({
+          category: 'logic',
+          confidence: 0.9,
+          errorMessage: 'Error',
+          affectedFiles: [],
+        }),
+        getErrorPriority: vi.fn().mockReturnValue(5),
+      },
+      dependency: {
+        hasBlockingDependencies: vi.fn().mockResolvedValue(false),
+        getBlockedErrors: vi.fn().mockResolvedValue([]),
+      },
+      clustering: {
+        clusterError: vi.fn(),
+      },
+      complexity: {
+        estimateComplexity: vi.fn().mockReturnValue(5),
+        detectConvergence: vi.fn().mockReturnValue({ trend: 'stable' }),
+        isAtomic: vi.fn().mockReturnValue(false),
+        explainComplexity: vi.fn().mockReturnValue('Complexity'),
+      },
+      repairAgent: {
+        getRepairAgentConfig: vi.fn().mockReturnValue({}),
+        runRepairAgent: vi.fn(),
+      },
+      metrics: {
+        recordFixAttempt: vi.fn(),
+      },
       analytics: { recordTrajectory: vi.fn(), getOptimalActions: vi.fn() },
       preferences: { getPreferences: vi.fn(), updatePreferences: vi.fn() },
-      clustering: { clusterError: vi.fn() },
-      classification: { classify: vi.fn() },
       orchestrator: { selectTools: vi.fn() }
     };
 

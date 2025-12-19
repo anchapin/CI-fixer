@@ -282,73 +282,78 @@ export async function generateRepoSummary(config: AppConfig, sandbox?: SandboxEn
 }
 
 export async function generateFix(config: AppConfig, context: any): Promise<string> {
-    const contextManager = new ContextManager(50000);
+    try {
+        const contextManager = new ContextManager(50000);
 
-    // System/Instruction
-    contextManager.addItem({
-        id: 'instruction',
-        type: 'text',
-        priority: ContextPriority.CRITICAL,
-        content: `Fix the code based on the error provided. Return only the full file code.`
-    });
-
-    // Error (Critical)
-    contextManager.addItem({
-        id: 'error_summary',
-        type: 'text',
-        priority: ContextPriority.CRITICAL,
-        content: `Error: ${context.error}`
-    });
-
-    // Code (High)
-    contextManager.addItem({
-        id: 'source_code',
-        type: 'code',
-        priority: ContextPriority.HIGH,
-        content: context.code
-    });
-
-    // Extra Context (Medium)
-    if (context.extraContext) {
+        // System/Instruction
         contextManager.addItem({
-            id: 'extra_context',
+            id: 'instruction',
             type: 'text',
-            priority: ContextPriority.MEDIUM,
-            content: context.extraContext
+            priority: ContextPriority.CRITICAL,
+            content: `Fix the code based on the error provided. Return only the full file code.`
         });
-    }
 
-    const prompt = contextManager.compile();
+        // Error (Critical)
+        contextManager.addItem({
+            id: 'error_summary',
+            type: 'text',
+            priority: ContextPriority.CRITICAL,
+            content: `Error: ${context.error}`
+        });
 
-    const segments: string[] = [];
-    let res = await unifiedGenerate(config, {
-        contents: prompt,
-        model: MODEL_SMART,
-        config: { maxOutputTokens: 8192 }
-    });
-    segments.push(res.text);
+        // Code (High)
+        contextManager.addItem({
+            id: 'source_code',
+            type: 'code',
+            priority: ContextPriority.HIGH,
+            content: context.code
+        });
 
-    for (let i = 0; i < 3; i++) {
-        const lastSegment = segments[segments.length - 1];
-        const trimmed = lastSegment.trim();
-        if (trimmed.endsWith('```')) break;
+        // Extra Context (Medium)
+        if (context.extraContext) {
+            contextManager.addItem({
+                id: 'extra_context',
+                type: 'text',
+                priority: ContextPriority.MEDIUM,
+                content: context.extraContext
+            });
+        }
 
-        const contPrompt = `Continue generating code from where you left off. Last chars:\n\`\`\`${trimmed.slice(-1000)}\`\`\``;
-        res = await unifiedGenerate(config, {
-            contents: contPrompt,
+        const prompt = contextManager.compile();
+
+        const segments: string[] = [];
+        let res = await unifiedGenerate(config, {
+            contents: prompt,
             model: MODEL_SMART,
             config: { maxOutputTokens: 8192 }
         });
         segments.push(res.text);
+
+        for (let i = 0; i < 3; i++) {
+            const lastSegment = segments[segments.length - 1];
+            const trimmed = lastSegment.trim();
+            if (trimmed.endsWith('```')) break;
+
+            const contPrompt = `Continue generating code from where you left off. Last chars:\n\`\`\`${trimmed.slice(-1000)}\`\`\``;
+            res = await unifiedGenerate(config, {
+                contents: contPrompt,
+                model: MODEL_SMART,
+                config: { maxOutputTokens: 8192 }
+            });
+            segments.push(res.text);
+        }
+
+        let fullCode = "";
+        segments.forEach((seg) => {
+            const clean = seg.trim().replace(/^```[\w]*\s*/, '').replace(/\s*```$/, '');
+            fullCode += clean;
+        });
+
+        return fullCode.trim();
+    } catch (e: any) {
+        console.error('[generateFix] Error:', e);
+        throw new Error(`Failed to generate fix: ${e.message}`);
     }
-
-    let fullCode = "";
-    segments.forEach((seg) => {
-        const clean = seg.trim().replace(/^```[\w]*\s*/, '').replace(/\s*```$/, '');
-        fullCode += clean;
-    });
-
-    return fullCode.trim();
 }
 
 export async function judgeFix(config: AppConfig, original: string, fixed: string, error: string): Promise<{ passed: boolean, score: number, reasoning: string }> {
@@ -374,33 +379,52 @@ export async function judgeFix(config: AppConfig, original: string, fixed: strin
             model: MODEL_SMART
         });
         return safeJsonParse(res.text, { passed: true, score: 7, reasoning: "Assuming fix is valid (fallback)." });
-    } catch { return { passed: true, score: 5, reasoning: "Judge Offline (Bypass)" }; }
+    } catch (e: any) {
+        console.error('[judgeFix] Error:', e);
+        return { passed: true, score: 5, reasoning: `Judge Offline (${e.message}). Bypass enabled.` };
+    }
 }
 
 export async function generatePostMortem(config: AppConfig, failedAgents: any[]): Promise<string> {
-    const prompt = `Generate a post-mortem for these failed agents: ${JSON.stringify(failedAgents)}`;
-    const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
-    return res.text;
+    try {
+        const prompt = `Generate a post-mortem for these failed agents: ${JSON.stringify(failedAgents)}`;
+        const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
+        return res.text;
+    } catch (e: any) {
+        console.error('[generatePostMortem] Error:', e);
+        return `Failed to generate post-mortem: ${e.message}`;
+    }
 }
 
 export async function getAgentChatResponse(config: AppConfig, message: string, context?: string): Promise<string> {
-    const prompt = `
+    try {
+        const prompt = `
       System Context: ${context || 'General DevOps Dashboard'}
       User: ${message}
       Respond as a helpful DevOps AI Agent. Keep it brief.
     `;
-    const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
-    return res.text;
+        const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
+        return res.text;
+    } catch (e: any) {
+        console.error('[getAgentChatResponse] Error:', e);
+        return `I'm sorry, I'm having trouble responding right now. (${e.message})`;
+    }
 }
 
 export async function generateWorkflowOverride(config: AppConfig, originalContent: string, branchName: string, errorGoal: string): Promise<string> {
-    const prompt = `Modify this workflow to run only relevant tests for error "${errorGoal}" on branch "${branchName}".\n${originalContent}`;
-    const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_FAST });
-    return extractCode(res.text, 'yaml');
+    try {
+        const prompt = `Modify this workflow to run only relevant tests for error "${errorGoal}" on branch "${branchName}".\n${originalContent}`;
+        const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_FAST });
+        return extractCode(res.text, 'yaml');
+    } catch (e: any) {
+        console.error('[generateWorkflowOverride] Error:', e);
+        return originalContent; // Fallback to original
+    }
 }
 
 export async function generateDetailedPlan(config: AppConfig, error: string, file: string, context: string = ""): Promise<AgentPlan> {
-    const prompt = `
+    try {
+        const prompt = `
     Create a fix plan for error "${error}" in "${file}".
     
     CONTEXT:
@@ -408,12 +432,16 @@ export async function generateDetailedPlan(config: AppConfig, error: string, fil
 
     Return JSON { "goal": string, "tasks": [{ "id": string, "description": string, "status": "pending" }], "approved": boolean }
     `;
-    const res = await unifiedGenerate(config, {
-        contents: prompt,
-        config: { responseMimeType: "application/json" },
-        model: MODEL_SMART
-    });
-    return safeJsonParse(res.text, { goal: "Fix error", tasks: [], approved: true });
+        const res = await unifiedGenerate(config, {
+            contents: prompt,
+            config: { responseMimeType: "application/json" },
+            model: MODEL_SMART
+        });
+        return safeJsonParse(res.text, { goal: "Fix error", tasks: [], approved: true });
+    } catch (e: any) {
+        console.error('[generateDetailedPlan] Error:', e);
+        return { goal: `Fix error: ${error}`, tasks: [{ id: "1", description: "Implement fix", status: "pending" }], approved: true };
+    }
 }
 
 export async function judgeDetailedPlan(config: AppConfig, plan: AgentPlan, error: string): Promise<{ approved: boolean, feedback: string }> {

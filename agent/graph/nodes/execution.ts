@@ -1,15 +1,10 @@
 import { GraphState, GraphContext, NodeHandler } from '../state.js';
-import { generateFix, judgeFix } from '../../../services/analysis/LogAnalysisService.js';
-import { toolLintCheck, toolWebSearch } from '../../../services/sandbox/SandboxService.js';
-import { getImmediateDependencies } from '../../../services/dependency-analyzer.js';
-import { thinLog, formatHistorySummary } from '../../../services/context-manager.js';
 import { db as globalDb } from '../../../db/client.js';
 import { FileChange } from '../../../types.js';
-import { markNodeSolved } from '../../../services/dag-executor.js';
 import { withNodeTracing } from './tracing-wrapper.js';
 
 const codingNodeHandler: NodeHandler = async (state, context) => {
-    const { config, group, diagnosis, refinedProblemStatement, fileReservations, iteration, initialLogText, errorDAG, currentNodeId, solvedNodes } = state;
+    const { config, group, diagnosis, refinedProblemStatement, fileReservations, iteration, errorDAG, currentNodeId } = state;
     const { logCallback, sandbox, dbClient, services } = context;
 
     // Use injected dbClient or fall back to global db
@@ -112,7 +107,7 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
         }
 
         // Generate Code Fix
-        const fixCode = await generateFix(config, {
+        const fixCode = await services.analysis.generateFix(config, {
             code: currentContent,
             error: diagnosis.summary,
             context: refinedProblemStatement || diagnosis.summary
@@ -180,7 +175,7 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
 
     // AoT Phase 3: Mark DAG node as solved
     if (currentNodeId && errorDAG && implementationSuccess) {
-        const dagUpdate = markNodeSolved(state, currentNodeId);
+        const dagUpdate = services.context.markNodeSolved(state as any, currentNodeId);
         log('INFO', `[Execution] Solved DAG node: ${currentNodeId}`);
         log('VERBOSE', `[Execution] Progress: ${dagUpdate.solvedNodes?.length}/${errorDAG.nodes.length} nodes solved`);
 

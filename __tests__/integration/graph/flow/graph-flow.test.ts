@@ -270,10 +270,8 @@ describe('Graph State Machine Flow Tests', () => {
             // Should still proceed but with warning
             expect(state).toHaveTransitionedTo('execution');
 
-            // Verify logger was called (using the mock we added)
-            // Note: Since we are mocking the module, we can inspect the import if we import it as a mock
-            const logger = await import('../../../../utils/logger.js');
-            expect(logger.log).toHaveBeenCalledWith('WARN', expect.stringContaining('not found'));
+            // Verify logCallback was called
+            expect(context.logCallback).toHaveBeenCalledWith('WARN', expect.stringContaining('not found'));
         });
     });
 

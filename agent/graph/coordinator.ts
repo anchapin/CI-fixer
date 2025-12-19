@@ -3,9 +3,7 @@ import { SandboxEnvironment } from '../../sandbox.js';
 import { ServiceContainer } from '../../services/container.js';
 import { RepositoryProfile } from '../../validation.js';
 import { GraphState, GraphContext, NodeHandler } from './state.js';
-import { detectConvergence, explainComplexity } from '../../services/complexity-estimator.js';
 import { withSpan, setAttributes, addEvent } from '../../telemetry/tracing.js';
-import { recordFixAttempt } from '../../telemetry/metrics.js';
 
 // Node Imports
 import { analysisNode } from './nodes/analysis.js';
@@ -170,7 +168,7 @@ export async function runGraphAgent(
                 state.status = 'failed';
                 state.failureReason = 'Max iterations reached.';
             } else if (state.complexityHistory.length > 2) {
-                const convergence = detectConvergence(state.complexityHistory);
+                const convergence = services.complexity.detectConvergence(state.complexityHistory);
 
                 // Early success if problem is atomic and stable
                 if (state.isAtomic && convergence.isStable) {
@@ -184,7 +182,7 @@ export async function runGraphAgent(
 
                 // Log complexity trend
                 if (state.problemComplexity !== undefined) {
-                    log('VERBOSE', `[AoT] Final ${explainComplexity(state, state.problemComplexity)}`);
+                    log('VERBOSE', `[AoT] Final ${services.complexity.explainComplexity(state as any, state.problemComplexity)}`);
                 }
             }
         }
@@ -206,7 +204,7 @@ export async function runGraphAgent(
         });
 
         // Record fix attempt metrics
-        recordFixAttempt(
+        services.metrics.recordFixAttempt(
             state.status === 'success',
             duration,
             state.iteration,

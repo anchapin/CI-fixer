@@ -14,7 +14,7 @@ import { withSpan, setAttributes, addEvent } from '../../../telemetry/tracing.js
 export const analysisNode: NodeHandler = async (state, context) => {
     return withSpan('analysis-node', async (span) => {
         const { config, group, iteration } = state;
-        const { logCallback, sandbox, profile, dbClient } = context;
+        const { logCallback, sandbox, profile, dbClient, services } = context;
 
         // Use injected dbClient or fall back to global db
         const db = dbClient || globalDb;
@@ -46,10 +46,10 @@ export const analysisNode: NodeHandler = async (state, context) => {
 
             log('INFO', `Fetching logs with strategy: ${strategy}`);
             try {
-                const { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, strategy);
+                const { logText } = await services.github.getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, strategy);
 
                 // Context Thinning
-                currentLogText = await smartThinLog(logText, 300);
+                currentLogText = await services.context.smartThinLog(logText, 300);
             } catch (e: any) {
                 log('ERROR', `Failed to fetch logs: ${e.message}`);
                 return { status: 'failed', failureReason: `Failed to fetch logs: ${e.message}` };
@@ -67,22 +67,22 @@ export const analysisNode: NodeHandler = async (state, context) => {
             if (isDependencyIssue) {
                 log('TOOL', 'Invoking Dependency Inspector...');
                 const headSha = group.mainRun.head_sha || 'HEAD'; // Fallback
-                const depReport = await toolScanDependencies(config, headSha);
+                const depReport = await services.sandbox.toolScanDependencies(config, headSha);
                 dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
             }
         }
 
         // 1. DIAGNOSIS
         const cachedSha = group.mainRun.head_sha || 'unknown';
-        const repoContext = await getCachedRepoContext(config, cachedSha, () => context.services.analysis.generateRepoSummary(config, sandbox));
+        const repoContext = await getCachedRepoContext(config, cachedSha, () => services.analysis.generateRepoSummary(config, sandbox));
         const diagContext = (iteration === 0) ? repoContext + dependencyContext : repoContext;
 
         // Classification (Stage 3)
-        const classified = await classifyErrorWithHistory(currentLogText, profile);
+        const classified = await services.classification.classifyErrorWithHistory(currentLogText, profile);
 
         const classificationForDiagnosis = {
             category: classified.category,
-            priority: getErrorPriority(classified.category),
+            priority: services.classification.getErrorPriority(classified.category),
             confidence: classified.confidence,
             affectedFiles: classified.affectedFiles,
             suggestedAction: classified.suggestedAction
@@ -97,7 +97,7 @@ export const analysisNode: NodeHandler = async (state, context) => {
         let refinedStatement: string | undefined;
         if (state.feedback.length > 0) {
             log('VERBOSE', '[AoT] Refining problem statement from feedback...');
-            refinedStatement = await refineProblemStatement(
+            refinedStatement = await services.analysis.refineProblemStatement(
                 config,
                 diagnosis,
                 state.feedback,
@@ -113,12 +113,12 @@ export const analysisNode: NodeHandler = async (state, context) => {
             diagnosis,
             refinedProblemStatement: refinedStatement
         };
-        const complexity = estimateComplexity(tempState);
+        const complexity = services.complexity.estimateComplexity(tempState as any);
         const complexityHistory = [...(state.complexityHistory || []), complexity];
-        const convergence = detectConvergence(complexityHistory);
-        const isAtomicState = isAtomic(complexity, complexityHistory);
+        const convergence = services.complexity.detectConvergence(complexityHistory);
+        const isAtomicState = services.complexity.isAtomic(complexity, complexityHistory);
 
-        log('INFO', `[AoT] ${explainComplexity(tempState, complexity)}`);
+        log('INFO', `[AoT] ${services.complexity.explainComplexity(tempState as any, complexity)}`);
         log('VERBOSE', `[AoT] Convergence: ${convergence.trend}, Atomic: ${isAtomicState}`);
 
         // History check (Knowledge Graph) - MOVED AFTER diagnosis is created
@@ -163,9 +163,9 @@ export const analysisNode: NodeHandler = async (state, context) => {
                 });
 
                 // Check for blocking dependencies
-                const isBlocked = await hasBlockingDependencies(errorFact.id);
+                const isBlocked = await services.dependency.hasBlockingDependencies(errorFact.id);
                 if (isBlocked) {
-                    const blockers = await getBlockedErrors(errorFact.id);
+                    const blockers = await services.dependency.getBlockedErrors(errorFact.id);
                     log('WARN', `[Dependency] This error is blocked by ${blockers[0]?.blockedBy.length || 0} unresolved error(s)`);
                     if (blockers[0]?.blockedBy.length > 0) {
                         log('INFO', `[Dependency] Blocked by: ${blockers[0].blockedBy.map(b => b.summary).join(', ')}`);
@@ -187,7 +187,7 @@ export const analysisNode: NodeHandler = async (state, context) => {
 
                 // Cluster error for cross-run pattern detection
                 try {
-                    await clusterError(
+                    await services.clustering.clusterError(
                         errorFact.id,
                         classified.category,
                         classified.errorMessage,

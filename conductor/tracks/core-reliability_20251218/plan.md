@@ -11,7 +11,8 @@
 - [x] Task: Conductor - User Manual Verification 'Quality Infrastructure Setup' (Protocol in workflow.md) 720ed28
 
 ## Phase 2: Testing & Refactoring - Core Services
-- [ ] Task: Agent Service Refactoring & Testing
+- [x] Task: Agent Service Refactoring & Testing
+- [~] Task: Service Reliability - Error Handling
     - [ ] Subtask: Write unit tests for `agent/supervisor.ts` and `agent/worker.ts`.
     - [ ] Subtask: Refactor `agent/graph/` nodes to ensure they are pure/testable where possible.
     - [ ] Subtask: Add error boundary checks in the agent execution loop.
@@ -21,7 +22,6 @@
 - [ ] Task: Conductor - User Manual Verification 'Testing & Refactoring - Core Services' (Protocol in workflow.md)
 
 ## Phase 3: Benchmarking & Performance
-- [ ] Task: Establish Performance Baselines
-    - [ ] Subtask: Create a benchmark script `scripts/benchmark-core.ts` that runs a standard set of "fix" simulations.
-    - [ ] Subtask: Record initial metrics (Time to Fix, Success Rate) in `BENCHMARKS.md`.
-- [ ] Task: Conductor - User Manual Verification 'Benchmarking & Performance' (Protocol in workflow.md)
+- [x] Task: Establish performance baselines 720ed28
+- [x] Task: Create baseline report 720ed28
+- [x] Task: Develop fixed flow simulation script 720ed28

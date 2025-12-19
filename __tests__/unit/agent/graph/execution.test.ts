@@ -44,6 +44,12 @@ describe('Execution Node', () => {
             services: {
                 sandbox: {
                     toolLintCheck: vi.fn().mockResolvedValue({ valid: true })
+                },
+                analysis: {
+                    generateFix: vi.fn().mockResolvedValue('fixed content'),
+                },
+                context: {
+                    markNodeSolved: vi.fn().mockReturnValue({ solvedNodes: [] }),
                 }
             }
         };
@@ -99,29 +105,28 @@ describe('Execution Node', () => {
     });
 
     it('should implement edit fix', async () => {
-        vi.mocked(LogAnalysisService.generateFix).mockResolvedValue('fixed content');
+        mockContext.services.analysis.generateFix.mockResolvedValue('fixed content');
 
         const result = await codingNode(mockState, mockContext);
 
         expect(mockSandbox.readFile).toHaveBeenCalledWith('file.ts');
-        expect(LogAnalysisService.generateFix).toHaveBeenCalled();
+        expect(mockContext.services.analysis.generateFix).toHaveBeenCalled();
         expect(mockSandbox.writeFile).toHaveBeenCalledWith('file.ts', 'fixed content');
 
         // Check result structure
         expect(result.currentNode).toBe('verification');
         expect(result.activeFileChange).toBeDefined();
-        expect(result.activeFileChange.modified.content).toBe('fixed content');
+        expect(result.activeFileChange!.modified.content).toBe('fixed content');
     });
 
     it('should lint check the fix', async () => {
-        vi.mocked(LogAnalysisService.generateFix).mockResolvedValue('bad content');
+        mockContext.services.analysis.generateFix.mockResolvedValue('bad content');
         mockContext.services.sandbox.toolLintCheck.mockResolvedValueOnce({ valid: false, error: 'Lint fail' });
 
         const result = await codingNode(mockState, mockContext);
 
         expect(result.feedback).toContain('Lint Error: Lint fail');
         // Does NOT proceed to Verification if lint fails?
-        // Logic: returns { feedback, fileReservations } -> implies loop back via Orchestrator or DAG?
         // NodeHandler returns partial state. 
         // Logic in agent loop determines next node if 'currentNode' is missing?
         // Wait, typical NodeHandler returns 'currentNode'.

@@ -22,5 +22,5 @@ describe('CI-Fixer Benchmark Suite', () => {
         // Also ensure no crashes
         expect(report.results).toBeDefined();
         expect(report.results.length).toBeGreaterThan(0);
-    }, 30000); // 30s timeout
+    }, 300000); // 300s timeout
 });

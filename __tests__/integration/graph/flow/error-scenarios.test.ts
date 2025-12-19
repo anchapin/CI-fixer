@@ -57,12 +57,6 @@ describe('Error Scenario Tests', () => {
         testDbManager = new TestDatabaseManager();
         testDb = await testDbManager.setup();
         context = await createMockGraphContext({ dbClient: testDb });
-        context.services = {
-            llm: await import('../../../../services/llm/LLMService.js'),
-            github: await import('../../../../services/github/GitHubService.js'),
-            sandbox: await import('../../../../services/sandbox/SandboxService.js'),
-            analysis: await import('../../../../services/analysis/LogAnalysisService.js'),
-        } as any;
     });
 
     afterEach(async () => {

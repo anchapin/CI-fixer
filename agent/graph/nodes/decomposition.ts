@@ -10,7 +10,7 @@ import { estimateComplexity } from '../../../services/complexity-estimator.js';
  */
 export const decompositionNode: NodeHandler = async (state, context) => {
     const { config, diagnosis, classification, problemComplexity } = state;
-    const { logCallback } = context;
+    const { logCallback, services } = context;
 
     const log = (level: string, msg: string) => logCallback(level as any, msg);
 
@@ -39,7 +39,8 @@ export const decompositionNode: NodeHandler = async (state, context) => {
             classification?.category || 'UNKNOWN',
             problemComplexity,
             classification?.affectedFiles || [],
-            state.feedback
+            state.feedback,
+            services
         );
 
         if (!dag.shouldDecompose) {
@@ -89,10 +90,10 @@ async function generateErrorDAG(
     category: string,
     complexity: number,
     affectedFiles: string[],
-    feedbackHistory?: string[]
+    feedbackHistory: string[] | undefined,
+    services: ServiceContainer
 ): Promise<{ shouldDecompose: boolean; reasoning: string; nodes: ErrorNode[]; edges: Array<{ from: string; to: string }> }> {
     const { loadPrompt, renderPrompt, getPromptConfig } = await import('../../../services/llm/prompt-loader.js');
-    const { unifiedGenerate, safeJsonParse } = await import('../../../services/llm/LLMService.js');
 
     const template = await loadPrompt('decomposition/error-decomposition', 'v1');
 
@@ -104,13 +105,13 @@ async function generateErrorDAG(
         feedbackHistory: feedbackHistory?.map((f, i) => `${i + 1}. ${f}`).join('\n') || ''
     });
 
-    const response = await unifiedGenerate(config, {
+    const response = await services.llm.unifiedGenerate(config, {
         contents: prompt,
         config: getPromptConfig(template),
         model: template.metadata.model
     });
 
-    const result = safeJsonParse(response.text || '{}', {
+    const result = services.llm.safeJsonParse(response.text || '{}', {
         shouldDecompose: false,
         reasoning: 'Failed to parse response',
         nodes: [],

@@ -1,8 +1,5 @@
 import { NodeHandler } from '../types.js';
-import { log } from '../../../utils/logger.js';
-import { generateDetailedPlan, formatPlanToMarkdown } from '../../../services/analysis/LogAnalysisService.js';
 import { extractFileOutline } from '../../../services/analysis/CodeAnalysisService.js';
-import { toolSemanticCodeSearch, toolCodeSearch } from '../../../services/sandbox/SandboxService.js';
 import { loadFeatureFlags } from '../../../config/feature-flags.js';
 import { getEnhancedKB } from '../../../services/knowledge-base/enhanced-kb.js';
 import { getNextNode, isDAGComplete, describeDAGPlan } from '../../../services/dag-executor.js';
@@ -16,6 +13,8 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
     const { config, group, diagnosis: initialDiagnosis, classification, errorDAG, solvedNodes } = state;
     let diagnosis = initialDiagnosis;
     const { logCallback, sandbox, services, dbClient } = context;
+
+    const log = (level: string, msg: string) => logCallback(level as any, msg);
 
     // ToolOrchestra: Initialize orchestration services
     const orchestrator = new ToolOrchestrator();

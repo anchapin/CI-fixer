@@ -1,6 +1,4 @@
 import { GraphState, GraphContext, NodeHandler } from '../state.js';
-import { runSandboxTest, judgeFix } from '../../../services/analysis/LogAnalysisService.js';
-import { thinLog } from '../../../services/context-manager.js';
 import { RewardCalculator } from '../../../services/orchestration/reward-calculator.js';
 import { TrajectoryAnalyzer } from '../../../services/analytics/trajectory-analyzer.js';
 import { withNodeTracing } from './tracing-wrapper.js';
@@ -197,7 +195,7 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
         }
 
         return {
-            feedback: [...state.feedback, `Test Suite Failed:\n${thinLog(testResult.logs, 200)}`],
+            feedback: [...state.feedback, `Test Suite Failed:\n${services.context.thinLog(testResult.logs, 200)}`],
             iteration: iteration + 1,
             currentNode: 'analysis', // Loop back
             rewardHistory: [...(state.rewardHistory || []), reward]

@@ -5,11 +5,10 @@
 
 import { GraphState, GraphContext, NodeHandler } from '../state.js';
 import { withNodeTracing } from './tracing-wrapper.js';
-import { runRepairAgent, isRepairAgentEnabled, getRepairAgentConfig } from '../../../services/repair-agent/orchestrator.js';
 
 const repairAgentNodeHandler: NodeHandler = async (state, context) => {
     const { config, group, diagnosis, currentLogText, iteration } = state;
-    const { logCallback, sandbox } = context;
+    const { logCallback, sandbox, services } = context;
     const log = (level: string, msg: string) => logCallback(level as any, msg);
 
     if (!diagnosis) {
@@ -32,8 +31,8 @@ const repairAgentNodeHandler: NodeHandler = async (state, context) => {
         'npm test';
 
     // Run RepairAgent
-    const agentConfig = getRepairAgentConfig();
-    const result = await runRepairAgent(
+    const agentConfig = services.repairAgent.getRepairAgentConfig();
+    const result = await services.repairAgent.runRepairAgent(
         config,
         currentLogText,
         originalCode,

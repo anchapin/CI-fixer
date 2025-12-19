@@ -103,8 +103,44 @@ describe('Agent Logic (Refactored)', () => {
         services = {
             llm: mockLLM as any,
             sandbox: mockSandbox as any,
-            github: GitHubService,
-            analysis: AnalysisService
+            github: GitHubService as any,
+            analysis: AnalysisService as any,
+            context: {
+                smartThinLog: vi.fn().mockImplementation(async (log) => log),
+                thinLog: vi.fn().mockImplementation((log) => log),
+                formatHistorySummary: vi.fn().mockReturnValue('History'),
+                formatPlanToMarkdown: vi.fn().mockReturnValue('Plan'),
+                markNodeSolved: vi.fn().mockReturnValue({ solvedNodes: [] }),
+            } as any,
+            classification: {
+                classifyErrorWithHistory: vi.fn().mockResolvedValue({
+                    category: 'logic',
+                    confidence: 0.9,
+                    errorMessage: 'Error',
+                    affectedFiles: [],
+                }),
+                getErrorPriority: vi.fn().mockReturnValue(5),
+            } as any,
+            dependency: {
+                hasBlockingDependencies: vi.fn().mockResolvedValue(false),
+                getBlockedErrors: vi.fn().mockResolvedValue([]),
+            } as any,
+            clustering: {
+                clusterError: vi.fn(),
+            } as any,
+            complexity: {
+                estimateComplexity: vi.fn().mockReturnValue(5),
+                detectConvergence: vi.fn().mockReturnValue({ trend: 'stable' }),
+                isAtomic: vi.fn().mockReturnValue(false),
+                explainComplexity: vi.fn().mockReturnValue('Complexity'),
+            } as any,
+            repairAgent: {
+                getRepairAgentConfig: vi.fn().mockReturnValue({}),
+                runRepairAgent: vi.fn(),
+            } as any,
+            metrics: {
+                recordFixAttempt: vi.fn(),
+            } as any
         };
     });
 

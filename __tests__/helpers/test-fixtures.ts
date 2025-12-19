@@ -115,48 +115,99 @@ export const createMockGraphState = (overrides?: Partial<GraphState>): GraphStat
 /**
  * Creates mock services with spies
  */
-export const createMockServices = (): ServiceContainer => ({
-    llm: {
-        unifiedGenerate: vi.fn().mockResolvedValue({ text: 'Mock LLM response', toolCalls: [] })
-    } as any,
-    github: {
-        getWorkflowLogs: vi.fn().mockResolvedValue({ logText: 'Mock logs', headSha: 'abc123', jobName: 'test' }),
-        findClosestFile: vi.fn().mockResolvedValue({
-            file: { name: 'app.ts', content: 'const x = 1;', language: 'typescript' },
-            path: 'src/app.ts'
-        }),
-        getFileContent: vi.fn().mockResolvedValue({ name: 'app.ts', content: 'const x = 1;', language: 'typescript' })
-    } as any,
-    sandbox: {
-        toolCodeSearch: vi.fn().mockResolvedValue([]),
-        toolWebSearch: vi.fn().mockResolvedValue(''),
-        toolLintCheck: vi.fn().mockResolvedValue({ valid: true }),
-        toolScanDependencies: vi.fn().mockResolvedValue('No dependencies found'),
-        toolSemanticCodeSearch: vi.fn().mockResolvedValue([]),
-        prepareSandbox: vi.fn().mockResolvedValue({
-            getId: () => 'mock-sandbox',
-            init: vi.fn(),
-            teardown: vi.fn(),
-            runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
-            writeFile: vi.fn(),
-            readFile: vi.fn().mockResolvedValue('const x = 1;'),
-            getWorkDir: () => '/'
-        })
-    } as any,
-    analysis: {
-        diagnoseError: vi.fn().mockResolvedValue(createMockDiagnosis()),
-        generateRepoSummary: vi.fn().mockResolvedValue('Mock repo summary'),
-        generateDetailedPlan: vi.fn().mockResolvedValue({
-            goal: 'Fix error',
-            tasks: [{ id: '1', description: 'Fix', status: 'pending' }],
-            approved: true
-        }),
-        formatPlanToMarkdown: vi.fn().mockReturnValue('# Plan'),
-        generateFix: vi.fn().mockResolvedValue('const x = 2;'),
-        judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 10, reasoning: 'Good fix' }),
-        runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: 'Tests passed' })
-    } as any
-});
+export const createMockServices = (overrides?: Partial<ServiceContainer>): ServiceContainer => {
+    const services: ServiceContainer = {
+        llm: {
+            unifiedGenerate: vi.fn().mockResolvedValue({ text: 'Mock LLM response', toolCalls: [] }),
+            safeJsonParse: vi.fn().mockImplementation((text, fallback) => {
+                try { return JSON.parse(text); } catch { return fallback; }
+            }),
+            extractCode: vi.fn().mockImplementation((text) => text)
+        } as any,
+        github: {
+            getWorkflowLogs: vi.fn().mockResolvedValue({ logText: 'Mock logs', headSha: 'abc123', jobName: 'test' }),
+            findClosestFile: vi.fn().mockResolvedValue({
+                file: { name: 'app.ts', content: 'const x = 1;', language: 'typescript' },
+                path: 'src/app.ts'
+            }),
+            getFileContent: vi.fn().mockResolvedValue({ name: 'app.ts', content: 'const x = 1;', language: 'typescript' })
+        } as any,
+        sandbox: {
+            toolCodeSearch: vi.fn().mockResolvedValue([]),
+            toolWebSearch: vi.fn().mockResolvedValue(''),
+            toolLintCheck: vi.fn().mockResolvedValue({ valid: true }),
+            toolScanDependencies: vi.fn().mockResolvedValue('No dependencies found'),
+            toolSemanticCodeSearch: vi.fn().mockResolvedValue([]),
+            prepareSandbox: vi.fn().mockResolvedValue({
+                getId: () => 'mock-sandbox',
+                init: vi.fn(),
+                teardown: vi.fn(),
+                runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+                writeFile: vi.fn(),
+                readFile: vi.fn().mockResolvedValue('const x = 1;'),
+                getWorkDir: () => '/'
+            })
+        } as any,
+        analysis: {
+            diagnoseError: vi.fn().mockResolvedValue(createMockDiagnosis()),
+            generateRepoSummary: vi.fn().mockResolvedValue('Mock repo summary'),
+            generateDetailedPlan: vi.fn().mockResolvedValue({
+                goal: 'Fix error',
+                tasks: [{ id: '1', description: 'Fix', status: 'pending' }],
+                approved: true
+            }),
+            formatPlanToMarkdown: vi.fn().mockReturnValue('# Plan'),
+            generateFix: vi.fn().mockResolvedValue('const x = 2;'),
+            judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 10, reasoning: 'Good fix' }),
+            runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: 'Tests passed' }),
+            refineProblemStatement: vi.fn().mockImplementation((config, diag) => diag.summary)
+        } as any,
+        context: {
+            smartThinLog: vi.fn().mockImplementation(async (log) => log),
+            thinLog: vi.fn().mockImplementation((log) => log),
+            formatHistorySummary: vi.fn().mockReturnValue('History'),
+            formatPlanToMarkdown: vi.fn().mockReturnValue('Plan'),
+            markNodeSolved: vi.fn().mockReturnValue({ solvedNodes: [] }),
+        } as any,
+        classification: {
+            classifyErrorWithHistory: vi.fn().mockResolvedValue(createMockClassification()),
+            getErrorPriority: vi.fn().mockReturnValue(5),
+        } as any,
+        dependency: {
+            hasBlockingDependencies: vi.fn().mockResolvedValue(false),
+            getBlockedErrors: vi.fn().mockResolvedValue([]),
+        } as any,
+        clustering: {
+            clusterError: vi.fn(),
+        } as any,
+        complexity: {
+            estimateComplexity: vi.fn().mockReturnValue(5),
+            detectConvergence: vi.fn().mockReturnValue({ trend: 'stable' }),
+            isAtomic: vi.fn().mockReturnValue(false),
+            explainComplexity: vi.fn().mockReturnValue('Complexity'),
+        } as any,
+        repairAgent: {
+            getRepairAgentConfig: vi.fn().mockReturnValue({}),
+            runRepairAgent: vi.fn(),
+        } as any,
+        metrics: {
+            recordFixAttempt: vi.fn(),
+        } as any
+    };
+
+    if (overrides) {
+        Object.keys(overrides).forEach(key => {
+            if (overrides[key as keyof ServiceContainer]) {
+                services[key as keyof ServiceContainer] = {
+                    ...services[key as keyof ServiceContainer],
+                    ...overrides[key as keyof ServiceContainer]
+                } as any;
+            }
+        });
+    }
+
+    return services;
+};
 
 /**
  * Creates a mock GraphContext with sensible defaults

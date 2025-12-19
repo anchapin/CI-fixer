@@ -211,10 +211,8 @@ describe('Agent Loop Integration (Refactored)', () => {
             );
 
             // Verify services were called
-            // Note: executionNode uses imported generateFix, not passing through services object
             expect(services.analysis.diagnoseError).toHaveBeenCalled();
-            expect(AnalysisService.generateFix).toHaveBeenCalled();
-            // runSandboxTest is on the object? 
+            expect(services.analysis.generateFix).toHaveBeenCalled();
             expect(services.analysis.runSandboxTest).toHaveBeenCalled();
         });
 
@@ -340,8 +338,8 @@ describe('Agent Loop Integration (Refactored)', () => {
             // Hybrid assertions:
             // verificationNode uses injected services
             expect(services.analysis.judgeFix).toHaveBeenCalledTimes(2);
-            // executionNode uses imported module
-            expect(AnalysisService.generateFix).toHaveBeenCalledTimes(2);
+            // executionNode uses injected services
+            expect(services.analysis.generateFix).toHaveBeenCalledTimes(2);
         });
 
         it('should fallback to summary search if file path is empty', async () => {

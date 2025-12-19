@@ -193,8 +193,54 @@ describe('Agent Flow Integration (Mocked)', () => {
         created_at: new Date()
     } as any;
 
+    let testServices: any;
+
     beforeEach(async () => {
         vi.clearAllMocks();
+        
+        testServices = {
+            github: GitHubService,
+            analysis: LogAnalysisService,
+            sandbox: SandboxService,
+            llm: LLMService,
+            context: {
+                smartThinLog: vi.fn().mockImplementation(async (log) => log),
+                thinLog: vi.fn().mockImplementation((log) => log),
+                formatHistorySummary: vi.fn().mockReturnValue('History'),
+                formatPlanToMarkdown: vi.fn().mockReturnValue('Plan'),
+                markNodeSolved: vi.fn().mockReturnValue({ solvedNodes: [] }),
+            } as any,
+            classification: {
+                classifyErrorWithHistory: vi.fn().mockResolvedValue({
+                    category: 'logic',
+                    confidence: 0.9,
+                    errorMessage: 'Error',
+                    affectedFiles: [],
+                }),
+                getErrorPriority: vi.fn().mockReturnValue(5),
+            } as any,
+            dependency: {
+                hasBlockingDependencies: vi.fn().mockResolvedValue(false),
+                getBlockedErrors: vi.fn().mockResolvedValue([]),
+            } as any,
+            clustering: {
+                clusterError: vi.fn(),
+            } as any,
+            complexity: {
+                estimateComplexity: vi.fn().mockReturnValue(5),
+                detectConvergence: vi.fn().mockReturnValue({ trend: 'stable' }),
+                isAtomic: vi.fn().mockReturnValue(false),
+                explainComplexity: vi.fn().mockReturnValue('Complexity'),
+            } as any,
+            repairAgent: {
+                getRepairAgentConfig: vi.fn().mockReturnValue({}),
+                runRepairAgent: vi.fn(),
+            } as any,
+            metrics: {
+                recordFixAttempt: vi.fn(),
+            } as any
+        };
+
         // Default Mock Behaviors for Happy Path
         vi.mocked(SandboxService.prepareSandbox).mockResolvedValue(new SimulationSandbox());
         vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error log...', headSha: 'sha123' });
@@ -218,14 +264,6 @@ describe('Agent Flow Integration (Mocked)', () => {
     });
 
     it('should complete a successful repair cycle', async () => {
-        // Create proper ServiceContainer structure
-        const testServices = {
-            github: GitHubService,
-            analysis: LogAnalysisService,
-            sandbox: SandboxService,
-            llm: LLMService
-        };
-
         const result = await runIndependentAgentLoop(config, group, 'ctx', testServices as any, mockUpdateState, mockLog);
 
         expect(result.status).toBe('success');
@@ -243,14 +281,6 @@ describe('Agent Flow Integration (Mocked)', () => {
         // since the graph architecture handles retries differently
         vi.mocked(LogAnalysisService.runSandboxTest).mockResolvedValue({ passed: true, logs: 'Tests Passed' });
 
-        // Create proper ServiceContainer structure
-        const testServices = {
-            github: GitHubService,
-            analysis: LogAnalysisService,
-            sandbox: SandboxService,
-            llm: LLMService
-        };
-
         const result = await runIndependentAgentLoop(config, group, 'ctx', testServices as any, mockUpdateState, mockLog);
 
         expect(result.status).toBe('success');
@@ -264,14 +294,6 @@ describe('Agent Flow Integration (Mocked)', () => {
 
         // Mock generateFix to return something so files are created
         vi.mocked(LogAnalysisService.generateFix).mockResolvedValue('fixed content');
-
-        // Create proper ServiceContainer structure
-        const testServices = {
-            github: GitHubService,
-            analysis: LogAnalysisService,
-            sandbox: SandboxService,
-            llm: LLMService
-        };
 
         const result = await runIndependentAgentLoop(config, group, 'ctx', testServices as any, mockUpdateState, mockLog);
 

@@ -6,6 +6,7 @@ import { ErrorCategory } from '../../../errorClassification.js';
 import { SimulationSandbox } from '../../../sandbox.js';
 import { registerCustomMatchers } from '../../helpers/custom-assertions.js';
 import { diagnoseError } from '../../../services/analysis/LogAnalysisService.js';
+import { createMockConfig, createMockRunGroup, createMockDiagnosis, createMockClassification, createMockServices } from '../../helpers/test-fixtures.js';
 
 // Register custom matchers
 registerCustomMatchers();
@@ -109,24 +110,19 @@ describe('Analysis Node - Database Integration Tests', () => {
 
         // Create mock state
         mockState = {
-            config: {
-                geminiApiKey: 'test-key',
-                githubToken: 'test-token',
-                repoUrl: 'https://github.com/test/repo',
-                devEnv: 'simulation' as const,
-                checkEnv: 'simulation' as const
-            },
-            group: {
+            config: createMockConfig({
+                devEnv: 'simulation',
+                checkEnv: 'simulation'
+            }),
+            group: createMockRunGroup({
                 id: 'test-group-1',
-                name: 'Test Group',
-                runIds: [123],
                 mainRun: {
                     id: 123,
                     head_sha: 'abc123',
                     status: 'failed',
                     conclusion: 'failure'
                 } as any
-            },
+            }),
             iteration: 0,
             currentLogText: 'Error: Cannot find module "lodash"\nModuleNotFoundError: No module named lodash',
             diagnosis: null,
@@ -135,30 +131,31 @@ describe('Analysis Node - Database Integration Tests', () => {
             feedback: [],
             currentNode: 'analysis',
             initialLogText: '',
-            activeFileChange: null
-        };
+            complexityHistory: [],
+            solvedNodes: []
+        } as any;
 
         // Create mock context with test database
         const sandbox = new SimulationSandbox();
         await sandbox.init();
 
+        // Override default mocks with test-specific ones from the top-level vi.mock calls
+        const LogAnalysisService = await import('../../../services/analysis/LogAnalysisService.js');
+        const ErrorClassification = await import('../../../errorClassification.js');
+        const SandboxService = await import('../../../services/sandbox/SandboxService.js');
+
         mockContext = {
-            logCallback: (level: any, msg: string) => {
-                // Silent for tests
-            },
-            updateState: (groupId: string, state: any) => {
-                // No-op for tests
-            },
+            logCallback: vi.fn(),
+            updateStateCallback: vi.fn(),
             sandbox,
             profile: undefined,
-            services: {
-                analysis: await import('../../../services/analysis/LogAnalysisService.js'),
-                github: await import('../../../services/github/GitHubService.js'),
-                sandbox: await import('../../../services/sandbox/SandboxService.js'),
-                llm: await import('../../../services/llm/LLMService.js'),
-            } as any,
+            services: createMockServices({
+                analysis: LogAnalysisService as any,
+                classification: ErrorClassification as any,
+                sandbox: SandboxService as any
+            }),
             dbClient: testDb // ← Inject test database
-        };
+        } as any;
     });
 
     afterEach(async () => {
