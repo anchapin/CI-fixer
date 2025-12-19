@@ -18,10 +18,14 @@
 ## Artificial Intelligence
 - **LLM Provider:** Google Generative AI (@google/genai)
 - **AI UI/UX:** TanStack AI
+- **ML Pipeline:** TensorFlow or PyTorch (for model training), Scikit-learn (for metrics/evaluation)
 
 ## Testing & Quality Assurance
 - **Unit & Integration Testing:** Vitest
 - **End-to-End Testing:** Playwright
+- **Linting & Formatting:** ESLint, Prettier
+- **Spell Checking:** CSpell (for generated patches)
+- **Dockerfile Linting:** Hadolint
 
 ## Execution Environment
 - **Sandboxing:** E2B Code Interpreter, Docker
