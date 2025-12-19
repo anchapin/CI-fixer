@@ -29,6 +29,24 @@ export class DataIngestionService {
     }
 
     /**
+     * Ingests raw text data and stores it in the database.
+     * @param content Raw text content
+     * @param source Source name or identifier
+     * @param type Data type (e.g., 'log', 'diff', 'external')
+     * @param metadata Optional metadata
+     */
+    async ingestRawData(content: string, source: string, type: string, metadata?: any) {
+        return await this.prisma.ingestedData.create({
+            data: {
+                source: source,
+                type: type,
+                content: content,
+                metadata: metadata ? JSON.stringify(metadata) : null
+            }
+        });
+    }
+
+    /**
      * Infers the data type based on the file extension
      */
     private inferType(filePath: string): string {

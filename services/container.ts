@@ -10,6 +10,8 @@ import * as Clustering from './error-clustering.js';
 import * as Complexity from './complexity-estimator.js';
 import * as RepairAgent from './repair-agent/orchestrator.js';
 import * as Metrics from '../telemetry/metrics.js';
+import { DataIngestionService } from './DataIngestionService.js';
+import { db } from '../db/client.js';
 
 export interface ServiceContainer {
     github: typeof GitHub;
@@ -23,6 +25,7 @@ export interface ServiceContainer {
     complexity: typeof Complexity;
     repairAgent: typeof RepairAgent;
     metrics: typeof Metrics;
+    ingestion: DataIngestionService;
 }
 
 export const defaultServices: ServiceContainer = {
@@ -36,6 +39,7 @@ export const defaultServices: ServiceContainer = {
     clustering: Clustering,
     complexity: Complexity,
     repairAgent: RepairAgent,
-    metrics: Metrics
+    metrics: Metrics,
+    ingestion: new DataIngestionService(db)
 };
 

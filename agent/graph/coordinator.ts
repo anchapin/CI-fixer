@@ -191,6 +191,42 @@ export async function runGraphAgent(
 
         // Record metrics
         const duration = (Date.now() - startTime) / 1000;
+        
+        // Ingest live CI execution data
+        try {
+            // Ingest Logs
+            await services.ingestion.ingestRawData(
+                state.activeLog,
+                `live-run-${group.id}`,
+                'log',
+                {
+                    groupId: group.id,
+                    status: state.status,
+                    iterations: state.iteration,
+                    duration: duration,
+                    errorCategory: state.classification?.category || 'unknown'
+                }
+            );
+
+            // Ingest Artifacts (Modified Files)
+            for (const [path, fileInfo] of Object.entries(state.files)) {
+                if (fileInfo.modified?.content) {
+                    await services.ingestion.ingestRawData(
+                        fileInfo.modified.content,
+                        `live-artifact-${group.id}-${path}`,
+                        'diff', // Or 'code', but spec mentioned extracting patterns from diffs
+                        {
+                            groupId: group.id,
+                            path: path,
+                            iteration: state.iteration
+                        }
+                    );
+                }
+            }
+        } catch (e) {
+            log('WARN', `Failed to ingest live logs: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
         setAttributes(span, {
             'agent.final_status': state.status,
             'agent.iterations': state.iteration,
