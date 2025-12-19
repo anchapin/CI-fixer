@@ -61,7 +61,15 @@ Uses [E2B.dev](https://e2b.dev)'s secure cloud microVMs.
 Runs the agent's reproduction steps in a container on your local machine.
 -   **Pros**: Free, lower latency, full control over base images, works offline.
 -   **Requires**: Docker Desktop running locally.
--   **Configuration**: Select **Execution Strategy: Local Docker Container** in Settings. You can specify a custom Docker image (default: `node:20-bullseye`).
+-   **Configuration**: Select **Execution Strategy: Local Docker Container** in Settings. You can specify a custom Docker image (default: `nikolaik/python-nodejs:python3.11-nodejs20-bullseye`).
+
+## ⚡ Benchmarks & RL Gym
+
+CI-Fixer now features a Reinforcement Learning (RL) ready environment and benchmark suite.
+-   **Benchmark Suite**: Measure agent success rates against real repos.
+-   **RL Gym**: Collect training data for "Agent Lightning" style optimization.
+
+Full documentation: [BENCHMARKS.md](./BENCHMARKS.md)
 
 ## 🧪 Testing
 

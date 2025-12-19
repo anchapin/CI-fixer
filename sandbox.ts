@@ -11,6 +11,8 @@ export interface SandboxEnvironment {
 
     // Execution
     runCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    // Alias for compatibility
+    exec(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 
     // File I/O
     writeFile(path: string, content: string): Promise<void>;
@@ -168,6 +170,8 @@ export class DockerSandbox implements SandboxEnvironment {
     getId(): string {
         return this.containerId || 'unknown';
     }
+
+    async exec(command: string) { return this.runCommand(command); }
 }
 
 export class E2BSandbox implements SandboxEnvironment {
@@ -257,6 +261,8 @@ export class E2BSandbox implements SandboxEnvironment {
     getRawSandbox(): Sandbox | undefined {
         return this.sandbox;
     }
+
+    async exec(command: string) { return this.runCommand(command); }
 }
 
 // Simulation Sandbox for fallback/testing
@@ -282,6 +288,7 @@ export class SimulationSandbox implements SandboxEnvironment {
 
     getWorkDir(): string { return '/simulation'; }
     getId(): string { return 'sim-001'; }
+    async exec(command: string) { return this.runCommand(command); }
 }
 
 // Factory Function

@@ -74,4 +74,8 @@ tanstack_test_*.txt
 arxiv_paper.html
 debug_assertion.txt
 
+# Benchmark logs and results
+benchmark_log*.txt
+benchmark_results.json
+
 

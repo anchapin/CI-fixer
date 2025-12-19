@@ -169,7 +169,7 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
             }
         }, 5, 2000).catch(e => {
             if (e.name === 'AbortError' || e.message === 'AbortError') {
-                throw new Error(`LLM Generation Timed Out after ${(config as any).llmTimeout || 120000}ms`);
+                throw new Error(`LLM Generation Timed Out after ${(config as any).llmTimeout || 300000}ms`);
             }
             throw new Error(`LLM Generation Failed after retries: ${e.message}`);
         });

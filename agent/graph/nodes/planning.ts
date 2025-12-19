@@ -61,7 +61,7 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
 
         // Select optimal model
         const stats = await trajectoryAnalyzer.getStats(classification?.category || 'UNKNOWN');
-        selectedModel = modelSelector.selectModel({
+        selectedModel = config.llmModel || modelSelector.selectModel({
             complexity: state.problemComplexity || 5,
             category: classification?.category || 'UNKNOWN',
             attemptNumber: state.iteration,

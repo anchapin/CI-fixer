@@ -68,6 +68,7 @@ export interface AppConfig {
   llmBaseUrl?: string;
   llmModel?: string;
   customApiKey?: string;
+  llmTimeout?: number;
 
   // Search Settings
   searchProvider?: 'gemini_grounding' | 'tavily';
