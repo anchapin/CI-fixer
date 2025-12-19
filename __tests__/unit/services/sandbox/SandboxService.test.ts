@@ -123,6 +123,8 @@ describe('SandboxService', () => {
             expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(expect.stringMatching(/git checkout.*main/));
             // Expect dependency install
             expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(expect.stringMatching(/npm install/));
+            // Expect hadolint installation
+            expect(mockSandboxInstance.runCommand).toHaveBeenCalledWith(expect.stringMatching(/hadolint/));
             // Expect agent tools injection
             expect(mockSandboxInstance.writeFile).toHaveBeenCalledWith('agent_tools.ts', expect.any(String));
         });

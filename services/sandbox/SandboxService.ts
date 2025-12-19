@@ -140,10 +140,15 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
             await sandbox.runCommand('echo \'export BUN_INSTALL="$HOME/.bun"\' >> ~/.bashrc && echo \'export PATH="$BUN_INSTALL/bin:$PATH"\' >> ~/.bashrc && source ~/.bashrc && export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH" && bun install');
         }
 
-        // Install common tools if missing (Docker)
+        // Install common tools if missing (Docker, Hadolint)
         // Note: This requires root/sudo, assuming sandbox user has rights or is root
-        console.log('[Sandbox] Ensuring Docker CLI is available...');
+        console.log('[Sandbox] Ensuring Docker CLI and Hadolint are available...');
         await sandbox.runCommand('apt-get update && apt-get install -y docker.io');
+        
+        // Download and install hadolint binary
+        const HADOLINT_VERSION = 'v2.12.0';
+        const hadolintCmd = `curl -sL -o /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-Linux-x86_64 && chmod +x /usr/local/bin/hadolint`;
+        await sandbox.runCommand(hadolintCmd);
 
     } catch (e: any) {
         console.warn('[Sandbox] Dependency installation warning (continuing):', e);
