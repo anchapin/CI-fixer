@@ -10,18 +10,10 @@
     - [ ] Subtask: Add `husky` and `lint-staged` (if not present) to enforce pre-commit checks.
 - [x] Task: Conductor - User Manual Verification 'Quality Infrastructure Setup' (Protocol in workflow.md) 720ed28
 
-## Phase 2: Testing & Refactoring - Core Services
-- [x] Task: Agent Service Refactoring & Testing
-- [~] Task: Service Reliability - Error Handling
-    - [ ] Subtask: Write unit tests for `agent/supervisor.ts` and `agent/worker.ts`.
-    - [ ] Subtask: Refactor `agent/graph/` nodes to ensure they are pure/testable where possible.
-    - [ ] Subtask: Add error boundary checks in the agent execution loop.
-- [ ] Task: Backend Services Testing
-    - [ ] Subtask: Write integration tests for `services/llm/LLMService.ts` (mocking the API).
-    - [ ] Subtask: Write integration tests for `db/client.ts` to verify data persistence.
-- [ ] Task: Conductor - User Manual Verification 'Testing & Refactoring - Core Services' (Protocol in workflow.md)
-
-## Phase 3: Benchmarking & Performance
-- [x] Task: Establish performance baselines 720ed28
-- [x] Task: Create baseline report 720ed28
-- [x] Task: Develop fixed flow simulation script 720ed28
+## Phase 2: Testing & Refactoring - Core Services [checkpoint: 9e278ea]
+- [x] Task: Agent Service Refactoring & Testing 9e278ea
+- [x] Task: Service Reliability - Error Handling 9e278ea
+- [x] Task: Establish performance baselines 9e278ea
+- [x] Task: Create baseline report 9e278ea
+- [x] Task: Develop fixed flow simulation script 9e278ea
+- [x] Task: Conductor - User Manual Verification 'Core Services & Performance' (Protocol in workflow.md) 9e278ea
