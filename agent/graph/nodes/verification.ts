@@ -1,5 +1,6 @@
 import { NodeHandler } from '../state.js';
 import { withNodeTracing } from './tracing-wrapper.js';
+import { DockerfileValidator } from '../../../services/analysis/DockerfileValidator.js';
 
 const verificationNodeHandler: NodeHandler = async (state, context) => {
     const { config, group, iteration, diagnosis, files } = state;
@@ -16,6 +17,26 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
             if (change.status === 'modified' && change.modified) {
                 log('VERBOSE', `[Verification] Writing ${path}`);
                 await sandbox.writeFile(path, change.modified.content);
+                
+                // 1a. Dockerfile Specific Validation (New!)
+                if (path.toLowerCase().includes('dockerfile')) {
+                    log('INFO', `[Verification] Modified Dockerfile detected: ${path}. Running validation...`);
+                    const dockerValidation = await DockerfileValidator.validate(config, path, sandbox);
+                    if (!dockerValidation.valid) {
+                        const issueSummary = dockerValidation.issues
+                            .map(i => `[${i.level.toUpperCase()}] Line ${i.line || '?'}: ${i.message} (${i.code})`)
+                            .join('\n');
+                        
+                        log('WARN', `[Verification] Dockerfile validation failed:\n${issueSummary}`);
+                        
+                        return {
+                            feedback: [...state.feedback, `Dockerfile Validation Failed for ${path}:\n${issueSummary}`],
+                            iteration: iteration + 1,
+                            currentNode: 'analysis'
+                        };
+                    }
+                    log('SUCCESS', `[Verification] Dockerfile validation passed for ${path}`);
+                }
             }
         }
     }
