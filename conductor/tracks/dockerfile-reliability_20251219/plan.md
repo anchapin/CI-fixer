@@ -21,8 +21,8 @@
 - [x] Task: Verify the agent can successfully recover from a self-introduced Dockerfile syntax error in a simulated environment. 5b28348
 - [x] Task: Conductor - User Manual Verification 'Feedback Loop Integration' (Protocol in workflow.md) ee0fae1
 
-## Phase 4: Integration & Regression Testing
+## Phase 4: Integration & Regression Testing [checkpoint: 5a116ac]
 - [x] Task: Create an integration test suite using a mock failing Dockerfile (similar to the modporter-ai failure). 35bdcd0
 - [x] Task: Verify the agent fixes the Dockerfile without introducing new syntax errors. 35bdcd0
 - [x] Task: Perform a final end-to-end check of the entire Dockerfile repair flow. 35bdcd0
-- [ ] Task: Conductor - User Manual Verification 'Integration & Regression Testing' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Integration & Regression Testing' (Protocol in workflow.md) 5a116ac
