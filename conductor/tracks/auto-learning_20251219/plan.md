@@ -2,7 +2,7 @@
 
 ## Phase 1: Foundation & Data Ingestion Pipeline
 - [x] Task: Define database schema for ingestion data (logs, fixes, metrics) in `schema.prisma` 22b14c0
-- [ ] Task: Implement `DataIngestionService` with support for file-based logs (benchmark logs)
+- [x] Task: Implement `DataIngestionService` with support for file-based logs (benchmark logs) 71ed9f3
 - [ ] Task: Implement ingestion for live CI execution data and artifacts
 - [ ] Task: Implement parser for historical fix patterns (extracting diffs and context)
 - [ ] Task: Integrate external dataset (SWE-bench) ingestion utility
