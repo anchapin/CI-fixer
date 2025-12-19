@@ -21,6 +21,7 @@ model AgentRun {
   errorFacts        ErrorFact[]
   metrics           AgentMetrics[]
   fixAttempts       FixAttempt[]
+  rewardSignals     RewardSignal[]
 }
 
 model FileModification {
@@ -212,4 +213,34 @@ model FixTrajectory {
   
   @@index([errorCategory, complexity])
   @@index([success])
+}
+
+// ============================================================================
+// AUTO-LEARNING & REINFORCEMENT LEARNING
+// ============================================================================
+
+model IngestedData {
+  id        String   @id @default(uuid())
+  source    String   // e.g., "benchmark_log.txt", "SWE-bench"
+  type      String   // "log", "diff", "external"
+  content   String   // actual content or path
+  metadata  String?  // JSON
+  createdAt DateTime @default(now())
+}
+
+model RewardSignal {
+  id        String   @id @default(uuid())
+  runId     String
+  agentRun  AgentRun @relation(fields: [runId], references: [id])
+  outcome   String   // "Pass", "Fail"
+  reward    Float
+  createdAt DateTime @default(now())
+}
+
+model LearningMetric {
+  id         String   @id @default(uuid())
+  metricName String   // "Fix Rate", "False Positive Rate", etc.
+  value      Float
+  timestamp  DateTime @default(now())
+  metadata   String?  // JSON
 }
