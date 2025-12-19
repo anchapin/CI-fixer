@@ -17,6 +17,7 @@ export enum ErrorCategory {
     NETWORK = "network",
     AUTHENTICATION = "authentication",
     DEPENDENCY = "dependency",
+    DEPENDENCY_CONFLICT = "dependency_conflict",
     SYNTAX = "syntax",
     RUNTIME = "runtime",
     BUILD = "build",
@@ -76,6 +77,27 @@ const ERROR_PATTERNS: ErrorPattern[] = [
         ],
         confidence: 0.95,
         suggestedAction: "Ensure Docker service is running or use a runner with Docker support"
+    },
+
+    // Dependency Conflicts (High Confidence)
+    {
+        category: ErrorCategory.DEPENDENCY_CONFLICT,
+        patterns: [
+            /pkg_resources\.ContextualVersionConflict/i,
+            /pydantic\.errors\.PydanticImportError/i,
+            /ImportError:.*cannot import name.*from.*pydantic/i,
+            /ModuleNotFoundError: No module named 'pydantic\.v1'/i,
+            /conflicting dependencies/i,
+            /ResolutionImpossible/i
+        ],
+        confidence: 0.95,
+        suggestedAction: "Check dependency versions and pin compatible versions in pyproject.toml or requirements.txt",
+        extractFiles: (log) => {
+             // Try to extract package names
+             const match = log.match(/Requirement\.parse\('([^']+)'\)/);
+             if (match) return [match[1].split(/[>=<]/)[0]]; // crude extraction
+             return [];
+        }
     },
 
     // HTTP 413 (Artifacts/Network)
@@ -426,6 +448,7 @@ export function getErrorPriority(category: ErrorCategory): number {
         [ErrorCategory.DISK_SPACE]: 10,        // Critical: blocks everything
         [ErrorCategory.AUTHENTICATION]: 9,     // Critical: prevents access
         [ErrorCategory.CONFIGURATION]: 8,      // High: prevents startup
+        [ErrorCategory.DEPENDENCY_CONFLICT]: 8,// High: structural incompatibility
         [ErrorCategory.DEPENDENCY]: 7,         // High: prevents build
         [ErrorCategory.SYNTAX]: 6,             // Medium-high: prevents compilation
         [ErrorCategory.BUILD]: 5,              // Medium: prevents deployment

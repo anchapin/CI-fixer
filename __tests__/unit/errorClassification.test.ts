@@ -439,4 +439,50 @@ This is just random text
             expect(isCascadingError(error2, error1)).toBe(true);
         });
     });
+
+    describe('Dependency Conflict Detection', () => {
+        it('should classify pkg_resources.ContextualVersionConflict', () => {
+            const logs = `
+Traceback (most recent call last):
+  File "/usr/local/bin/crewai", line 5, in <module>
+    from crewai.cli import main
+  File "/usr/local/lib/python3.10/site-packages/crewai/__init__.py", line 5, in <module>
+    from crewai.agent import Agent
+  File "/usr/local/lib/python3.10/site-packages/crewai/agent.py", line 4, in <module>
+    from pydantic import BaseModel, Field, PrivateAttr, root_validator
+  File "/usr/local/lib/python3.10/site-packages/pydantic/__init__.py", line 2, in <module>
+    from . import dataclasses
+  File "/usr/local/lib/python3.10/site-packages/pydantic/dataclasses.py", line 3, in <module>
+    from ._internal import typing_extra
+  File "/usr/local/lib/python3.10/site-packages/pydantic/_internal/typing_extra.py", line 3, in <module>
+    from typing import Annotated, Any, Callable, ForwardRef, Literal, TypeVar, Union
+ImportError: cannot import name 'Annotated' from 'typing' (/usr/local/lib/python3.10/typing.py)
+ERROR: pkg_resources.ContextualVersionConflict: (pydantic 1.10.13 (/usr/local/lib/python3.10/site-packages), Requirement.parse('pydantic>=2.0.0'), {'crewai'})
+`;
+            const result = classifyError(logs);
+            // Casting to any to avoid TS error before implementation
+            expect(result.category).toBe(ErrorCategory.DEPENDENCY_CONFLICT);
+            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+            expect(result.errorMessage).toContain('ContextualVersionConflict');
+        });
+
+        it('should classify Pydantic version mismatch ImportError', () => {
+            const logs = `
+Traceback (most recent call last):
+  File "main.py", line 1, in <module>
+    from crewai import Agent
+  File "/usr/local/lib/python3.10/site-packages/crewai/__init__.py", line 1, in <module>
+    from .agent import Agent
+  File "/usr/local/lib/python3.10/site-packages/crewai/agent.py", line 3, in <module>
+    from pydantic.v1 import BaseModel
+ModuleNotFoundError: No module named 'pydantic.v1'
+`;
+            // This suggests they have Pydantic v1 installed but code tries to use v2 compatibility layer or vice versa
+            // Actually 'pydantic.v1' is available in Pydantic V2 to support V1 code.
+            // If it fails, it means they likely have Pydantic V1 installed which doesn't have .v1 submodule.
+            
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.DEPENDENCY_CONFLICT);
+        });
+    });
 });
