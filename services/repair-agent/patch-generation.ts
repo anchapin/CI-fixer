@@ -7,6 +7,10 @@
 import { AppConfig } from '../../types.js';
 import { unifiedGenerate, safeJsonParse } from '../llm/LLMService.js';
 import { FaultLocation } from './fault-localization.js';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 export interface PatchCandidate {
     id: string;
@@ -15,6 +19,7 @@ export interface PatchCandidate {
     confidence: number;
     strategy: 'direct' | 'conservative' | 'aggressive' | 'alternative';
     reasoning: string;
+    spellingErrors?: string[];
 }
 
 export interface PatchGenerationResult {
@@ -149,13 +154,18 @@ Respond with ONLY the JSON object.`;
     // Post-process patch for common errors
     result.code = postProcessPatch(faultLocation.file, result.code);
 
+    // Spelling check
+    const spellingErrors = checkSpelling(faultLocation.file, result.code);
+    const confidenceAdjustment = calculateSpellingPenalty(spellingErrors.length);
+
     return {
         id: 'direct-' + Date.now(),
         code: result.code,
         description: result.description,
-        confidence: result.confidence,
+        confidence: Math.max(0, result.confidence - confidenceAdjustment),
         strategy: 'direct',
-        reasoning: result.reasoning
+        reasoning: result.reasoning,
+        spellingErrors: spellingErrors.length > 0 ? spellingErrors : undefined
     };
 }
 
@@ -221,13 +231,18 @@ Respond with ONLY the JSON object.`;
     // Post-process patch for common errors
     result.code = postProcessPatch(faultLocation.file, result.code);
 
+    // Spelling check
+    const spellingErrors = checkSpelling(faultLocation.file, result.code);
+    const confidenceAdjustment = calculateSpellingPenalty(spellingErrors.length);
+
     return {
         id: 'conservative-' + Date.now(),
         code: result.code,
         description: result.description,
-        confidence: result.confidence * 0.9, // Slightly lower confidence for more complex changes
+        confidence: Math.max(0, (result.confidence * 0.9) - confidenceAdjustment), // Slightly lower confidence for more complex changes
         strategy: 'conservative',
-        reasoning: result.reasoning
+        reasoning: result.reasoning,
+        spellingErrors: spellingErrors.length > 0 ? spellingErrors : undefined
     };
 }
 
@@ -293,13 +308,18 @@ Respond with ONLY the JSON object.`;
     // Post-process patch for common errors
     result.code = postProcessPatch(faultLocation.file, result.code);
 
+    // Spelling check
+    const spellingErrors = checkSpelling(faultLocation.file, result.code);
+    const confidenceAdjustment = calculateSpellingPenalty(spellingErrors.length);
+
     return {
         id: 'alternative-' + Date.now(),
         code: result.code,
         description: result.description,
-        confidence: result.confidence * 0.85, // Lower confidence for alternative approaches
+        confidence: Math.max(0, (result.confidence * 0.85) - confidenceAdjustment), // Lower confidence for alternative approaches
         strategy: 'alternative',
-        reasoning: result.reasoning
+        reasoning: result.reasoning,
+        spellingErrors: spellingErrors.length > 0 ? spellingErrors : undefined
     };
 }
 
@@ -329,12 +349,145 @@ function postProcessPatch(filename: string, code: string): string {
 }
 
 /**
- * Fixes common typos in shell command flags
+
+ * Checks spelling in the generated code using cspell
+
+ */
+
+function checkSpelling(filename: string, code: string): string[] {
+
+    const ext = path.extname(filename) || '.txt';
+
+    const tempFile = path.resolve(process.cwd(), `temp-spell-check-${Date.now()}${ext}`);
+
+    
+
+    try {
+
+        fs.writeFileSync(tempFile, code);
+
+        
+
+        // Try local cspell first, then npx
+
+        const isWin = process.platform === 'win32';
+
+        const cspellName = isWin ? 'cspell.cmd' : 'cspell';
+
+        const localCspell = path.resolve(process.cwd(), 'node_modules', '.bin', cspellName);
+
+        
+
+        let cmd = "";
+
+        if (fs.existsSync(localCspell)) {
+
+            cmd = `"${localCspell}" "${tempFile}" --no-summary --no-progress`;
+
+        } else {
+
+            cmd = `npx cspell "${tempFile}" --no-summary --no-progress`;
+
+        }
+
+        
+
+        try {
+
+            execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+            return []; // No errors
+
+        } catch (e: any) {
+
+            const output = (e.stdout || "") + "\n" + (e.stderr || "");
+
+            const lines = output.split('\n');
+
+            
+
+            const errors = lines
+
+                .map((l: string) => {
+
+                    const match = l.match(/Unknown word \((.*?)\)/);
+
+                    return match ? match[1] : null;
+
+                })
+
+                .filter((w: string | null): w is string => !!w);
+
+            
+
+            return [...new Set(errors)];
+
+        }
+
+    } catch (e) {
+
+        console.error('[checkSpelling] Error:', e);
+
+        return [];
+
+    } finally {
+
+        if (fs.existsSync(tempFile)) {
+
+            try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
+
+        }
+
+    }
+
+}
+
+
+
+/**
+ * Calculates a confidence penalty based on the number of spelling errors
+ */
+function calculateSpellingPenalty(errorCount: number): number {
+    const THRESHOLD = 3; // Maximum acceptable spelling errors before penalty increases
+    if (errorCount === 0) return 0;
+    if (errorCount <= THRESHOLD) return 0.05; // Minor penalty for few errors
+    return 0.1 + (errorCount - THRESHOLD) * 0.02; // Steeper penalty for more errors
+}
+
+/**
+ * Registry of common shell flag typos and their corrections
+ */
+const SHELL_FLAG_CORRECTIONS = [
+    {
+        // apt-get --no-install-recommends
+        // Handles: --no-installrecommends, --no-install-recommend, --no-installfrrecommends, etc.
+        pattern: /--no-install[- ]*(?:fr)?recom+ends?\b/gi,
+        replacement: '--no-install-recommends'
+    },
+    {
+        // pip --no-cache-dir
+        // Handles: --no-cache, --no-cachedir, --nocache-dir
+        pattern: /--no-?cache(?:-?dir)?\b/gi,
+        replacement: '--no-cache-dir'
+    },
+    {
+        // npm --no-audit
+        pattern: /--noaudit\b/gi,
+        replacement: '--no-audit'
+    }
+];
+
+/**
+ * Fixes common typos in shell command flags using a generic pattern registry
  */
 function cleanShellFlags(code: string): string {
-    // Generic regex for --no-install-recommends typos
-    // Handles variations like: --no-install-recommend, --no-installrecommends, --no-installfrrecommends, --no-install-recomends
-    return code.replace(/--no-install[- ]*(?:fr)?recom+ends?\b/gi, '--no-install-recommends');
+    let processed = code;
+
+    for (const { pattern, replacement } of SHELL_FLAG_CORRECTIONS) {
+        processed = processed.replace(pattern, replacement);
+    }
+
+    return processed;
 }
 
 /**
