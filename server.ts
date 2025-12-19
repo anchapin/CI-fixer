@@ -385,8 +385,8 @@ console.log(files);
 
         // Pipe body
         if (response.body) {
-            // @ts-ignore - Readable.fromWeb matches Response.body but Types might be old
-            const nodeStream = (response.body as any).pipe ? response.body : require('stream').Readable.fromWeb(response.body);
+            // @ts-expect-error - Readable.fromWeb matches Response.body but Types might be old
+            const nodeStream = (response.body as any).pipe ? response.body : (await import('stream')).Readable.fromWeb(response.body as any);
             nodeStream.pipe(res);
         } else {
             res.end();
@@ -394,6 +394,67 @@ console.log(files);
 
     } catch (e: any) {
         console.error('Chat endpoint error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================================
+// PREDICTION API ENDPOINTS
+// ============================================================================
+
+import { findSimilarFixes } from './services/knowledge-base.js';
+
+app.get('/api/prediction/strategy', async (req, res) => {
+    try {
+        const { errorCategory, complexity } = req.query;
+
+        if (!errorCategory) {
+            return res.status(400).json({ error: 'Missing errorCategory' });
+        }
+
+        const recommendation = await defaultServices.learning.getStrategyRecommendation(
+            errorCategory as string,
+            parseInt(complexity as string) || 5
+        );
+
+        res.json(recommendation);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/prediction/fix', async (req, res) => {
+    try {
+        const { logs, errorCategory, affectedFiles } = req.body;
+
+        if (!logs && !errorCategory) {
+            return res.status(400).json({ error: 'Missing logs or errorCategory' });
+        }
+
+        // 1. Classify if logs provided but no category
+        let category = errorCategory;
+        if (logs && !category) {
+            const classified = classifyError(logs);
+            category = classified.category;
+        }
+
+        // 2. Find similar fixes
+        const fixes = await findSimilarFixes({
+            category: category,
+            errorMessage: logs || '',
+            affectedFiles: affectedFiles || [],
+            confidence: 1.0
+        });
+
+        res.json({
+            category,
+            suggestions: fixes.map(f => ({
+                pattern: JSON.parse(f.pattern.fixTemplate),
+                confidence: f.similarity,
+                successCount: f.successCount
+            }))
+        });
+    } catch (e: any) {
         res.status(500).json({ error: e.message });
     }
 });

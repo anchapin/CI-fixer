@@ -1,11 +1,9 @@
-import { GraphState, GraphContext, NodeHandler } from '../state.js';
-import { RewardCalculator } from '../../../services/orchestration/reward-calculator.js';
-import { TrajectoryAnalyzer } from '../../../services/analytics/trajectory-analyzer.js';
+import { NodeHandler } from '../state.js';
 import { withNodeTracing } from './tracing-wrapper.js';
 
 const verificationNodeHandler: NodeHandler = async (state, context) => {
     const { config, group, iteration, diagnosis, files } = state;
-    const { logCallback, sandbox, updateStateCallback, services } = context;
+    const { logCallback, sandbox, services } = context;
     const log = (level: string, msg: string) => logCallback(level as any, msg);
 
     log('INFO', '[VerificationNode] Verifying changes...');
@@ -120,9 +118,6 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
         }
 
         // ToolOrchestra: Calculate and record reward
-        const rewardCalc = new RewardCalculator();
-        const trajectoryAnalyzer = new TrajectoryAnalyzer(context.dbClient);
-
         const diffSize = Object.values(files).reduce((sum, f) => {
             if (!f.modified || !f.original) return sum;
             const origLines = f.original.content.split('\n').length;
@@ -130,7 +125,7 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
             return sum + Math.abs(modLines - origLines);
         }, 0);
 
-        const metrics = {
+        const runMetrics = {
             success: true,
             llmCost: state.totalCostAccumulated || 0,
             totalLatency: state.totalLatencyAccumulated || 0,
@@ -140,36 +135,27 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
             diffSize
         };
 
-        const reward = rewardCalc.calculateReward(metrics);
-        log('INFO', `[Verification] Reward: ${reward.toFixed(2)}`);
-        log('VERBOSE', rewardCalc.explainReward(metrics));
+        // Use LearningLoopService to record everything
+        const signal = await services.learning.processRunOutcome(
+            group.id,
+            state.classification?.category || 'UNKNOWN',
+            state.problemComplexity || 5,
+            state.selectedTools || [],
+            runMetrics
+        );
 
-        // Record trajectory for learning
-        if (state.selectedTools && state.classification) {
-            await trajectoryAnalyzer.recordTrajectory(
-                state.classification.category,
-                state.problemComplexity || 5,
-                state.selectedTools,
-                true, // success
-                state.totalCostAccumulated || 0,
-                state.totalLatencyAccumulated || 0,
-                reward
-            );
-        }
+        log('INFO', `[Verification] Reward: ${signal.reward.toFixed(2)}`);
 
         return {
             status: 'success',
             currentNode: 'finish',
-            rewardHistory: [...(state.rewardHistory || []), reward]
+            rewardHistory: [...(state.rewardHistory || []), signal.reward]
         };
     } else {
         log('WARN', `Full verification failed: ${testResult.logs.substring(0, 100)}...`);
 
         // ToolOrchestra: Record failed attempt
-        const rewardCalc = new RewardCalculator();
-        const trajectoryAnalyzer = new TrajectoryAnalyzer(context.dbClient);
-
-        const metrics = {
+        const runMetrics = {
             success: false,
             llmCost: state.totalCostAccumulated || 0,
             totalLatency: state.totalLatencyAccumulated || 0,
@@ -178,27 +164,21 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
             toolCallCount: state.selectedTools?.length || 0
         };
 
-        const reward = rewardCalc.calculateReward(metrics);
-        log('INFO', `[Verification] Reward (failed): ${reward.toFixed(2)}`);
+        const signal = await services.learning.processRunOutcome(
+            group.id,
+            state.classification?.category || 'UNKNOWN',
+            state.problemComplexity || 5,
+            state.selectedTools || [],
+            runMetrics
+        );
 
-        // Record failed trajectory
-        if (state.selectedTools && state.classification) {
-            await trajectoryAnalyzer.recordTrajectory(
-                state.classification.category,
-                state.problemComplexity || 5,
-                state.selectedTools,
-                false, // failed
-                state.totalCostAccumulated || 0,
-                state.totalLatencyAccumulated || 0,
-                reward
-            );
-        }
+        log('INFO', `[Verification] Reward (failed): ${signal.reward.toFixed(2)}`);
 
         return {
             feedback: [...state.feedback, `Test Suite Failed:\n${services.context.thinLog(testResult.logs, 200)}`],
             iteration: iteration + 1,
             currentNode: 'analysis', // Loop back
-            rewardHistory: [...(state.rewardHistory || []), reward]
+            rewardHistory: [...(state.rewardHistory || []), signal.reward]
         };
     }
 };

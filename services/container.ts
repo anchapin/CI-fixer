@@ -11,6 +11,8 @@ import * as Complexity from './complexity-estimator.js';
 import * as RepairAgent from './repair-agent/orchestrator.js';
 import * as Metrics from '../telemetry/metrics.js';
 import { DataIngestionService } from './DataIngestionService.js';
+import { LearningLoopService } from './LearningLoopService.js';
+import { LearningMetricService } from './LearningMetricService.js';
 import { db } from '../db/client.js';
 
 export interface ServiceContainer {
@@ -26,6 +28,8 @@ export interface ServiceContainer {
     repairAgent: typeof RepairAgent;
     metrics: typeof Metrics;
     ingestion: DataIngestionService;
+    learning: LearningLoopService;
+    learningMetrics: LearningMetricService;
 }
 
 export const defaultServices: ServiceContainer = {
@@ -40,6 +44,8 @@ export const defaultServices: ServiceContainer = {
     complexity: Complexity,
     repairAgent: RepairAgent,
     metrics: Metrics,
-    ingestion: new DataIngestionService(db)
+    ingestion: new DataIngestionService(db),
+    learning: new LearningLoopService(db),
+    learningMetrics: new LearningMetricService(db)
 };
 

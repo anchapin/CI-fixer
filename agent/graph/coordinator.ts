@@ -247,6 +247,21 @@ export async function runGraphAgent(
             state.classification?.category || 'unknown'
         );
 
+        // Record learning metrics for the dashboard
+        try {
+            await services.learningMetrics.recordMetric(
+                'Fix Rate',
+                state.status === 'success' ? 1.0 : 0.0,
+                {
+                    groupId: group.id,
+                    category: state.classification?.category || 'unknown',
+                    iterations: state.iteration
+                }
+            );
+        } catch {
+            // Ignore metric recording errors
+        }
+
         // Return Final AgentState
         // Map GraphState status to AgentState status
         let agentStatus: 'idle' | 'working' | 'waiting' | 'success' | 'failed';

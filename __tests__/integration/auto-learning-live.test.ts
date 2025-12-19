@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { runGraphAgent } from '../../agent/graph/coordinator.js';
 import { TestDatabaseManager } from '../helpers/test-database.js';
 import { PrismaClient } from '@prisma/client';
-import { AppConfig, RunGroup, AgentPhase } from '../../types.js';
+import { AppConfig, RunGroup } from '../../types.js';
 import { ServiceContainer, defaultServices } from '../../services/container.js';
 import { DataIngestionService } from '../../services/DataIngestionService.js';
+import { LearningLoopService } from '../../services/LearningLoopService.js';
+import { LearningMetricService } from '../../services/LearningMetricService.js';
 
 describe('Auto-Learning Live Ingestion Integration', () => {
     let testDbManager: TestDatabaseManager;
@@ -18,7 +20,9 @@ describe('Auto-Learning Live Ingestion Integration', () => {
         // Setup services with the test DB
         services = {
             ...defaultServices,
-            ingestion: new DataIngestionService(testDb)
+            ingestion: new DataIngestionService(testDb),
+            learning: new LearningLoopService(testDb),
+            learningMetrics: new LearningMetricService(testDb)
         };
     });
 
@@ -115,5 +119,38 @@ describe('Auto-Learning Live Ingestion Integration', () => {
 
         expect(artifactIngested.length).toBe(1);
         expect(artifactIngested[0].content).toBe('updated content');
+    });
+
+    it('should recommend a previously successful strategy for similar errors', async () => {
+        const category = 'LEARNED_CAT';
+        const complexity = 5;
+        const tools = ['ls', 'edit'];
+        const runId = 'run-1';
+
+        // Create dummy AgentRun first (foreign key requirement)
+        await testDb.agentRun.create({
+            data: {
+                id: runId,
+                groupId: 'G1',
+                status: 'success',
+                state: '{}'
+            }
+        });
+
+        // 1. Record a successful run outcome directly
+        await services.learning.processRunOutcome(runId, category, complexity, tools, {
+            success: true,
+            llmCost: 0.01,
+            totalLatency: 1000,
+            llmTokensInput: 100,
+            llmTokensOutput: 50,
+            toolCallCount: 2
+        });
+
+        // 2. Ask for a recommendation for the same category
+        const recommendation = await services.learning.getStrategyRecommendation(category, complexity);
+
+        expect(recommendation.preferredTools).toEqual(tools);
+        expect(recommendation.historicalStats?.successRate).toBe(1.0);
     });
 });

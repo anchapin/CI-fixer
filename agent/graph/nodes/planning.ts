@@ -1,16 +1,13 @@
 import { NodeHandler } from '../types.js';
 import { extractFileOutline } from '../../../services/analysis/CodeAnalysisService.js';
-import { loadFeatureFlags } from '../../../config/feature-flags.js';
-import { getEnhancedKB } from '../../../services/knowledge-base/enhanced-kb.js';
-import { getNextNode, isDAGComplete, describeDAGPlan } from '../../../services/dag-executor.js';
+import { getNextNode, isDAGComplete } from '../../../services/dag-executor.js';
 import { ToolOrchestrator } from '../../../services/orchestration/tool-selector.js';
 import { AdaptiveModelSelector } from '../../../services/llm/model-selector.js';
 import { PreferencesManager } from '../../../services/preferences/repository-preferences.js';
-import { TrajectoryAnalyzer } from '../../../services/analytics/trajectory-analyzer.js';
 import { withNodeTracing } from './tracing-wrapper.js'; // Retained as it's used below
 
 const planningNodeHandler: NodeHandler = async (state, context) => {
-    const { config, group, diagnosis: initialDiagnosis, classification, errorDAG, solvedNodes } = state;
+    const { config, diagnosis: initialDiagnosis, classification, errorDAG, solvedNodes } = state;
     let diagnosis = initialDiagnosis;
     const { logCallback, sandbox, services, dbClient } = context;
 
@@ -20,7 +17,6 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
     const orchestrator = new ToolOrchestrator();
     const modelSelector = new AdaptiveModelSelector();
     const prefsManager = new PreferencesManager(dbClient);
-    const trajectoryAnalyzer = new TrajectoryAnalyzer(dbClient);
 
     // Initialize budget if not set (default: $1.00 per fix attempt)
     const budgetRemaining = state.budgetRemaining ?? 1.0;
@@ -32,19 +28,25 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
     let selectedModel = state.selectedModel;
 
     if (diagnosis && !selectedTools) {
-        // Get user preferences
-        const preferences = await prefsManager.getPreferences(config.repoUrl);
-
-        // Check for historical optimal path
-        const optimalPath = await trajectoryAnalyzer.findOptimalPath(
+        // Get learned recommendation
+        const recommendation = await services.learning.getStrategyRecommendation(
             classification?.category || 'UNKNOWN',
             state.problemComplexity || 5
         );
 
-        if (optimalPath) {
-            log('INFO', `[Planning] Using learned optimal path: ${optimalPath.join(' → ')}`);
-            selectedTools = optimalPath;
+        const successRate = recommendation.historicalStats?.successRate || 0;
+        const confidenceThreshold = 0.5; // Require at least 50% historical success
+
+        if (recommendation.preferredTools && successRate >= confidenceThreshold) {
+            log('INFO', `[Planning] Using learned optimal path (Confidence: ${(successRate * 100).toFixed(0)}%): ${recommendation.preferredTools.join(' → ')}`);
+            selectedTools = recommendation.preferredTools;
         } else {
+            if (recommendation.preferredTools) {
+                log('WARN', `[Planning] Learned path found but confidence too low (${(successRate * 100).toFixed(0)}%). Falling back to standard orchestration.`);
+            }
+            // Get user preferences
+            const preferences = await prefsManager.getPreferences(config.repoUrl);
+
             // Select tools based on error characteristics
             selectedTools = orchestrator.selectOptimalTools(diagnosis, {
                 errorCategory: classification?.category || 'UNKNOWN',
@@ -59,13 +61,12 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
         log('INFO', `[Planning] Selected tools: ${selectedTools.join(', ')}`);
 
         // Select optimal model
-        const stats = await trajectoryAnalyzer.getStats(classification?.category || 'UNKNOWN');
         selectedModel = config.llmModel || modelSelector.selectModel({
             complexity: state.problemComplexity || 5,
             category: classification?.category || 'UNKNOWN',
             attemptNumber: state.iteration,
             remainingBudget: budgetRemaining,
-            historicalSuccessRate: stats?.successRate
+            historicalSuccessRate: recommendation.historicalStats?.successRate
         });
 
         log('INFO', `[Planning] Selected model: ${selectedModel}`);
