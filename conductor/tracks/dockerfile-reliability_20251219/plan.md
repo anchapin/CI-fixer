@@ -22,7 +22,7 @@
 - [x] Task: Conductor - User Manual Verification 'Feedback Loop Integration' (Protocol in workflow.md) ee0fae1
 
 ## Phase 4: Integration & Regression Testing
-- [ ] Task: Create an integration test suite using a mock failing Dockerfile (similar to the modporter-ai failure).
-- [ ] Task: Verify the agent fixes the Dockerfile without introducing new syntax errors.
+- [x] Task: Create an integration test suite using a mock failing Dockerfile (similar to the modporter-ai failure). 35bdcd0
+- [x] Task: Verify the agent fixes the Dockerfile without introducing new syntax errors. 35bdcd0
 - [ ] Task: Perform a final end-to-end check of the entire Dockerfile repair flow.
 - [ ] Task: Conductor - User Manual Verification 'Integration & Regression Testing' (Protocol in workflow.md)
