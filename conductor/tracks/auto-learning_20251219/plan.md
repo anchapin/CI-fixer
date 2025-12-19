@@ -5,7 +5,7 @@
 - [x] Task: Implement `DataIngestionService` with support for file-based logs (benchmark logs) 71ed9f3
 - [x] Task: Implement ingestion for live CI execution data and artifacts d147062
 - [x] Task: Implement parser for historical fix patterns (extracting diffs and context) 08adca2
-- [ ] Task: Integrate external dataset (SWE-bench) ingestion utility
+- [x] Task: Integrate external dataset (SWE-bench) ingestion utility a6f9928
 - [ ] Task: Conductor - User Manual Verification 'Foundation & Data Ingestion Pipeline' (Protocol in workflow.md)
 
 ## Phase 2: Reinforcement Learning Module
