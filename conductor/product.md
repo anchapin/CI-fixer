@@ -21,3 +21,5 @@ CI-Fixer aims to be the definitive tool for autonomous DevOps, transforming how 
 - **Self-Healing:** Autonomously generates, applies, and verifies code fixes, closing the loop on CI failures.
 - **Reinforcement Learning Loop:** Implements adaptive learning algorithms that incorporate reinforcement learning from CI outcomes to refine patch generation.
 - **Model Fine-Tuning:** continuously fine-tunes underlying models on diverse bug-fixing scenarios (including SWE-bench) to improve accuracy and minimize false positives.
+- **Auto-Learning Pipeline:** Integrated data ingestion and model training pipeline that automatically processes CI results to improve future fix predictions.
+- **Performance Dashboard:** Real-time monitoring of agent performance, success rates, and learning progress.
