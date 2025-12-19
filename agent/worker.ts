@@ -47,7 +47,7 @@ export async function runWorkerTask(
 ): Promise<AgentState> {
 
     const MAX_ITERATIONS = 5;
-    let currentState: AgentState = {
+    const currentState: AgentState = {
         groupId: group.id,
         name: group.name,
         phase: AgentPhase.IDLE,
@@ -73,7 +73,7 @@ export async function runWorkerTask(
         log('INFO', `[Worker] Starting analysis for workflow: ${group.name}`);
 
         // Initial Log Retrieval
-        let { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, 'standard');
+        const { logText, headSha } = await getWorkflowLogs(config.repoUrl, group.runIds[0], config.githubToken, 'standard');
 
         // [STAGE 3] Context Thinning: Prevent massive logs from overflowing context
         logText = thinLog(logText, 300); // Keep max 300 lines

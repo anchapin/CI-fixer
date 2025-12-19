@@ -12,6 +12,8 @@ interface AgentStatusProps {
 }
 
 export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPhase, selectedAgentId, onSelectAgent }) => {
+    const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
+
     const steps = [
         { id: AgentPhase.UNDERSTAND, label: 'Scan', icon: Search },
         { id: AgentPhase.REPRODUCE, label: 'Repro', icon: Repeat },
@@ -36,8 +38,6 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
             </div>
         );
     }
-
-    const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
 
     const toggleExpand = (agentId: string) => {
         setExpandedAgents(prev => {

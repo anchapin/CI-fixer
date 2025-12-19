@@ -381,7 +381,7 @@ export async function toolLSPDefinition(config: AppConfig, file: string, line: n
 
 export async function toolLSPReferences(config: AppConfig, file: string, line: number, symbol: string, sandbox?: SandboxEnvironment): Promise<string[]> {
     if (sandbox) {
-        const cmd = `grep -r "${symbol}" . --include=\*.{ts,tsx,js,py,go}`;
+        const cmd = `grep -r "${symbol}" . --include=*.{ts,tsx,js,py,go}`;
         const res = await runDevShellCommand(config, cmd, sandbox);
         if (res.exitCode === 0) {
             return res.output.split('\n').slice(0, 10);

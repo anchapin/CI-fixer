@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
               console.error('[Proxy Error]', err);
             });
             proxy.on('proxyReq', (proxyReq, req, _res) => {
-              const match = req.url?.match(/^\/api\/sandbox_exec\/([^\/]+)\/(.*)/);
+              const match = req.url?.match(/^\/api\/sandbox_exec\/([^/]+)\/(.*)/);
               if (match) {
                 const targetHost = match[1];
                 const newPath = '/' + match[2];
@@ -55,7 +55,7 @@ export default defineConfig(({ mode }) => {
           },
           // router handles finding the correct target host
           router: (req) => {
-            const matches = req.url?.match(/^\/api\/sandbox_exec\/([^\/]+)/);
+            const matches = req.url?.match(/^\/api\/sandbox_exec\/([^/]+)/);
             return matches ? 'https://' + matches[1] : 'https://api.e2b.dev';
           }
         }

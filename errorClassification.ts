@@ -403,8 +403,8 @@ function extractCascadingErrors(lines: string[], rootCause: string): string[] {
  */
 function cleanErrorMessage(message: string): string {
     return message
-        // Remove ANSI color codes
-        .replace(/\x1b\[[0-9;]*m/g, '')
+        // eslint-disable-next-line no-control-regex
+        .replace(/\u001b\[[0-9;]*m/g, '')
         // Remove timestamps
         .replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?Z?\s*/g, '')
         // Remove log level prefixes

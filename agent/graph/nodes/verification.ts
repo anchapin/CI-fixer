@@ -50,7 +50,7 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
     // runSandboxTest takes a single FileChange. We might need to adapt it.
     // For now, stick to the main active file.
     // 3. Full Suite Verification
-    let mainChange = Object.values(files)[0];
+    const mainChange = Object.values(files)[0];
 
     if (!mainChange) {
         // For command-based fixes, no file modifications is expected behavior

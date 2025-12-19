@@ -5,7 +5,7 @@
     - [ ] Subtask: Review and update `vitest.config.ts` to ensure comprehensive coverage collection.
     - [ ] Subtask: Verify `playwright.config.ts` matches the current project structure.
     - [ ] Subtask: Create a `test:ci` script in `package.json` that runs all tests and lints.
-- [ ] Task: Enforce Code Style & Linting
+- [~] Task: Enforce Code Style & Linting
     - [ ] Subtask: Update `.eslintrc` (or eslint config) to enforce stricter TypeScript rules (no implicit any).
     - [ ] Subtask: Add `husky` and `lint-staged` (if not present) to enforce pre-commit checks.
 - [ ] Task: Conductor - User Manual Verification 'Quality Infrastructure Setup' (Protocol in workflow.md)

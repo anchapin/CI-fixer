@@ -459,7 +459,9 @@ describe('Agent Loop Integration', () => {
     const e2bConfig: AppConfig = { ...mockConfig, devEnv: 'e2b', e2bApiKey: 'key' };
     try {
       await runIndependentAgentLoop(e2bConfig, mockGroup, "", testServices, updateStateCallback, logCallback);
-    } catch { }
+    } catch {
+      // Expected to fail in this test case
+    }
 
     expect(mockKill).toHaveBeenCalled();
   });

@@ -217,8 +217,8 @@ export async function smartThinLog(content: string, maxLines: number = 300): Pro
     for (const idx of interestingIndices) {
         if (blocksAdded >= maxErrorBlocks) break;
 
-        let start = Math.max(0, idx - contextWindow);
-        let end = Math.min(lines.length - 1, idx + contextWindow);
+        const start = Math.max(0, idx - contextWindow);
+        const end = Math.min(lines.length - 1, idx + contextWindow);
 
         for (let i = start; i <= end; i++) keptIndices.add(i);
         blocksAdded++;

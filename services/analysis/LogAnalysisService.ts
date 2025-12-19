@@ -15,7 +15,9 @@ function logTrace(msg: string) {
     try {
         const truncated = msg.length > 500 ? msg.substring(0, 500) + '... [truncated]' : msg;
         fs.appendFileSync('debug_trace.txt', truncated + '\n');
-    } catch { }
+    } catch {
+        // Ignore trace logging errors
+    }
 }
 
 export interface DiagnosisResult {
@@ -252,13 +254,17 @@ export async function generateRepoSummary(config: AppConfig, sandbox?: SandboxEn
         try {
             const readmeRes = await runDevShellCommand(config, "cat README.md", sandbox);
             if (readmeRes.exitCode === 0) readme = readmeRes.output.slice(0, 2000);
-        } catch { }
+        } catch (e) {
+            // Ignore readme read errors
+        }
 
         let configFiles = "";
         try {
             const pkgRes = await runDevShellCommand(config, "cat package.json", sandbox);
             if (pkgRes.exitCode === 0) configFiles += `\n=== package.json ===\n${pkgRes.output}`;
-        } catch { }
+        } catch (e) {
+            // Ignore package.json read errors
+        }
 
         return `
     Repository Structure:
@@ -314,7 +320,7 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
 
     const prompt = contextManager.compile();
 
-    let segments: string[] = [];
+    const segments: string[] = [];
     let res = await unifiedGenerate(config, {
         contents: prompt,
         model: MODEL_SMART,
@@ -338,7 +344,7 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
 
     let fullCode = "";
     segments.forEach((seg) => {
-        let clean = seg.trim().replace(/^```[\w]*\s*/, '').replace(/\s*```$/, '');
+        const clean = seg.trim().replace(/^```[\w]*\s*/, '').replace(/\s*```$/, '');
         fullCode += clean;
     });
 

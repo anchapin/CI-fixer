@@ -8,7 +8,7 @@ describe('Robustness Improvements', () => {
         repoUrl: 'mock/repo',
         githubToken: 'mock_token',
         llmProvider: 'google',
-        // @ts-ignore
+        // @ts-expect-error - Testing invalid input
         devEnv: 'simulation'
     };
 

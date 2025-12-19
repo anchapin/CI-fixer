@@ -135,7 +135,7 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
 
     // 1. Resource Acquisition (Find File)
     let targetFile: { file: any, path: string } | null = null;
-    let fileReservations: string[] = [];
+    const fileReservations: string[] = [];
 
     if (diagnosis.fixAction === 'edit' || diagnosis.fixAction === 'create') {
         const filePath = diagnosis.filePath;
@@ -147,7 +147,9 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
             try {
                 // If we had a way to check GH existence cheaply, do it here.
                 // For now, rely on findClosestFile which checks repo content and sandbox
-            } catch (e) { }
+            } catch (e) {
+                // Ignore existence check errors
+            }
 
             // Retrieve target file
             targetFile = await services.github.findClosestFile(config, filePath, sandbox);

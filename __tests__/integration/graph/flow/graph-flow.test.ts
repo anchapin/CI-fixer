@@ -226,7 +226,7 @@ describe('Graph State Machine Flow Tests', () => {
         });
 
         it('should fail after max iterations', async () => {
-            let state = new GraphStateBuilder()
+            const state = new GraphStateBuilder()
                 .withLogText('Persistent error')
                 .atNode('analysis')
                 .atIteration(3)

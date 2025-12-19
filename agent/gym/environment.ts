@@ -50,7 +50,7 @@ export class CIFixerEnv {
         this.currentStep++;
         let reward = -0.1; // Step cost
         let done = false;
-        let info: Record<string, any> = {};
+        const info: Record<string, any> = {};
         let lastLog = "";
 
         // Execute Action

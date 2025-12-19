@@ -157,7 +157,7 @@ describe('Telemetry Config', () => {
             expect(sigtermCall).toBeDefined();
 
             if (sigtermCall) {
-                const handler = sigtermCall[1] as Function;
+                const handler = sigtermCall[1] as () => void;
                 handler();
                 await new Promise(resolve => setTimeout(resolve, 10)); // Allow promise chain to complete
 

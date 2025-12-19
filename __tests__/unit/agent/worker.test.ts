@@ -117,7 +117,7 @@ describe('runWorkerTask', () => {
         mockConfig = {
             githubToken: 'test-token',
             repoUrl: 'owner/repo',
-            // @ts-ignore
+            // @ts-expect-error - Testing protected/private method or invalid args
             redisUrl: 'redis://localhost:6379',
             openaiApiKey: 'test-key',
         };
@@ -127,7 +127,7 @@ describe('runWorkerTask', () => {
             name: 'Test Group',
             runIds: [123],
             mainRun: { head_sha: 'sha123' } as any,
-            // @ts-ignore
+            // @ts-expect-error - Testing protected/private method or invalid args
             fileReservations: [],
         };
 

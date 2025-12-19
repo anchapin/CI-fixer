@@ -73,7 +73,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
     const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const provider = e.target.value;
-        let updates: Partial<AppConfig> = { llmProvider: provider };
+        const updates: Partial<AppConfig> = { llmProvider: provider };
 
         if (provider === 'zai') {
             updates.llmBaseUrl = 'https://api.z.ai/api/coding/paas/v4';
@@ -105,7 +105,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             return;
         }
 
-        const match = formData.prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+        const match = formData.prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
         if (!match) {
             setValidationError("Invalid PR URL format. Use https://github.com/owner/repo/pull/123");
             return;
@@ -199,7 +199,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         if (!formData.selectedRuns || formData.selectedRuns.length === 0) { setValidationError("Please select at least one failed run to fix."); return; }
 
         if (!formData.repoUrl && formData.prUrl) {
-            const match = formData.prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+            const match = formData.prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
             if (match) {
                 const [_, owner, repo] = match;
                 formData.repoUrl = `${owner}/${repo}`;
@@ -618,7 +618,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
                     {foundRuns.length === 0 && !isLoadingRuns && formData.prUrl && !validationError && (
                         <div className="text-center text-slate-600 text-xs italic py-4">
-                            No failed runs loaded. Click "Load Failed Runs" to fetch.
+                            {'No failed runs loaded. Click "Load Failed Runs" to fetch.'}
                         </div>
                     )}
 

@@ -200,7 +200,7 @@ export async function iterativeRefinement(
 ): Promise<{ finalPatch: PatchCandidate; validationResult: ValidationResult; iterations: number }> {
 
     let currentPatch = initialPatch;
-    let feedbackHistory: FeedbackEntry[] = [];
+    const feedbackHistory: FeedbackEntry[] = [];
     let validationResult: ValidationResult;
 
     for (let i = 0; i < maxIterations; i++) {

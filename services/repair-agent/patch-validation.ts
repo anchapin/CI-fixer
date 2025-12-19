@@ -181,7 +181,7 @@ async function runStaticAnalysis(
 
     const errors: string[] = [];
     let lintErrors = 0;
-    let typeErrors = 0;
+    const typeErrors = 0;
 
     try {
         // Run ESLint
