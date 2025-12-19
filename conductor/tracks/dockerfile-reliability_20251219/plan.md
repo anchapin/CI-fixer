@@ -10,9 +10,9 @@
 
 ## Phase 2: Sandbox & Validation Tooling
 - [x] Task: Update `services/sandbox/SandboxService.ts` to ensure `hadolint` is installed during sandbox initialization. 74535f5
-- [ ] Task: Write unit tests for a new `DockerfileValidator` service or utility.
-- [ ] Task: Implement `DockerfileValidator` that executes `hadolint` and `docker build` (parsability check).
-- [ ] Task: Integrate `DockerfileValidator` into the agent's verification workflow (likely in `services/repair-agent/` or a graph node).
+- [x] Task: Write unit tests for a new `DockerfileValidator` service or utility. 3b6253b
+- [x] Task: Implement `DockerfileValidator` that executes `hadolint` and `docker build` (parsability check). 3b6253b
+- [~] Task: Integrate `DockerfileValidator` into the agent's verification workflow (likely in `services/repair-agent/` or a graph node).
 - [ ] Task: Conductor - User Manual Verification 'Sandbox & Validation Tooling' (Protocol in workflow.md)
 
 ## Phase 3: Feedback Loop Integration
