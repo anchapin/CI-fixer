@@ -17,8 +17,8 @@
 
 ## Phase 3: Feedback Loop Integration
 - [x] Task: Write tests to ensure validation failures (from Hadolint/Docker) are correctly formatted for agent consumption. 428ff00
-- [~] Task: Update the agent's feedback logic to present syntax errors back to the LLM for iterative correction.
-- [ ] Task: Verify the agent can successfully recover from a self-introduced Dockerfile syntax error in a simulated environment.
+- [x] Task: Update the agent's feedback logic to present syntax errors back to the LLM for iterative correction. ed28e2c
+- [~] Task: Verify the agent can successfully recover from a self-introduced Dockerfile syntax error in a simulated environment.
 - [ ] Task: Conductor - User Manual Verification 'Feedback Loop Integration' (Protocol in workflow.md)
 
 ## Phase 4: Integration & Regression Testing
