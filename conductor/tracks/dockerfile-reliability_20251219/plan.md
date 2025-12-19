@@ -15,11 +15,11 @@
 - [x] Task: Integrate `DockerfileValidator` into the agent's verification workflow (likely in `services/repair-agent/` or a graph node). 99c6df6
 - [x] Task: Conductor - User Manual Verification 'Sandbox & Validation Tooling' (Protocol in workflow.md) 6882aaf
 
-## Phase 3: Feedback Loop Integration
+## Phase 3: Feedback Loop Integration [checkpoint: ee0fae1]
 - [x] Task: Write tests to ensure validation failures (from Hadolint/Docker) are correctly formatted for agent consumption. 428ff00
 - [x] Task: Update the agent's feedback logic to present syntax errors back to the LLM for iterative correction. ed28e2c
 - [x] Task: Verify the agent can successfully recover from a self-introduced Dockerfile syntax error in a simulated environment. 5b28348
-- [ ] Task: Conductor - User Manual Verification 'Feedback Loop Integration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Feedback Loop Integration' (Protocol in workflow.md) ee0fae1
 
 ## Phase 4: Integration & Regression Testing
 - [ ] Task: Create an integration test suite using a mock failing Dockerfile (similar to the modporter-ai failure).
