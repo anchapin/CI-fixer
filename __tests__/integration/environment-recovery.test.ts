@@ -19,7 +19,8 @@ vi.mock('../../services/analysis/LogAnalysisService.js', () => ({
     generateFix: vi.fn(),
     judgeFix: vi.fn(),
     runSandboxTest: vi.fn(),
-    generateRepoSummary: vi.fn()
+    generateRepoSummary: vi.fn(),
+    refineProblemStatement: vi.fn().mockImplementation((config, diag) => Promise.resolve(diag.summary))
 }));
 vi.mock('../../services/github/GitHubService', () => ({
     getWorkflowLogs: vi.fn(),
@@ -172,5 +173,20 @@ describe('Environment Recovery Integration', () => {
         expect(testServices.environment.refreshDependencies).toHaveBeenCalled();
         expect(testServices.environment.killDanglingProcesses).toHaveBeenCalled();
         expect(LogAnalysisService.runSandboxTest).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not trigger stabilization on a standard single test failure', async () => {
+        // Run fails with standard error consistently
+        vi.mocked(LogAnalysisService.runSandboxTest).mockResolvedValue({ 
+            passed: false, 
+            logs: 'AssertionError: expected 1 to be 2' 
+        });
+
+        const result = await runIndependentAgentLoop(config, group, 'ctx', testServices as any, mockUpdateState, mockLog);
+
+        // It should eventually fail after max iterations
+        expect(result.status).toBe('failed');
+        expect(result.message).toContain('Max iterations reached');
+        expect(testServices.environment.refreshDependencies).not.toHaveBeenCalled();
     });
 });
