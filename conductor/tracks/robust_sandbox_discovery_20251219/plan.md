@@ -13,7 +13,7 @@ This plan details the steps to enhance the ci-fixer agent's file discovery and v
 ## Phase 2: Candidate Verification & Build Validation
 *Goal: Ensure discovered candidates are valid for the target build step.*
 
-- [ ] Task: Write failing tests for candidate verification (content analysis and dry-run) in `__tests__/unit/file-verification.test.ts`.
+- [~] Task: Write failing tests for candidate verification (content analysis and dry-run) in `__tests__/unit/file-verification.test.ts`.
 - [ ] Task: Implement content-based verification (e.g., checking if a requirements file contains dependency declarations).
 - [ ] Task: Implement "dry-run" build validation logic to test candidates in the sandbox before proposing changes.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
