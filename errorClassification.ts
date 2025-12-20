@@ -24,6 +24,9 @@ export enum ErrorCategory {
     TEST_FAILURE = "test_failure",
     TIMEOUT = "timeout",
     CONFIGURATION = "configuration",
+    PATCH_PACKAGE_FAILURE = "patch_package_failure",
+    MSW_ERROR = "msw_error",
+    ENVIRONMENT_UNSTABLE = "environment_unstable",
     UNKNOWN = "unknown"
 }
 
@@ -65,6 +68,33 @@ const ERROR_PATTERNS: ErrorPattern[] = [
         ],
         confidence: 0.95,
         suggestedAction: "Add cleanup step before build (e.g., 'docker system prune -af')"
+    },
+
+    // Patch-package Failures
+    {
+        category: ErrorCategory.PATCH_PACKAGE_FAILURE,
+        patterns: [
+            /patch-package/i,
+            /failed to apply patch/i,
+            /checksum mismatch/i,
+            /patch file is out of date/i
+        ],
+        confidence: 0.95,
+        suggestedAction: "Regenerate patches using 'npx patch-package <package>'"
+    },
+
+    // MSW Errors
+    {
+        category: ErrorCategory.MSW_ERROR,
+        patterns: [
+            /msw/i,
+            /mock service worker/i,
+            /failed to intercept/i,
+            /unhandled request/i,
+            /worker\.start.*failed/i
+        ],
+        confidence: 0.95,
+        suggestedAction: "Check MSW setup or clear node_modules and reinstall"
     },
 
     // Docker Daemon Errors
@@ -285,6 +315,18 @@ const ERROR_PATTERNS: ErrorPattern[] = [
         }
     },
 
+    // Environment Unstable (Mass Failures)
+    {
+        category: ErrorCategory.ENVIRONMENT_UNSTABLE,
+        patterns: [
+            /too many errors/i,
+            /exhausted.*retries/i,
+            /corrupted.*node_modules/i
+        ],
+        confidence: 0.8,
+        suggestedAction: "Clear cache and reinstall all dependencies"
+    },
+
     // Configuration Errors
     {
         category: ErrorCategory.CONFIGURATION,
@@ -387,6 +429,22 @@ export function classifyError(logs: string): ClassifiedError {
     // Clean and format error message
     const errorMessage = cleanErrorMessage(rootCauseLog);
 
+    // Mass failure detection (Stage 1)
+    const failureCountMatch = logs.match(/(\d+) (?:failing|failed|×|✖)/gi);
+    if (failureCountMatch) {
+        // Extract numbers and sum them
+        const totalFailures = failureCountMatch.reduce((sum, match) => {
+            const num = parseInt(match.match(/\d+/)?.[0] || '0');
+            return sum + num;
+        }, 0);
+
+        if (totalFailures > 20) { // Threshold for "mass failure"
+            category = ErrorCategory.ENVIRONMENT_UNSTABLE;
+            confidence = 0.85;
+            suggestedAction = "Detected mass test failures. This often indicates a broken environment rather than code bugs.";
+        }
+    }
+
     return {
         category,
         confidence,
@@ -449,6 +507,9 @@ export function getErrorPriority(category: ErrorCategory): number {
         [ErrorCategory.AUTHENTICATION]: 9,     // Critical: prevents access
         [ErrorCategory.CONFIGURATION]: 8,      // High: prevents startup
         [ErrorCategory.DEPENDENCY_CONFLICT]: 8,// High: structural incompatibility
+        [ErrorCategory.ENVIRONMENT_UNSTABLE]: 8, // High: broken environment
+        [ErrorCategory.PATCH_PACKAGE_FAILURE]: 8, // High: broken patches
+        [ErrorCategory.MSW_ERROR]: 7,          // High: broken mocks
         [ErrorCategory.DEPENDENCY]: 7,         // High: prevents build
         [ErrorCategory.SYNTAX]: 6,             // Medium-high: prevents compilation
         [ErrorCategory.BUILD]: 5,              // Medium: prevents deployment

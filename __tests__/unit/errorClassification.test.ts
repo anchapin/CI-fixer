@@ -485,4 +485,39 @@ ModuleNotFoundError: No module named 'pydantic.v1'
             expect(result.category).toBe(ErrorCategory.DEPENDENCY_CONFLICT);
         });
     });
+
+    describe('Environmental Error Detection', () => {
+        it('should classify patch-package failure', () => {
+            const logs = `
+error: patch-package: failed to apply patch for @mui/material
+  checksum mismatch: expected abc, got xyz
+`;
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.PATCH_PACKAGE_FAILURE);
+            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+        });
+
+        it('should classify MSW error', () => {
+            const logs = `
+Error: [MSW] Failed to intercept request: connection refused
+    at MockServiceWorker.start
+`;
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.MSW_ERROR);
+            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+        });
+
+        it('should detect mass test failures as environment unstable', () => {
+            const logs = `
+FAIL src/components/Button.test.tsx
+FAIL src/utils/math.test.ts
+FAIL src/hooks/useUser.test.ts
+... (many more)
+Tests: 25 failed, 2 passed, 27 total
+`;
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.ENVIRONMENT_UNSTABLE);
+            expect(result.confidence).toBe(0.85);
+        });
+    });
 });
