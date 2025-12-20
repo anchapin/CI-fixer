@@ -31,6 +31,6 @@ This plan outlines the steps to make the CI-Fixer agent more robust against envi
 ## Phase 4: Integration Testing & Hardening
 *Goal: Ensure end-to-end reliability.*
 
-- [ ] Task: Create an integration test in `__tests__/integration/environment-recovery.test.ts` simulating a corrupted `node_modules` and verifying the agent heals it.
-- [ ] Task: Verify that stabilization does not trigger on valid, fix-related test failures.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md)
+- [x] Task: Create an integration test in `__tests__/integration/environment-recovery.test.ts` simulating a corrupted `node_modules` and verifying the agent heals it. 6135bb8
+- [x] Task: Verify that stabilization does not trigger on valid, fix-related test failures. 6135bb8
+- [x] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md) 6135bb8
