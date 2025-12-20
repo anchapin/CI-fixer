@@ -18,13 +18,13 @@ This plan details the steps to enhance the ci-fixer agent's file discovery and v
 - [x] Task: Implement "dry-run" build validation logic to test candidates in the sandbox before proposing changes). 97ff7b3
 - [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md) 97ff7b3
 
-## Phase 3: Safe Fallback & Placeholder Logic
+## Phase 3: Safe Fallback & Placeholder Logic [checkpoint: 1354daf]
 *Goal: Implement intelligent fallback strategies for definitively missing files.*
 
-- [~] Task: Write failing tests for placeholder generation and stale reference detection in `__tests__/unit/file-fallback.test.ts`.
-- [ ] Task: Implement heuristic-based placeholder generation (e.g., creating empty requirements files).
-- [ ] Task: Implement logic to identify and propose removal of stale references in config files (e.g., Dockerfile).
-- [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
+- [x] Task: Write failing tests for placeholder generation and stale reference detection in `__tests__/unit/file-fallback.test.ts`. 1354daf
+- [x] Task: Implement heuristic-based placeholder generation (e.g., creating empty requirements files). 1354daf
+- [x] Task: Implement logic to identify and propose removal of stale references in config files (e.g., Dockerfile). 1354daf
+- [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md) 1354daf
 
 ## Phase 4: Integration into Agent Flow
 *Goal: Wire the new discovery and validation services into the main agent loop.*
