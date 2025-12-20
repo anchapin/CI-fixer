@@ -13,9 +13,9 @@ This plan outlines the steps to enhance the CI-fixer's ability to handle complex
 ## Phase 2: Contextual Analysis and Fix Generation
 *Goal: Determine the required Pydantic version and generate the appropriate fix.*
 
-- [ ] Task: Write failing tests for `FixPatternService.ts` to verify contextual Pydantic version detection (V1 vs V2 indicators).
-- [ ] Task: Implement `analyzePydanticVersionRequirement` in `FixPatternService.ts` to scan the codebase for `model_dump` (V2) vs `dict()` (V1) etc.
-- [ ] Task: Implement logic to generate `pip install` or file modification fixes (e.g., updating `requirements.txt` or `pyproject.toml`) for pinning the correct version.
+- [x] Task: Write failing tests for `FixPatternService.ts` to verify contextual Pydantic version detection (V1 vs V2 indicators). bb19ba5
+- [x] Task: Implement `analyzePydanticVersionRequirement` in `FixPatternService.ts` to scan the codebase for `model_dump` (V2) vs `dict()` (V1) etc. bb19ba5
+- [x] Task: Implement logic to generate `pip install` or file modification fixes (e.g., updating `requirements.txt` or `pyproject.toml`) for pinning the correct version. bb19ba5
 - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Multi-Error Coordination
