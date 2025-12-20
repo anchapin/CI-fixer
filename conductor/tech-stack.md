@@ -23,6 +23,7 @@
 ## Testing & Quality Assurance
 - **Unit & Integration Testing:** Vitest
 - **End-to-End Testing:** Playwright
+- **Fuzzy Search:** Fuse.js
 - **Linting & Formatting:** ESLint, Prettier
 - **Spell Checking:** CSpell (for generated patches)
 - **Dockerfile Linting:** Hadolint

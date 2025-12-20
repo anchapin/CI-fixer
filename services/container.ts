@@ -16,6 +16,7 @@ import { LearningMetricService } from './LearningMetricService.js';
 import { FileDiscoveryService } from './sandbox/FileDiscoveryService.js';
 import { FileVerificationService } from './sandbox/FileVerificationService.js';
 import { FileFallbackService } from './sandbox/FileFallbackService.js';
+import { EnvironmentService } from './sandbox/EnvironmentService.js';
 import { db } from '../db/client.js';
 
 export interface ServiceContainer {
@@ -24,6 +25,7 @@ export interface ServiceContainer {
     discovery: FileDiscoveryService;
     verification: FileVerificationService;
     fallback: FileFallbackService;
+    environment: EnvironmentService;
     llm: typeof LLM;
     analysis: typeof Analysis;
     context: typeof Context;
@@ -44,6 +46,7 @@ export const defaultServices: ServiceContainer = {
     discovery: new FileDiscoveryService(),
     verification: new FileVerificationService(),
     fallback: new FileFallbackService(),
+    environment: new EnvironmentService(),
     llm: LLM,
     analysis: Analysis,
     context: Context,

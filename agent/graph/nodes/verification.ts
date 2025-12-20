@@ -175,6 +175,55 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
     } else {
         log('WARN', `Full verification failed: ${testResult.logs.substring(0, 100)}...`);
 
+        // STABILIZATION CHECK: Check for environmental issues
+        const errorAnalysis = await services.classification.classifyError(testResult.logs);
+        const isEnvironmental = [
+            'patch_package_failure',
+            'msw_error',
+            'environment_unstable'
+        ].includes(errorAnalysis.category);
+
+        if (isEnvironmental && sandbox) {
+            log('WARN', `[Verification] Detected environmental failure: ${errorAnalysis.category}. Attempting stabilization...`);
+            
+            // 1. Kill dangling processes
+            await services.environment.killDanglingProcesses(config, sandbox);
+            
+            // 2. Refresh dependencies
+            await services.environment.refreshDependencies(config, sandbox);
+            
+            // 3. Repair patches if needed
+            if (errorAnalysis.category === 'patch_package_failure') {
+                await services.environment.repairPatches(config, sandbox);
+            }
+
+            // 4. Retry verification ONCE in the same node execution
+            log('INFO', '[Verification] Environment stabilized. Retrying verification...');
+            const retryResult = await services.analysis.runSandboxTest(
+                config,
+                group,
+                iteration,
+                true,
+                mainChange,
+                diagnosis?.summary || "Fix",
+                logCallback,
+                files,
+                sandbox
+            );
+
+            if (retryResult.passed) {
+                log('SUCCESS', '[Verification] Retry passed after stabilization!');
+                return {
+                    status: 'success',
+                    currentNode: 'finish'
+                };
+            }
+            
+            log('ERROR', '[Verification] Retry failed even after stabilization.');
+            // Fall through to standard failure handling with enhanced feedback
+            testResult.logs = `[POST-STABILIZATION FAILURE]\n${retryResult.logs}`;
+        }
+
         // ToolOrchestra: Record failed attempt
         const runMetrics = {
             success: false,

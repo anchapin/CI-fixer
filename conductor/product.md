@@ -17,7 +17,7 @@ CI-Fixer aims to be the definitive tool for autonomous DevOps, transforming how 
 
 ## Core Features
 - **Sandboxed Reproduction:** Automatically spins up isolated environments to faithfully reproduce CI failures locally or in the cloud.
-- **Automated Root Cause Analysis:** Employs intelligent log parsing and AST-based code analysis to pinpoint the exact source of failures.
+- **Automated Root Cause Analysis:** Employs intelligent log parsing, robust file discovery (including fuzzy search and git history tracking), and AST-based code analysis to pinpoint the exact source of failures.
 - **Self-Healing:** Autonomously generates, applies, and verifies code fixes, closing the loop on CI failures.
 - **Reinforcement Learning Loop:** Implements adaptive learning algorithms that incorporate reinforcement learning from CI outcomes to refine patch generation.
 - **Model Fine-Tuning:** continuously fine-tunes underlying models on diverse bug-fixing scenarios (including SWE-bench) to improve accuracy and minimize false positives.

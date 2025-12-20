@@ -13,20 +13,20 @@ This plan outlines the steps to make the CI-Fixer agent more robust against envi
 ## Phase 2: Stabilization Service Implementation
 *Goal: Create the tools necessary to repair the environment.*
 
-- [ ] Task: Create `services/sandbox/EnvironmentService.ts` to manage environment-level commands.
-- [ ] Task: Implement `refreshDependencies()` to run `pnpm install` and handle lockfile synchronization.
-- [ ] Task: Implement `purgeEnvironment()` to remove `node_modules` and clear package manager caches.
-- [ ] Task: Implement `repairPatches()` to attempt automatic regeneration of `patch-package` files.
-- [ ] Task: Implement `killDanglingProcesses()` to cleanup orphaned test runners or servers.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
+- [x] Task: Create `services/sandbox/EnvironmentService.ts` to manage environment-level commands. edbd621
+- [x] Task: Implement `refreshDependencies()` to run `pnpm install` and handle lockfile synchronization. edbd621
+- [x] Task: Implement `purgeEnvironment()` to remove `node_modules` and clear package manager caches. edbd621
+- [x] Task: Implement `repairPatches()` to attempt automatic regeneration of `patch-package` files. edbd621
+- [x] Task: Implement `killDanglingProcesses()` to cleanup orphaned test runners or servers. edbd621
+- [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md) edbd621
 
 ## Phase 3: Workflow Integration (Verification Node)
 *Goal: Integrate stabilization into the agent's decision-making loop.*
 
-- [ ] Task: Modify the `verification` node in `agent/graph/nodes/verification.ts` to analyze test results for environmental flags.
-- [ ] Task: Implement retry logic within the verification node that triggers stabilization before a second test attempt.
-- [ ] Task: Ensure stabilization actions are logged separately from the primary fix trajectory.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
+- [x] Task: Modify the `verification` node in `agent/graph/nodes/verification.ts` to analyze test results for environmental flags. edbd621
+- [x] Task: Implement retry logic within the verification node that triggers stabilization before a second test attempt. edbd621
+- [x] Task: Ensure stabilization actions are logged separately from the primary fix trajectory. edbd621
+- [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md) edbd621
 
 ## Phase 4: Integration Testing & Hardening
 *Goal: Ensure end-to-end reliability.*

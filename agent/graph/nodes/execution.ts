@@ -51,7 +51,8 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
                                 if (retryRes.exitCode === 0) {
                                     implementationSuccess = true;
                                     // Success path, implicitly continues.
-                                } else {
+                                }
+ else {
                                     log('WARN', `Retry failed: ${retryRes.stderr}`);
                                     return {
                                         feedback: [...state.feedback, `Command Failed (Exit Code ${retryRes.exitCode}) after installing missing tool:\nStdout: ${retryRes.stdout}\nStderr: ${retryRes.stderr}`],
