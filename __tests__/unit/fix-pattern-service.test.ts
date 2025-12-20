@@ -55,4 +55,76 @@ describe('FixPatternService', () => {
 
         expect(pattern2.successCount).toBe(2);
     });
+
+    describe('Pydantic Version Detection', () => {
+        it('should detect Pydantic V2 from model_dump', async () => {
+            const content = `
+from pydantic import BaseModel
+class User(BaseModel):
+    name: str
+user = User(name="test")
+print(user.model_dump())
+`;
+            const version = (service as any).analyzePydanticVersionRequirement(content);
+            expect(version).toBe(2);
+        });
+
+        it('should detect Pydantic V1 from dict() usage', async () => {
+            const content = `
+from pydantic import BaseModel
+class User(BaseModel):
+    name: str
+user = User(name="test")
+print(user.dict())
+`;
+            const version = (service as any).analyzePydanticVersionRequirement(content);
+            expect(version).toBe(1);
+        });
+
+        it('should detect Pydantic V2 from field_validator', async () => {
+            const content = `
+from pydantic import BaseModel, field_validator
+class User(BaseModel):
+    @field_validator('name')
+    @classmethod
+    def check_name(cls, v):
+        return v
+`;
+            const version = (service as any).analyzePydanticVersionRequirement(content);
+            expect(version).toBe(2);
+        });
+
+        it('should detect Pydantic V1 from root_validator', async () => {
+            const content = `
+from pydantic import BaseModel, root_validator
+class User(BaseModel):
+    @root_validator
+    def check_all(cls, values):
+        return values
+`;
+            const version = (service as any).analyzePydanticVersionRequirement(content);
+            expect(version).toBe(1);
+        });
+    });
+
+    describe('Dependency Fix Generation', () => {
+        it('should generate fix for requirements.txt', () => {
+            const configFiles = [
+                { name: 'requirements.txt', content: 'pydantic>=1.10.0\ncrewai==0.1.0' }
+            ];
+            const fix = service.generateDependencyFix('pydantic', '>=2.0.0', configFiles);
+            expect(fix.filePath).toBe('requirements.txt');
+            expect(fix.newContent).toContain('pydantic>=2.0.0');
+            expect(fix.action).toContain('Pin pydantic to >=2.0.0');
+        });
+
+        it('should generate fix for pyproject.toml', () => {
+            const configFiles = [
+                { name: 'pyproject.toml', content: '[tool.poetry.dependencies]\npython = "^3.10"\npydantic = "^1.10.0"' }
+            ];
+            const fix = service.generateDependencyFix('pydantic', '>=2.0.0', configFiles);
+            expect(fix.filePath).toBe('pyproject.toml');
+            expect(fix.newContent).toContain('pydantic = ">=2.0.0"');
+        });
+    });
 });
