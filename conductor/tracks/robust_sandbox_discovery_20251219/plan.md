@@ -10,7 +10,7 @@ This plan details the steps to enhance the ci-fixer agent's file discovery and v
 - [x] Task: Integrate `git log` analysis into `FileDiscoveryService.ts` to detect file renames or deletions. 7ad419c
 - [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md) edbd621
 
-## Phase 2: Candidate Verification & Build Validation
+## Phase 2: Candidate Verification & Build Validation [checkpoint: 97ff7b3]
 *Goal: Ensure discovered candidates are valid for the target build step.*
 
 - [x] Task: Write failing tests for candidate verification (content analysis and dry-run) in `__tests__/unit/file-verification.test.ts`. 97ff7b3
@@ -27,8 +27,6 @@ This plan details the steps to enhance the ci-fixer agent's file discovery and v
 - [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md) 1354daf
 
 ## Phase 4: Integration into Agent Flow
-*Goal: Wire the new discovery and validation services into the main agent loop.*
-
-- [ ] Task: Write integration tests in `__tests__/integration/sandbox-discovery.test.ts` showing the agent correctly handling a renamed requirements file.
-- [ ] Task: Update the main agent logic (likely in `agent.ts` or `services/orchestration/`) to use `FileDiscoveryService` when a file lookup fails.
+- [x] Task: Write integration tests in `__tests__/integration/sandbox-discovery.test.ts` showing the agent correctly handling a renamed requirements file. 658e6c0
+- [x] Task: Update the main agent logic (likely in `agent.ts` or `services/orchestration/`) to use `FileDiscoveryService` when a file lookup fails. 658e6c0
 - [ ] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md)
