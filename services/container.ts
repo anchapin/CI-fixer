@@ -13,11 +13,17 @@ import * as Metrics from '../telemetry/metrics.js';
 import { DataIngestionService } from './DataIngestionService.js';
 import { LearningLoopService } from './LearningLoopService.js';
 import { LearningMetricService } from './LearningMetricService.js';
+import { FileDiscoveryService } from './sandbox/FileDiscoveryService.js';
+import { FileVerificationService } from './sandbox/FileVerificationService.js';
+import { FileFallbackService } from './sandbox/FileFallbackService.js';
 import { db } from '../db/client.js';
 
 export interface ServiceContainer {
     github: typeof GitHub;
     sandbox: typeof Sandbox;
+    discovery: FileDiscoveryService;
+    verification: FileVerificationService;
+    fallback: FileFallbackService;
     llm: typeof LLM;
     analysis: typeof Analysis;
     context: typeof Context;
@@ -35,6 +41,9 @@ export interface ServiceContainer {
 export const defaultServices: ServiceContainer = {
     github: GitHub,
     sandbox: Sandbox,
+    discovery: new FileDiscoveryService(),
+    verification: new FileVerificationService(),
+    fallback: new FileFallbackService(),
     llm: LLM,
     analysis: Analysis,
     context: Context,
