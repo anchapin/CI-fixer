@@ -23,6 +23,9 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
     const totalCostAccumulated = state.totalCostAccumulated ?? 0;
     const llmMetrics = state.llmMetrics ?? [];
 
+    // ROBUSTNESS: Ensure high-priority category is handled correctly by orchestrator
+    const activeCategory = classification?.category || 'UNKNOWN';
+
     // ToolOrchestra: Select optimal tools and model
     let selectedTools = state.selectedTools;
     let selectedModel = state.selectedModel;
@@ -30,7 +33,7 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
     if (diagnosis && !selectedTools) {
         // Get learned recommendation
         const recommendation = await services.learning.getStrategyRecommendation(
-            classification?.category || 'UNKNOWN',
+            activeCategory,
             state.problemComplexity || 5
         );
 
@@ -49,7 +52,7 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
 
             // Select tools based on error characteristics
             selectedTools = orchestrator.selectOptimalTools(diagnosis, {
-                errorCategory: classification?.category || 'UNKNOWN',
+                errorCategory: activeCategory,
                 complexity: state.problemComplexity || 5,
                 affectedFiles: classification?.affectedFiles || [],
                 budget: budgetRemaining,

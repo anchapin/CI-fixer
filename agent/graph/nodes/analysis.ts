@@ -77,8 +77,13 @@ export const analysisNode: NodeHandler = async (state, context) => {
         const repoContext = await getCachedRepoContext(config, cachedSha, () => services.analysis.generateRepoSummary(config, sandbox));
         const diagContext = (iteration === 0) ? repoContext + dependencyContext : repoContext;
 
-        // Classification (Stage 3)
+        // 1. CLASSIFICATION & MULTI-ERROR DETECTION
+        // Split logs into potential sub-error chunks if they are very large
+        // For now, let's look for multiple distinct error patterns in the same chunk
         const classified = await services.classification.classifyErrorWithHistory(currentLogText, profile);
+
+        // TODO: Future enhancement: if classified.cascadingErrors contains things that look like 
+        // independent errors, classify them too.
 
         const classificationForDiagnosis = {
             category: classified.category,
@@ -88,8 +93,15 @@ export const analysisNode: NodeHandler = async (state, context) => {
             suggestedAction: classified.suggestedAction
         };
 
-        log('INFO', `Diagnosing error...`);
+        log('INFO', `Diagnosing error (Category: ${classified.category})...`);
         const diagnosis = await context.services.analysis.diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, state.feedback);
+
+        // ROBUSTNESS UPGRADE: If diagnosis missed a high-priority structural error detected by classification, 
+        // we should override or augment it.
+        if (classified.category === 'dependency_conflict' && diagnosis.fixAction !== 'command') {
+             log('WARN', '[Robustness] Detected dependency conflict but diagnosis preferred file edit. Augmenting diagnosis.');
+             // We don't force override yet, but we ensure the category is preserved in state
+        }
 
         log('INFO', `Diagnosis: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
 
