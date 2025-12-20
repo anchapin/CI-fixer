@@ -21,7 +21,7 @@ This plan details the steps to enhance the ci-fixer agent's file discovery and v
 ## Phase 3: Safe Fallback & Placeholder Logic
 *Goal: Implement intelligent fallback strategies for definitively missing files.*
 
-- [ ] Task: Write failing tests for placeholder generation and stale reference detection in `__tests__/unit/file-fallback.test.ts`.
+- [~] Task: Write failing tests for placeholder generation and stale reference detection in `__tests__/unit/file-fallback.test.ts`.
 - [ ] Task: Implement heuristic-based placeholder generation (e.g., creating empty requirements files).
 - [ ] Task: Implement logic to identify and propose removal of stale references in config files (e.g., Dockerfile).
 - [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
