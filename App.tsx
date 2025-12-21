@@ -16,7 +16,7 @@ import { Play, RotateCcw, ShieldCheck, Zap, Wifi, Settings, Loader2, RefreshCw, 
 import {
     groupFailedRuns,
     generateRepoSummary,
-} from './services';
+} from './services/analysis/BrowserServices';
 
 const App: React.FC = () => {
     // Layout State

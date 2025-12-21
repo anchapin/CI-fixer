@@ -11,14 +11,8 @@ import { postProcessPatch } from '../repair-agent/post-processor.js';
 const MODEL_SMART = "gemini-3-pro-preview";
 const MODEL_FAST = "gemini-2.5-flash";
 
-import * as fs from 'fs';
 function logTrace(msg: string) {
-    try {
-        const truncated = msg.length > 500 ? msg.substring(0, 500) + '... [truncated]' : msg;
-        fs.appendFileSync('debug_trace.txt', truncated + '\n');
-    } catch {
-        // Ignore trace logging errors
-    }
+    // No-op in browser and server for now to maintain compatibility
 }
 
 export interface DiagnosisResult {

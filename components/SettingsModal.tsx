@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { AppConfig, WorkflowRun } from '../types';
 import { Shield, GitPullRequest, X, Check, Server, AlertCircle, RefreshCw, Layers, Cpu, Globe, Key, CloudLightning, Timer, Sliders, Box, Terminal, Download, Wifi, Loader2, AlertTriangle } from 'lucide-react';
-import { getPRFailedRuns, testE2BConnection, validateE2BApiKey } from '../services';
+import { getPRFailedRuns } from '../services/github/GitHubService';
+import { testE2BConnection, validateE2BApiKey } from '../services/sandbox/SandboxService';
 
 interface SettingsModalProps {
     isOpen: boolean;
