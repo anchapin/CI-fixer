@@ -1,6 +1,6 @@
 # Plan: Fix Chatty Output Injection
 
-## Phase 1: Infrastructure and Reproduction
+## Phase 1: Infrastructure and Reproduction [checkpoint: bd71d61]
 - [x] Task: Create a reproduction unit test for "Chatty Output" in `write_file` and `replace` tools.
 - [x] Task: Implement a robust `extractCodeBlock` utility function to isolate content within triple backticks. (dd93675)
 - [ ] Task: Conductor - User Manual Verification 'Infrastructure and Reproduction' (Protocol in workflow.md)
