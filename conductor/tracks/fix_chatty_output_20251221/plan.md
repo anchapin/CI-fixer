@@ -10,7 +10,7 @@
 - [x] Task: Integrate `extractCodeBlock` into `services/action-library.ts` to sanitize file-writing inputs. (c4a593d)
 - [ ] Task: Conductor - User Manual Verification 'Prompt Engineering & Core Enforcement' (Protocol in workflow.md)
 
-## Phase 3: Retry Logic & Service Integration
+## Phase 3: Retry Logic & Service Integration [checkpoint: c294e80]
 - [x] Task: Implement "Fail-Fast & Retry" logic in `services/repair-agent/patch-generation.ts` when no backticks are detected. (c4a593d)
 - [x] Task: Add validation hooks in the core LLM layer (`services/analysis/llm/`) to prevent leaking conversational text into structured payloads. (38c69dd)
 - [ ] Task: Conductor - User Manual Verification 'Retry Logic & Service Integration' (Protocol in workflow.md)
