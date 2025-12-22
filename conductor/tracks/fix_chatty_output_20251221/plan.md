@@ -6,7 +6,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Infrastructure and Reproduction' (Protocol in workflow.md)
 
 ## Phase 2: Prompt Engineering & Core Enforcement
-- [ ] Task: Update system prompts in `prompts/execution/` to explicitly forbid conversational filler in tool calls.
+- [x] Task: Update system prompts in `prompts/execution/` to explicitly forbid conversational filler in tool calls. (4a91122)
 - [ ] Task: Integrate `extractCodeBlock` into `services/action-library.ts` to sanitize file-writing inputs.
 - [ ] Task: Conductor - User Manual Verification 'Prompt Engineering & Core Enforcement' (Protocol in workflow.md)
 
