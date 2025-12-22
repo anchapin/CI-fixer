@@ -11,7 +11,7 @@
 - [ ] Task: Conductor - User Manual Verification 'Prompt Engineering & Core Enforcement' (Protocol in workflow.md)
 
 ## Phase 3: Retry Logic & Service Integration
-- [ ] Task: Implement "Fail-Fast & Retry" logic in `services/repair-agent/patch-generation.ts` when no backticks are detected.
+- [x] Task: Implement "Fail-Fast & Retry" logic in `services/repair-agent/patch-generation.ts` when no backticks are detected. (c4a593d)
 - [ ] Task: Add validation hooks in the core LLM layer (`services/analysis/llm/`) to prevent leaking conversational text into structured payloads.
 - [ ] Task: Conductor - User Manual Verification 'Retry Logic & Service Integration' (Protocol in workflow.md)
 
