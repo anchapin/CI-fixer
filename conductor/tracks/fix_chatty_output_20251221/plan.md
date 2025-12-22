@@ -7,7 +7,7 @@
 
 ## Phase 2: Prompt Engineering & Core Enforcement
 - [x] Task: Update system prompts in `prompts/execution/` to explicitly forbid conversational filler in tool calls. (4a91122)
-- [ ] Task: Integrate `extractCodeBlock` into `services/action-library.ts` to sanitize file-writing inputs.
+- [x] Task: Integrate `extractCodeBlock` into `services/action-library.ts` to sanitize file-writing inputs. (c4a593d)
 - [ ] Task: Conductor - User Manual Verification 'Prompt Engineering & Core Enforcement' (Protocol in workflow.md)
 
 ## Phase 3: Retry Logic & Service Integration
