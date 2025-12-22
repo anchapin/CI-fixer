@@ -90,25 +90,13 @@ export async function generatePatchCandidates(
  * Helper: Generate with backtick validation and retry
  */
 async function retryWithBacktickValidation(config: AppConfig, prompt: string, model: string, maxRetries: number = 2): Promise<{ text: string }> {
-    let retryCount = 0;
-    while (retryCount <= maxRetries) {
-        const response = await unifiedGenerate(config, {
-            contents: prompt,
-            config: { temperature: 0.1 + (retryCount * 0.1), maxOutputTokens: 2048 },
-            model: model,
-            responseFormat: 'json'
-        });
-
-        // We expect JSON which should be wrapped in backticks, 
-        // and the 'code' property inside should ideally have backticks if it's chatty
-        if (!response.text.includes('```') && retryCount < maxRetries) {
-            console.warn(`[PatchGeneration] No backticks detected. Retrying (${retryCount + 1}/${maxRetries})...`);
-            retryCount++;
-            continue;
-        }
-        return response;
-    }
-    return { text: "" }; // Should not happen due to while loop condition
+    return await unifiedGenerate(config, {
+        contents: prompt,
+        config: { temperature: 0.1, maxOutputTokens: 2048 },
+        model: model,
+        responseFormat: 'json',
+        validate: (text) => text.includes('```')
+    });
 }
 
 /**

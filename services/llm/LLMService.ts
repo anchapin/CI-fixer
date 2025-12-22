@@ -116,7 +116,13 @@ function calculateCost(model: string, inputTokens: number, outputTokens: number)
 
 
 // Core LLM Wrapper
-export async function unifiedGenerate(config: AppConfig, params: { model?: string, contents: any, config?: any, responseFormat?: 'json' | 'text' }): Promise<{ text: string, toolCalls?: any[], metrics?: LLMCallMetrics }> {
+export async function unifiedGenerate(config: AppConfig, params: { 
+    model?: string, 
+    contents: any, 
+    config?: any, 
+    responseFormat?: 'json' | 'text',
+    validate?: (text: string) => boolean
+}): Promise<{ text: string, toolCalls?: any[], metrics?: LLMCallMetrics }> {
     const startTime = Date.now();
 
     // 1. Handle Z.AI / OpenAI Providers via Fetch
@@ -168,12 +174,19 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
                     throw clientError;
                 }
                 const data = await response.json();
+                const text = data.choices?.[0]?.message?.content || "";
+
+                // Validation Hook
+                if (params.validate && !params.validate(text)) {
+                    throw new Error(`Output validation failed for provider ${config.llmProvider}`);
+                }
+
                 return {
-                    text: data.choices?.[0]?.message?.content || "",
+                    text,
                     toolCalls: data.choices?.[0]?.message?.tool_calls,
                     metrics: {
                         tokensInput: estimateTokens(params.contents),
-                        tokensOutput: estimateTokens(data.choices?.[0]?.message?.content || ''),
+                        tokensOutput: estimateTokens(text),
                         cost: 0,
                         latency: Date.now() - startTime,
                         model
@@ -211,13 +224,22 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
                 config: generationConfig
             });
 
+            const text = response.text || "";
+
+            // Validation Hook
+            if (params.validate && !params.validate(text)) {
+                console.warn(`[unifiedGenerate] Validation failed on attempt ${i + 1}. Retrying...`);
+                lastError = new Error("Output validation failed");
+                continue;
+            }
+
             const candidate = response.candidates?.[0];
             const functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall).map((p: any) => p.functionCall);
 
             // Calculate metrics
             const latency = Date.now() - startTime;
             const tokensInput = estimateTokens(params.contents);
-            const tokensOutput = estimateTokens(response.text || '');
+            const tokensOutput = estimateTokens(text);
             const metrics: LLMCallMetrics = {
                 tokensInput,
                 tokensOutput,
@@ -227,7 +249,7 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
             };
 
             return {
-                text: response.text || "",
+                text,
                 toolCalls: functionCalls && functionCalls.length > 0 ? functionCalls : undefined,
                 metrics
             };
@@ -243,9 +265,10 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
                         config: params.config
                     });
 
+                    const text = fallback.text || "";
                     const latency = Date.now() - startTime;
                     const tokensInput = estimateTokens(params.contents);
-                    const tokensOutput = estimateTokens(fallback.text || '');
+                    const tokensOutput = estimateTokens(text);
                     const metrics: LLMCallMetrics = {
                         tokensInput,
                         tokensOutput,
@@ -254,7 +277,7 @@ export async function unifiedGenerate(config: AppConfig, params: { model?: strin
                         model: MODEL_FAST
                     };
 
-                    return { text: fallback.text || "", metrics };
+                    return { text, metrics };
                 } catch (fbError) {
                     throw new Error(`Fallback Model Failed: ${fbError}`);
                 }

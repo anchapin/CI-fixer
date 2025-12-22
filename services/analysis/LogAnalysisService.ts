@@ -318,32 +318,18 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
         const prompt = contextManager.compile();
 
         const segments: string[] = [];
-        let retryCount = 0;
-        const MAX_RETRIES = 2;
-        let lastResponseText = "";
         
-        while (retryCount <= MAX_RETRIES) {
-            const res = await unifiedGenerate(config, {
-                contents: prompt,
-                model: MODEL_SMART,
-                config: { maxOutputTokens: 8192 }
-            });
-            
-            lastResponseText = res.text;
-
-            // Check if we have at least one code block if strictly enforced
-            if (!res.text.includes('```') && retryCount < MAX_RETRIES) {
-                console.warn(`[generateFix] No code block detected in response. Retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-                retryCount++;
-                continue;
-            }
-            
-            segments.push(res.text);
-            break;
-        }
+        const firstResponse = await unifiedGenerate(config, {
+            contents: prompt,
+            model: MODEL_SMART,
+            config: { maxOutputTokens: 8192 },
+            validate: (text) => text.includes('```')
+        });
+        
+        segments.push(firstResponse.text);
 
         for (let i = 0; i < 3; i++) {
-            const lastSegment = segments[segments.length - 1] || lastResponseText;
+            const lastSegment = segments[segments.length - 1];
             const trimmed = lastSegment.trim();
             if (trimmed.endsWith('```')) break;
 
