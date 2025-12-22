@@ -87,6 +87,31 @@ export async function generatePatchCandidates(
 }
 
 /**
+ * Helper: Generate with backtick validation and retry
+ */
+async function retryWithBacktickValidation(config: AppConfig, prompt: string, model: string, maxRetries: number = 2): Promise<{ text: string }> {
+    let retryCount = 0;
+    while (retryCount <= maxRetries) {
+        const response = await unifiedGenerate(config, {
+            contents: prompt,
+            config: { temperature: 0.1 + (retryCount * 0.1), maxOutputTokens: 2048 },
+            model: model,
+            responseFormat: 'json'
+        });
+
+        // We expect JSON which should be wrapped in backticks, 
+        // and the 'code' property inside should ideally have backticks if it's chatty
+        if (!response.text.includes('```') && retryCount < maxRetries) {
+            console.warn(`[PatchGeneration] No backticks detected. Retrying (${retryCount + 1}/${maxRetries})...`);
+            retryCount++;
+            continue;
+        }
+        return response;
+    }
+    return { text: "" }; // Should not happen due to while loop condition
+}
+
+/**
  * Strategy 1: Direct fix - minimal change to fix the immediate issue
  */
 async function generateDirectPatch(
@@ -134,12 +159,7 @@ Respond in JSON format:
 
 Respond with ONLY the JSON object.`;
 
-    const response = await unifiedGenerate(config, {
-        contents: prompt,
-        config: { temperature: 0.1, maxOutputTokens: 2048 },
-        model: 'gemini-2.5-flash',
-        responseFormat: 'json'
-    });
+    const response = await retryWithBacktickValidation(config, prompt, 'gemini-2.5-flash');
 
     const result = safeJsonParse(response.text, {
         code: originalCode,
@@ -211,12 +231,7 @@ Respond in JSON format:
 
 Respond with ONLY the JSON object.`;
 
-    const response = await unifiedGenerate(config, {
-        contents: prompt,
-        config: { temperature: 0.2, maxOutputTokens: 2048 },
-        model: 'gemini-2.5-flash',
-        responseFormat: 'json'
-    });
+    const response = await retryWithBacktickValidation(config, prompt, 'gemini-2.5-flash');
 
     const result = safeJsonParse(response.text, {
         code: originalCode,
@@ -288,12 +303,7 @@ Respond in JSON format:
 
 Respond with ONLY the JSON object.`;
 
-    const response = await unifiedGenerate(config, {
-        contents: prompt,
-        config: { temperature: 0.3, maxOutputTokens: 2048 },
-        model: 'gemini-2.5-flash',
-        responseFormat: 'json'
-    });
+    const response = await retryWithBacktickValidation(config, prompt, 'gemini-2.5-flash');
 
     const result = safeJsonParse(response.text, {
         code: originalCode,

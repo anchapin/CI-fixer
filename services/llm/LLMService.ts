@@ -33,14 +33,29 @@ export async function retryWithBackoff<T>(
 
 // Helper: Extract code from markdown
 export function extractCode(text: string, language: string = 'text'): string {
-    const codeBlockRegex = new RegExp(`\`\`\`${language}([\\s\\S]*?)\`\`\``, 'i');
-    const match = text.match(codeBlockRegex);
-    if (match) return match[1].trim();
+    // We can't import from utils/parsing here easily if it's a cyclic dependency or different layer,
+    // but we can use the same logic.
+    
+    const startMarker = '```';
+    const firstIndex = text.indexOf(startMarker);
+    
+    if (firstIndex !== -1) {
+        const openingFenceEnd = firstIndex + startMarker.length;
+        const closingMarkerIndex = text.indexOf(startMarker, openingFenceEnd);
+        
+        if (closingMarkerIndex !== -1) {
+            const contentWithInfo = text.substring(openingFenceEnd, closingMarkerIndex);
+            const newlineIndex = contentWithInfo.indexOf('\n');
+            
+            if (newlineIndex !== -1) {
+                return contentWithInfo.substring(newlineIndex + 1).trim();
+            } else {
+                return contentWithInfo.trim();
+            }
+        }
+    }
 
-    const genericBlockRegex = /```([\s\S]*?)```/;
-    const genericMatch = text.match(genericBlockRegex);
-    if (genericMatch) return genericMatch[1].trim();
-
+    // Fallback if no backticks found
     return text.trim();
 }
 

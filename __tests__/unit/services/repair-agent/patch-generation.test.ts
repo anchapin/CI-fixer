@@ -36,11 +36,11 @@ describe('Patch Generation Module', () => {
 
     describe('generatePatchCandidates', () => {
         it('should generate candidates using all 3 strategies', async () => {
-            // Mock responses for each strategy call
+            // Mock responses for each strategy call (including backticks for validation)
             (unifiedGenerate as any)
-                .mockResolvedValueOnce({ text: JSON.stringify({ code: 'fix1', description: 'direct', confidence: 0.9, reasoning: 'r1' }) })
-                .mockResolvedValueOnce({ text: JSON.stringify({ code: 'fix2', description: 'conservative', confidence: 0.8, reasoning: 'r2' }) })
-                .mockResolvedValueOnce({ text: JSON.stringify({ code: 'fix3', description: 'alternative', confidence: 0.7, reasoning: 'r3' }) });
+                .mockResolvedValueOnce({ text: '```json\n' + JSON.stringify({ code: 'fix1', description: 'direct', confidence: 0.9, reasoning: 'r1' }) + '\n```' })
+                .mockResolvedValueOnce({ text: '```json\n' + JSON.stringify({ code: 'fix2', description: 'conservative', confidence: 0.8, reasoning: 'r2' }) + '\n```' })
+                .mockResolvedValueOnce({ text: '```json\n' + JSON.stringify({ code: 'fix3', description: 'alternative', confidence: 0.7, reasoning: 'r3' }) + '\n```' });
 
             const result = await generatePatchCandidates(
                 mockConfig,

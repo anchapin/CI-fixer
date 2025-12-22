@@ -21,12 +21,32 @@ export async function readFile(filePath: string): Promise<string> {
 
 /**
  * Writes content to a file. Creates directories if needed.
+ * Strips conversational filler if markdown code blocks are detected.
  */
 export async function writeFile(filePath: string, content: string): Promise<string> {
     try {
         const fullPath = path.resolve(process.cwd(), filePath);
         await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.promises.writeFile(fullPath, content, 'utf-8');
+
+        // Sanitization Layer: Strip conversational filler
+        let sanitizedContent = content;
+        const startMarker = '```';
+        const firstIndex = content.indexOf(startMarker);
+        if (firstIndex !== -1) {
+            const openingFenceEnd = firstIndex + startMarker.length;
+            const closingMarkerIndex = content.indexOf(startMarker, openingFenceEnd);
+            if (closingMarkerIndex !== -1) {
+                const contentWithInfo = content.substring(openingFenceEnd, closingMarkerIndex);
+                const newlineIndex = contentWithInfo.indexOf('\n');
+                if (newlineIndex !== -1) {
+                    sanitizedContent = contentWithInfo.substring(newlineIndex + 1);
+                } else {
+                    sanitizedContent = contentWithInfo;
+                }
+            }
+        }
+        
+        await fs.promises.writeFile(fullPath, sanitizedContent.trim(), 'utf-8');
         return `Successfully wrote to ${filePath}`;
     } catch (e: any) {
         return `Error writing to file ${filePath}: ${e.message}`;

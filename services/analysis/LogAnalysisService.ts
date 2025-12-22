@@ -7,6 +7,7 @@ import { filterLogs, summarizeLogs } from '../context-compiler.js';
 import { getWorkflowLogs, pushMultipleFilesToGitHub } from '../github/GitHubService.js';
 import { ContextManager, ContextPriority } from '../context-manager.js';
 import { postProcessPatch } from '../repair-agent/post-processor.js';
+import { extractCodeBlock } from '../../utils/parsing.js';
 
 const MODEL_SMART = "gemini-3-pro-preview";
 const MODEL_FAST = "gemini-2.5-flash";
@@ -317,20 +318,37 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
         const prompt = contextManager.compile();
 
         const segments: string[] = [];
-        let res = await unifiedGenerate(config, {
-            contents: prompt,
-            model: MODEL_SMART,
-            config: { maxOutputTokens: 8192 }
-        });
-        segments.push(res.text);
+        let retryCount = 0;
+        const MAX_RETRIES = 2;
+        let lastResponseText = "";
+        
+        while (retryCount <= MAX_RETRIES) {
+            const res = await unifiedGenerate(config, {
+                contents: prompt,
+                model: MODEL_SMART,
+                config: { maxOutputTokens: 8192 }
+            });
+            
+            lastResponseText = res.text;
+
+            // Check if we have at least one code block if strictly enforced
+            if (!res.text.includes('```') && retryCount < MAX_RETRIES) {
+                console.warn(`[generateFix] No code block detected in response. Retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+                retryCount++;
+                continue;
+            }
+            
+            segments.push(res.text);
+            break;
+        }
 
         for (let i = 0; i < 3; i++) {
-            const lastSegment = segments[segments.length - 1];
+            const lastSegment = segments[segments.length - 1] || lastResponseText;
             const trimmed = lastSegment.trim();
             if (trimmed.endsWith('```')) break;
 
             const contPrompt = `Continue generating code from where you left off. Last chars:\n\`\`\`${trimmed.slice(-1000)}\`\`\``;
-            res = await unifiedGenerate(config, {
+            const res = await unifiedGenerate(config, {
                 contents: contPrompt,
                 model: MODEL_SMART,
                 config: { maxOutputTokens: 8192 }
@@ -344,7 +362,7 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
             fullCode += clean;
         });
 
-        const rawCode = fullCode.trim();
+        const rawCode = extractCodeBlock(fullCode) || fullCode.trim();
         
         // Apply automated post-processing (flags, Docker comments, spell-check)
         const processedCode = postProcessPatch(context.filePath || 'file.txt', rawCode);
