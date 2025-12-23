@@ -169,6 +169,18 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
             toolsContent = await fs.readFile('c:\\Users\\ancha\\Documents\\projects\\CI-fixer\\services\\sandbox\\agent_tools.ts', 'utf-8');
         }
 
+        // [Integration] Inject dependencies
+        try {
+            const verificationPath = path.resolve(process.cwd(), 'utils/fileVerification.ts');
+            const verificationContent = await fs.readFile(verificationPath, 'utf-8');
+            await sandbox.writeFile('utils/fileVerification.ts', verificationContent);
+            
+            // Rewrite import for sandbox environment
+            toolsContent = toolsContent.replace('../../utils/fileVerification', './utils/fileVerification');
+        } catch (depErr) {
+            console.warn(`[Sandbox] Failed to inject dependencies for agent_tools: ${depErr}`);
+        }
+
         await sandbox.writeFile('agent_tools.ts', toolsContent);
         console.log('[Sandbox] agent_tools.ts injected successfully.');
 
