@@ -244,3 +244,21 @@ model LearningMetric {
   timestamp  DateTime @default(now())
   metadata   String?  // JSON
 }
+
+// ============================================================================
+// PATH VERIFICATION TELEMETRY
+// ============================================================================
+
+model PathCorrection {
+  id              String   @id @default(uuid())
+  originalPath    String   // The path the agent tried to use
+  correctedPath   String   // The actual path that was used
+  filename        String   // The basename of the file
+  toolName        String   // "read_file", "write_file", "runCmd", etc.
+  agentRunId      String?  // Optional: Link to agent run if available
+  createdAt       DateTime @default(now())
+
+  @@index([toolName])
+  @@index([filename])
+  @@index([createdAt])
+}

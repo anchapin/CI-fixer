@@ -8,6 +8,19 @@ import { findUniqueFile } from '../../utils/fileVerification';
 const execPromise = promisify(exec);
 
 /**
+ * Helper function to log path corrections in a parseable format.
+ */
+function logPathCorrection(toolName: string, originalPath: string, correctedPath: string, filename: string): void {
+    console.log(`[PATH_CORRECTION] ${JSON.stringify({
+        tool: toolName,
+        originalPath,
+        correctedPath,
+        filename,
+        timestamp: new Date().toISOString()
+    })}`);
+}
+
+/**
  * Reads the content of a file.
  */
 export async function readFile(filePath: string): Promise<string> {
@@ -21,11 +34,9 @@ export async function readFile(filePath: string): Promise<string> {
             try {
                 const verification = await findUniqueFile(filePath, process.cwd());
                 if (verification.found && verification.path) {
+                    // Log the correction for telemetry
+                    logPathCorrection('read_file', filePath, verification.path, path.basename(filePath));
                     const recoveredContent = await fs.promises.readFile(verification.path, 'utf-8');
-                    // Optional: Log this correction if we had a logger here.
-                    // For now, silently recover as per requirement "automatically use that path".
-                    // The spec says "log the correction". Since we are in the sandbox, we can print to stdout/stderr or return a note?
-                    // "return the content of the correct file".
                     return recoveredContent;
                 } else if (verification.matches.length > 1) {
                      return `Error reading file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path.`;
@@ -45,15 +56,19 @@ export async function readFile(filePath: string): Promise<string> {
 export async function writeFile(filePath: string, content: string): Promise<string> {
     try {
         let targetPath = path.resolve(process.cwd(), filePath);
-        
+        let pathWasCorrected = false;
+
         // [Integration] Verification & Auto-Recovery
         if (!fs.existsSync(targetPath)) {
             // File doesn't exist, check for potential halluncination
             try {
                 const verification = await findUniqueFile(filePath, process.cwd());
                 if (verification.found && verification.path) {
+                    const originalPath = targetPath;
                     targetPath = verification.path;
-                    // Auto-corrected path
+                    pathWasCorrected = true;
+                    // Log the correction for telemetry
+                    logPathCorrection('write_file', filePath, verification.path, path.basename(filePath));
                 } else if (verification.matches.length > 1) {
                     return `Error writing to file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path or ensure unique filename.`;
                 }
@@ -83,7 +98,7 @@ export async function writeFile(filePath: string, content: string): Promise<stri
                 }
             }
         }
-        
+
         await fs.promises.writeFile(fullPath, sanitizedContent.trim(), 'utf-8');
         return `Successfully wrote to ${path.relative(process.cwd(), fullPath)}`;
     } catch (e: any) {
@@ -100,7 +115,7 @@ export async function runCmd(command: string): Promise<string> {
         let finalCommand = command;
         const parts = command.trim().split(/\s+/);
         const tool = parts[0];
-        
+
         if (['mv', 'cp', 'rm'].includes(tool)) {
             let pathIndex = -1;
             // Identify the target file path (source for mv/cp, target for rm)
@@ -113,11 +128,13 @@ export async function runCmd(command: string): Promise<string> {
             if (pathIndex !== -1) {
                 const filePath = parts[pathIndex];
                 const absPath = path.resolve(process.cwd(), filePath);
-                
+
                 if (!fs.existsSync(absPath)) {
                     try {
                         const verification = await findUniqueFile(filePath, process.cwd());
                         if (verification.found && verification.path) {
+                            // Log the correction for telemetry
+                            logPathCorrection(`runCmd_${tool}`, filePath, verification.path, path.basename(filePath));
                             parts[pathIndex] = verification.path; // Use absolute path found
                             finalCommand = parts.join(' ');
                         } else if (verification.matches.length > 1) {
