@@ -8,7 +8,7 @@
 
 ## Phase 2: Tool Integration
 - [x] Task: Integrate verification into `services/action-library.ts` (or relevant tool handler) for `read_file`. (5b07c12)
-- [ ] Task: Integrate verification into `services/action-library.ts` for `replace` and `write_file`.
+- [x] Task: Integrate verification into `services/action-library.ts` for `replace` and `write_file`. (aa07622)
 - [ ] Task: Update `run_shell_command` handler to intercept `mv`, `cp`, and `rm` for path verification.
 - [ ] Task: Write integration tests for each tool to ensure auto-correction and error reporting work as specified.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Tool Integration' (Protocol in workflow.md)
