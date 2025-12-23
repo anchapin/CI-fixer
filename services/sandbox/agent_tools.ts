@@ -44,7 +44,26 @@ export async function readFile(filePath: string): Promise<string> {
  */
 export async function writeFile(filePath: string, content: string): Promise<string> {
     try {
-        const fullPath = path.resolve(process.cwd(), filePath);
+        let targetPath = path.resolve(process.cwd(), filePath);
+        
+        // [Integration] Verification & Auto-Recovery
+        if (!fs.existsSync(targetPath)) {
+            // File doesn't exist, check for potential halluncination
+            try {
+                const verification = await findUniqueFile(filePath, process.cwd());
+                if (verification.found && verification.path) {
+                    targetPath = verification.path;
+                    // Auto-corrected path
+                } else if (verification.matches.length > 1) {
+                    return `Error writing to file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path or ensure unique filename.`;
+                }
+                // If not found, we assume it's a new file creation (verification.found === false)
+            } catch (recoveryError) {
+                // Ignore recovery error
+            }
+        }
+
+        const fullPath = targetPath;
         await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
 
         // Sanitization Layer: Strip conversational filler
@@ -66,7 +85,7 @@ export async function writeFile(filePath: string, content: string): Promise<stri
         }
         
         await fs.promises.writeFile(fullPath, sanitizedContent.trim(), 'utf-8');
-        return `Successfully wrote to ${filePath}`;
+        return `Successfully wrote to ${path.relative(process.cwd(), fullPath)}`;
     } catch (e: any) {
         return `Error writing to file ${filePath}: ${e.message}`;
     }
