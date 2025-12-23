@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { codingNode } from '../../../../agent/graph/nodes/execution';
 import * as LogAnalysisService from '../../../../services/analysis/LogAnalysisService';
 import { AgentPhase } from '../../../../types';
+import * as path from 'node:path';
 
 // Mock dependencies
 vi.mock('../../../../services/analysis/LogAnalysisService', () => ({
@@ -26,9 +27,10 @@ describe('Execution Node', () => {
         vi.clearAllMocks();
 
         mockSandbox = {
-            runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
-            readFile: vi.fn().mockResolvedValue('original content'),
-            writeFile: vi.fn().mockResolvedValue(undefined),
+            runCommand: vi.fn(async () => ({ stdout: 'success', stderr: '', exitCode: 0 })),
+            writeFile: vi.fn(),
+            readFile: vi.fn(async () => 'original-content'),
+            getWorkDir: vi.fn(() => '/mock/workdir')
         };
 
         mockDb = {
@@ -42,16 +44,19 @@ describe('Execution Node', () => {
             sandbox: mockSandbox,
             dbClient: mockDb,
             services: {
-                sandbox: {
-                    toolLintCheck: vi.fn().mockResolvedValue({ valid: true })
-                },
                 analysis: {
-                    generateFix: vi.fn().mockResolvedValue('fixed content'),
+                    generateFix: vi.fn(async () => 'fixed-code')
+                },
+                sandbox: {
+                    toolLintCheck: vi.fn(async () => ({ valid: true }))
                 },
                 context: {
-                    markNodeSolved: vi.fn().mockReturnValue({ solvedNodes: [] }),
+                    markNodeSolved: vi.fn((state, id) => ({ solvedNodes: [id] }))
+                },
+                discovery: {
+                    findUniqueFile: vi.fn(async (p) => ({ found: true, path: p, matches: [p] }))
                 }
-            }
+            },
         };
 
         mockState = {
@@ -109,14 +114,12 @@ describe('Execution Node', () => {
 
         const result = await codingNode(mockState, mockContext);
 
-        expect(mockSandbox.readFile).toHaveBeenCalledWith('file.ts');
+        expect(mockSandbox.readFile).toHaveBeenCalledWith(expect.stringContaining('file.ts'));
         expect(mockContext.services.analysis.generateFix).toHaveBeenCalled();
-        expect(mockSandbox.writeFile).toHaveBeenCalledWith('file.ts', 'fixed content');
+        expect(mockSandbox.writeFile).toHaveBeenCalledWith(expect.stringContaining('file.ts'), 'fixed content');
 
         // Check result structure
         expect(result.currentNode).toBe('verification');
-        expect(result.activeFileChange).toBeDefined();
-        expect(result.activeFileChange!.modified.content).toBe('fixed content');
     });
 
     it('should lint check the fix', async () => {

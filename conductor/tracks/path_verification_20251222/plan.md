@@ -11,7 +11,7 @@
 - [x] Task: Integrate verification into `services/action-library.ts` for `replace` and `write_file`. (aa07622)
 - [x] Task: Update `run_shell_command` handler to intercept `mv`, `cp`, and `rm` for path verification. (82e0ce5)
 - [x] Task: Write integration tests for each tool to ensure auto-correction and error reporting work as specified. (82e0ce5)
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Tool Integration' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 2: Tool Integration' (Protocol in workflow.md)
 
 ## Phase 3: Telemetry & Refinement
 - [ ] Task: Add logging/telemetry to track when a path is automatically corrected.

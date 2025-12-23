@@ -1,0 +1,8 @@
+{
+  "track_id": "path_verification_20251222",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2025-12-22T16:01:00Z",
+  "updated_at": "2025-12-22T16:01:00Z",
+  "description": "Make ci-fixer repository agents more robust by addressing File Path Hallucination (Spatial Unawareness)"
+}

@@ -2,6 +2,7 @@ import { GraphState, GraphContext, NodeHandler } from '../state.js';
 import { db as globalDb } from '../../../db/client.js';
 import { FileChange } from '../../../types.js';
 import { withNodeTracing } from './tracing-wrapper.js';
+import * as path from 'node:path';
 
 const codingNodeHandler: NodeHandler = async (state, context) => {
     const { config, group, diagnosis, refinedProblemStatement, fileReservations, iteration, errorDAG, currentNodeId } = state;
@@ -82,8 +83,28 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
     }
     // B. EDIT FIX
     else if (fileReservations.length > 0 || (diagnosis.fixAction === 'edit' && diagnosis.filePath)) {
-        const targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath;
+        let targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath!;
         log('INFO', `[Execution] Implementing fix for ${targetPath}`);
+
+        // PATH VERIFICATION: Auto-correct hallucinations
+        if (sandbox) {
+            const verification = await services.discovery.findUniqueFile(targetPath, sandbox.getWorkDir());
+            if (verification.found && verification.path) {
+                const relativePath = path.relative(sandbox.getWorkDir(), verification.path);
+                if (relativePath !== targetPath) {
+                    log('SUCCESS', `[Execution] Auto-corrected path from ${targetPath} to ${relativePath}`);
+                    targetPath = relativePath;
+                }
+            } else if (!verification.found && verification.matches.length > 1) {
+                const matchlist = verification.matches.map(m => path.relative(sandbox.getWorkDir(), m)).join(', ');
+                log('WARN', `[Execution] Multiple matches found for ${targetPath}: ${matchlist}. Aborting to avoid wrong file edit.`);
+                return {
+                    feedback: [...state.feedback, `Path Hallucination: Multiple files named '${targetPath}' found: ${matchlist}. Please specify the exact path.`],
+                    iteration: iteration + 1,
+                    currentNode: 'analysis'
+                };
+            }
+        }
 
         // Read current content
         // Try to get from State first (populated by Planning)

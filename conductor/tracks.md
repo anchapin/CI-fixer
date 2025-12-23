@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [~] Track: Improve CI-Fixer to avoid including conversational filler inside a file (Chatty Output Injection)
-*Link: [./conductor/tracks/fix_chatty_output_20251221/](./conductor/tracks/fix_chatty_output_20251221/)*
+## [~] Track: Robust File Path Verification
+*Link: [./conductor/tracks/path_verification_20251222/](./conductor/tracks/path_verification_20251222/)*
