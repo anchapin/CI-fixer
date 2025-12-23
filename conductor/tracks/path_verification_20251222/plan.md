@@ -7,7 +7,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Infrastructure & Core Logic' (Protocol in workflow.md) (add01dd)
 
 ## Phase 2: Tool Integration
-- [ ] Task: Integrate verification into `services/action-library.ts` (or relevant tool handler) for `read_file`.
+- [x] Task: Integrate verification into `services/action-library.ts` (or relevant tool handler) for `read_file`. (5b07c12)
 - [ ] Task: Integrate verification into `services/action-library.ts` for `replace` and `write_file`.
 - [ ] Task: Update `run_shell_command` handler to intercept `mv`, `cp`, and `rm` for path verification.
 - [ ] Task: Write integration tests for each tool to ensure auto-correction and error reporting work as specified.
