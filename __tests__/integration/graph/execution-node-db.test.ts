@@ -104,6 +104,9 @@ describe('Execution Node (Coding) - Database Integration Tests', () => {
                 sandbox: await import('../../../services/sandbox/SandboxService.js'),
                 analysis: await import('../../../services/analysis/LogAnalysisService.js'),
                 llm: await import('../../../services/llm/LLMService.js'),
+                discovery: {
+                    findUniqueFile: vi.fn().mockResolvedValue({ found: false, matches: [] })
+                }
             } as any,
             dbClient: testDb // ← Inject test database
         };
