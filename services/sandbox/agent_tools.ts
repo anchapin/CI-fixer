@@ -30,7 +30,7 @@ export async function readFile(filePath: string): Promise<string> {
                 } else if (verification.matches.length > 1) {
                      return `Error reading file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path.`;
                 }
-            } catch (recoveryError) {
+            } catch (_recoveryError) {
                 // Ignore recovery error and return original
             }
         }
@@ -58,7 +58,7 @@ export async function writeFile(filePath: string, content: string): Promise<stri
                     return `Error writing to file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path or ensure unique filename.`;
                 }
                 // If not found, we assume it's a new file creation (verification.found === false)
-            } catch (recoveryError) {
+            } catch (_recoveryError) {
                 // Ignore recovery error
             }
         }
@@ -96,7 +96,41 @@ export async function writeFile(filePath: string, content: string): Promise<stri
  */
 export async function runCmd(command: string): Promise<string> {
     try {
-        const { stdout, stderr } = await execPromise(command, { timeout: 120000 });
+        // [Integration] Verification & Auto-Recovery for critical commands
+        let finalCommand = command;
+        const parts = command.trim().split(/\s+/);
+        const tool = parts[0];
+        
+        if (['mv', 'cp', 'rm'].includes(tool)) {
+            let pathIndex = -1;
+            // Identify the target file path (source for mv/cp, target for rm)
+            if (tool === 'rm') {
+                pathIndex = parts.findIndex((p, i) => i > 0 && !p.startsWith('-'));
+            } else { // mv, cp
+                pathIndex = parts.findIndex((p, i) => i > 0 && !p.startsWith('-'));
+            }
+
+            if (pathIndex !== -1) {
+                const filePath = parts[pathIndex];
+                const absPath = path.resolve(process.cwd(), filePath);
+                
+                if (!fs.existsSync(absPath)) {
+                    try {
+                        const verification = await findUniqueFile(filePath, process.cwd());
+                        if (verification.found && verification.path) {
+                            parts[pathIndex] = verification.path; // Use absolute path found
+                            finalCommand = parts.join(' ');
+                        } else if (verification.matches.length > 1) {
+                             return `Error executing command: File '${filePath}' not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path.`;
+                        }
+                    } catch (_e) {
+                        // Ignore recovery error
+                    }
+                }
+            }
+        }
+
+        const { stdout, stderr } = await execPromise(finalCommand, { timeout: 120000 });
         let output = stdout;
         if (stderr) {
             output += `\n[STDERR]\n${stderr}`;
@@ -147,13 +181,13 @@ export async function listDir(dirPath: string = "."): Promise<string[]> {
 /**
  * Returns a visual tree structure of the directory.
  */
-export async function getFileTree(startPath: string = ".", maxDepth: number = 2): Promise<string> {
+export async function getFileTree(_startPath: string = ".", maxDepth: number = 2): Promise<string> {
     // Not implementing full recursive walk in TS helper for brevity right now, 
     // can stick to 'find' command if available, or just a simple implementation.
     try {
         const output = await runCmd(`find . -maxdepth ${maxDepth} -not -path '*/.*'`);
         return output;
-    } catch (e) {
+    } catch (_e) {
         return "Error getting file tree";
     }
 }
