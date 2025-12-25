@@ -50,4 +50,51 @@ describe('LoopDetector Service', () => {
     expect((detector as any).history).toBeDefined();
     expect((detector as any).history.length).toBe(1);
   });
+
+  it('should detect a loop when identical state is added', () => {
+    const snapshot1: LoopStateSnapshot = {
+      iteration: 1,
+      filesChanged: ['test.ts'],
+      contentChecksum: 'hash1',
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    const snapshot2: LoopStateSnapshot = {
+      iteration: 2,
+      filesChanged: ['test.ts'],
+      contentChecksum: 'hash1',
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    detector.addState(snapshot1);
+    const result = detector.detectLoop(snapshot2);
+
+    expect(result.detected).toBe(true);
+    expect(result.duplicateOfIteration).toBe(1);
+  });
+
+  it('should not detect loop when content checksum differs', () => {
+    const snapshot1: LoopStateSnapshot = {
+      iteration: 1,
+      filesChanged: ['test.ts'],
+      contentChecksum: 'hash1',
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    const snapshot2: LoopStateSnapshot = {
+      iteration: 2,
+      filesChanged: ['test.ts'],
+      contentChecksum: 'hash2', // Different checksum
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    detector.addState(snapshot1);
+    const result = detector.detectLoop(snapshot2);
+
+    expect(result.detected).toBe(false);
+  });
 });
