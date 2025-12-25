@@ -163,3 +163,21 @@ export interface AgentState {
   rewardHistory?: number[];
   budgetRemaining?: number;
 }
+
+// Loop Detection Types
+
+export type LoopStateHash = string;
+
+export interface LoopStateSnapshot {
+  iteration: number;
+  filesChanged: string[]; // Paths of files changed in this iteration
+  contentChecksum: string; // Hash of the content changes (or diffs)
+  errorFingerprint: string; // Hash or signature of the error encountered
+  timestamp: number;
+}
+
+export interface LoopDetectionResult {
+  detected: boolean;
+  message?: string;
+  duplicateOfIteration?: number; // The iteration this loops back to
+}
