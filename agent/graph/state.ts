@@ -69,6 +69,10 @@ export interface GraphState {
     llmMetrics?: LLMCallMetrics[];      // Metrics from all LLM calls
     rewardHistory?: number[];           // Reward scores per iteration
     selectedModel?: string;             // Model selected for this iteration
+
+    // Loop Detection
+    loopDetected?: boolean;
+    loopGuidance?: string;
 }
 
 export interface GraphContext {

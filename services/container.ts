@@ -18,6 +18,7 @@ import { FileVerificationService } from './sandbox/FileVerificationService.js';
 import { FileFallbackService } from './sandbox/FileFallbackService.js';
 import { EnvironmentService } from './sandbox/EnvironmentService.js';
 import { db } from '../db/client.js';
+import { LoopDetector } from './LoopDetector.js';
 
 export interface ServiceContainer {
     github: typeof GitHub;
@@ -26,6 +27,7 @@ export interface ServiceContainer {
     verification: FileVerificationService;
     fallback: FileFallbackService;
     environment: EnvironmentService;
+    loopDetector: LoopDetector;
     llm: typeof LLM;
     analysis: typeof Analysis;
     context: typeof Context;
@@ -47,6 +49,7 @@ export const defaultServices: ServiceContainer = {
     verification: new FileVerificationService(),
     fallback: new FileFallbackService(),
     environment: new EnvironmentService(),
+    loopDetector: new LoopDetector(),
     llm: LLM,
     analysis: Analysis,
     context: Context,

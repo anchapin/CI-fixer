@@ -10,6 +10,8 @@ import { hasBlockingDependencies, getBlockedErrors } from '../../../services/dep
 import { clusterError } from '../../../services/error-clustering.js';
 import { estimateComplexity, detectConvergence, isAtomic, explainComplexity } from '../../../services/complexity-estimator.js';
 import { withSpan, setAttributes, addEvent } from '../../../telemetry/tracing.js';
+import { createHash } from 'crypto';
+import { LoopStateSnapshot } from '../../../types.js';
 
 export const analysisNode: NodeHandler = async (state, context) => {
     return withSpan('analysis-node', async (span) => {
@@ -82,6 +84,42 @@ export const analysisNode: NodeHandler = async (state, context) => {
         // For now, let's look for multiple distinct error patterns in the same chunk
         const classified = await services.classification.classifyErrorWithHistory(currentLogText, profile);
 
+        // --- LOOP DETECTION START ---
+        // Construct snapshot of current state
+        const filesChanged = Object.keys(state.files).sort();
+        const contentHash = createHash('sha256');
+        for (const file of filesChanged) {
+            if (state.files[file].modified?.content) {
+                contentHash.update(state.files[file].modified.content);
+            }
+        }
+        const contentChecksum = contentHash.digest('hex');
+        
+        // Fingerprint combines error category + message (simplified) + filenames
+        // We use the classified fingerprint if available, or construct one
+        const errorFingerprint = `${classified.category}:${classified.errorMessage}`;
+
+        const snapshot: LoopStateSnapshot = {
+            iteration,
+            filesChanged,
+            contentChecksum,
+            errorFingerprint,
+            timestamp: Date.now()
+        };
+
+        const loopResult = services.loopDetector.detectLoop(snapshot);
+        services.loopDetector.addState(snapshot); // Record this state
+
+        let loopContext = "";
+        if (loopResult.detected) {
+            const message = `[LoopDetector] LOOP DETECTED! This state matches iteration ${loopResult.duplicateOfIteration}. You are repeating the same fix logic which leads to the same error. You MUST change your strategy.`;
+            log('WARN', message);
+            loopContext = `\nCRITICAL WARNING: ${message}\n`;
+            // Add to feedback so it persists in the loop
+            state.feedback.push(message);
+        }
+        // --- LOOP DETECTION END ---
+
         // TODO: Future enhancement: if classified.cascadingErrors contains things that look like 
         // independent errors, classify them too.
 
@@ -94,7 +132,14 @@ export const analysisNode: NodeHandler = async (state, context) => {
         };
 
         log('INFO', `Diagnosing error (Category: ${classified.category})...`);
-        const diagnosis = await context.services.analysis.diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, state.feedback);
+        const diagnosis = await context.services.analysis.diagnoseError(
+            config, 
+            currentLogText + loopContext, // Inject loop context here
+            diagContext, 
+            profile, 
+            classificationForDiagnosis, 
+            state.feedback
+        );
 
         // ROBUSTNESS UPGRADE: If diagnosis missed a high-priority structural error detected by classification, 
         // we should override or augment it.
