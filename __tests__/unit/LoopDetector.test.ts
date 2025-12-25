@@ -97,4 +97,52 @@ describe('LoopDetector Service', () => {
 
     expect(result.detected).toBe(false);
   });
+
+  it('should ignore file order when hashing', () => {
+    const snapshot1: LoopStateSnapshot = {
+      iteration: 1,
+      filesChanged: ['a.ts', 'b.ts'],
+      contentChecksum: 'hash1',
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    const snapshot2: LoopStateSnapshot = {
+      iteration: 2,
+      filesChanged: ['b.ts', 'a.ts'], // Different order
+      contentChecksum: 'hash1',
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    detector.addState(snapshot1);
+    const result = detector.detectLoop(snapshot2);
+
+    expect(result.detected).toBe(true);
+    expect(result.duplicateOfIteration).toBe(1);
+  });
+
+  it('should detect loop only after state is added', () => {
+    const snapshot: LoopStateSnapshot = {
+      iteration: 1,
+      filesChanged: ['test.ts'],
+      contentChecksum: 'hash1',
+      errorFingerprint: 'error1',
+      timestamp: Date.now()
+    };
+
+    // First check: Not yet in history
+    const result1 = detector.detectLoop(snapshot);
+    expect(result1.detected).toBe(false);
+
+    // Add state
+    detector.addState(snapshot);
+
+    // Second check (simulating a future identical state)
+    // Note: iteration should ideally be different for a loop, but the logic checks content
+    const snapshot2 = { ...snapshot, iteration: 2 };
+    const result2 = detector.detectLoop(snapshot2);
+    expect(result2.detected).toBe(true);
+    expect(result2.duplicateOfIteration).toBe(1);
+  });
 });
