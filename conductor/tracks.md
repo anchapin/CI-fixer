@@ -4,5 +4,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [~] Track: Robust File Path Verification
-*Link: [./conductor/tracks/path_verification_20251222/](./conductor/tracks/path_verification_20251222/)*
+
+
+## [~] Track: Error Prioritization Hierarchy
+
+*Link: [./conductor/tracks/error_priority_20251225/](./conductor/tracks/error_priority_20251225/)*

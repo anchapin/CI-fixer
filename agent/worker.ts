@@ -249,7 +249,7 @@ export async function runWorkerTask(
             }
 
             const priority = getErrorPriority(classified.category);
-            log('INFO', `[Classification] Category: ${classified.category}, Priority: ${priority}/10, Confidence: ${(classified.confidence * 100).toFixed(0)}%`);
+            log('INFO', `[Classification] Category: ${classified.category}, Priority: ${priority}/4, Confidence: ${(classified.confidence * 100).toFixed(0)}%`);
 
             if (classified.affectedFiles.length > 0) {
                 log('VERBOSE', `[Classification] Affected files: ${classified.affectedFiles.join(', ')}`);
@@ -276,8 +276,10 @@ export async function runWorkerTask(
             }
 
             // [STAGE 2 ACTIVE] Priority-based iteration limits
-            if (priority < 5 && i >= 2) {
-                log('INFO', `[Classification] Low priority error (${priority}/10), limiting iterations`);
+            // New Priority Scale: 1 (Highest) to 4 (Lowest)
+            // We limit iterations for lower priority errors (3=Runtime/Infra, 4=Test, 5=Unknown)
+            if (priority >= 3 && i >= 2) {
+                log('INFO', `[Classification] Low priority error (${priority}/4), limiting iterations`);
                 if (i > 2) {
                     log('WARN', `Max iterations for low-priority errors reached.`);
                     break;

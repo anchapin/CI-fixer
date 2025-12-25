@@ -387,8 +387,22 @@ export function classifyError(logs: string): ClassifiedError {
             const matched = pattern.patterns.some(regex => regex.test(line));
 
             if (matched) {
-                // If we found a higher confidence match, switch to it
-                if (pattern.confidence > confidence) {
+                const currentPriority = getErrorPriority(category);
+                const newPriority = getErrorPriority(pattern.category);
+                
+                let shouldSwitch = false;
+
+                if (category === ErrorCategory.UNKNOWN) {
+                    shouldSwitch = true;
+                } else if (newPriority < currentPriority) {
+                    shouldSwitch = true; // Better priority (lower number is higher priority)
+                } else if (newPriority === currentPriority) {
+                    if (pattern.confidence > confidence) {
+                        shouldSwitch = true; // Same priority, better confidence
+                    }
+                }
+
+                if (shouldSwitch) {
                     category = pattern.category;
                     confidence = pattern.confidence;
                     rootCauseLog = line.trim();
@@ -499,28 +513,37 @@ function cleanErrorMessage(message: string): string {
 
 /**
  * Assigns a priority score to an error category.
- * Higher scores indicate errors that should be fixed first.
+ * Lower scores indicate higher priority (1 = Highest, 4 = Lowest).
  */
 export function getErrorPriority(category: ErrorCategory): number {
     const priorities: Record<ErrorCategory, number> = {
-        [ErrorCategory.DISK_SPACE]: 10,        // Critical: blocks everything
-        [ErrorCategory.AUTHENTICATION]: 9,     // Critical: prevents access
-        [ErrorCategory.CONFIGURATION]: 8,      // High: prevents startup
-        [ErrorCategory.DEPENDENCY_CONFLICT]: 8,// High: structural incompatibility
-        [ErrorCategory.ENVIRONMENT_UNSTABLE]: 8, // High: broken environment
-        [ErrorCategory.PATCH_PACKAGE_FAILURE]: 8, // High: broken patches
-        [ErrorCategory.MSW_ERROR]: 7,          // High: broken mocks
-        [ErrorCategory.DEPENDENCY]: 7,         // High: prevents build
-        [ErrorCategory.SYNTAX]: 6,             // Medium-high: prevents compilation
-        [ErrorCategory.BUILD]: 5,              // Medium: prevents deployment
-        [ErrorCategory.RUNTIME]: 4,            // Medium: application crashes
-        [ErrorCategory.TEST_FAILURE]: 3,       // Medium-low: code works but tests fail
-        [ErrorCategory.NETWORK]: 2,            // Low: transient, might auto-recover
-        [ErrorCategory.TIMEOUT]: 1,            // Low: might be transient
-        [ErrorCategory.UNKNOWN]: 0             // Lowest: unclear how to fix
+        // Priority 1: Environment / Dependency / Critical Infrastructure
+        [ErrorCategory.DISK_SPACE]: 1,
+        [ErrorCategory.AUTHENTICATION]: 1,
+        [ErrorCategory.CONFIGURATION]: 1,
+        [ErrorCategory.DEPENDENCY_CONFLICT]: 1,
+        [ErrorCategory.ENVIRONMENT_UNSTABLE]: 1,
+        [ErrorCategory.PATCH_PACKAGE_FAILURE]: 1,
+        [ErrorCategory.MSW_ERROR]: 1,
+        [ErrorCategory.DEPENDENCY]: 1,
+        
+        // Priority 2: Linting / Build / Syntax
+        [ErrorCategory.SYNTAX]: 2,
+        [ErrorCategory.BUILD]: 2,
+        
+        // Priority 3: Runtime / Infrastructure (transient)
+        [ErrorCategory.RUNTIME]: 3,
+        [ErrorCategory.NETWORK]: 3,
+        [ErrorCategory.TIMEOUT]: 3,
+        
+        // Priority 4: Test Failures (Logic)
+        [ErrorCategory.TEST_FAILURE]: 4,
+        
+        // Priority 5: Unknown
+        [ErrorCategory.UNKNOWN]: 5
     };
 
-    return priorities[category] || 0;
+    return priorities[category] || 5;
 }
 
 /**
@@ -534,8 +557,9 @@ export function selectPrimaryError(
     const priority1 = getErrorPriority(error1.category);
     const priority2 = getErrorPriority(error2.category);
 
-    if (priority1 > priority2) return error1;
-    if (priority2 > priority1) return error2;
+    // Lower number = Higher priority
+    if (priority1 < priority2) return error1;
+    if (priority2 < priority1) return error2;
 
     // If same priority, prefer higher confidence
     return error1.confidence >= error2.confidence ? error1 : error2;
@@ -553,7 +577,7 @@ export function formatErrorSummary(error: ClassifiedError): string {
         '=== Error Classification ===',
         `Category: ${error.category.toUpperCase()}`,
         `Confidence: ${(error.confidence * 100).toFixed(0)}%`,
-        `Priority: ${getErrorPriority(error.category)}/10`,
+        `Priority: ${getErrorPriority(error.category)}/4`,
         '',
         `Error Message: ${error.errorMessage}`,
         ''

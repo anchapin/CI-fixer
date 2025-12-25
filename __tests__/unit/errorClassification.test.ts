@@ -190,48 +190,48 @@ This is just random text
     });
 
     describe('getErrorPriority', () => {
-        it('should assign highest priority to disk space errors', () => {
-            expect(getErrorPriority(ErrorCategory.DISK_SPACE)).toBe(10);
+        it('should assign highest priority (1) to disk space errors', () => {
+            expect(getErrorPriority(ErrorCategory.DISK_SPACE)).toBe(1);
         });
 
-        it('should assign high priority to auth errors', () => {
-            expect(getErrorPriority(ErrorCategory.AUTHENTICATION)).toBe(9);
+        it('should assign highest priority (1) to auth errors', () => {
+            expect(getErrorPriority(ErrorCategory.AUTHENTICATION)).toBe(1);
         });
 
-        it('should assign lower priority to test failures', () => {
-            const testPriority = getErrorPriority(ErrorCategory.TEST_FAILURE);
-            const diskPriority = getErrorPriority(ErrorCategory.DISK_SPACE);
-            expect(testPriority).toBeLessThan(diskPriority);
+        it('should assign lower priority (higher number) to test failures', () => {
+            const testPriority = getErrorPriority(ErrorCategory.TEST_FAILURE); // 4
+            const diskPriority = getErrorPriority(ErrorCategory.DISK_SPACE); // 1
+            expect(testPriority).toBeGreaterThan(diskPriority);
         });
 
-        it('should assign lowest priority to unknown errors', () => {
-            expect(getErrorPriority(ErrorCategory.UNKNOWN)).toBe(0);
+        it('should assign lowest priority (5) to unknown errors', () => {
+            expect(getErrorPriority(ErrorCategory.UNKNOWN)).toBe(5);
         });
 
         it('should have consistent priority ordering', () => {
+            // Ordered from Highest Priority (1) to Lowest (5)
             const priorities = [
-                ErrorCategory.DISK_SPACE,
-                ErrorCategory.AUTHENTICATION,
-                ErrorCategory.CONFIGURATION,
-                ErrorCategory.DEPENDENCY,
-                ErrorCategory.SYNTAX,
-                ErrorCategory.BUILD,
-                ErrorCategory.RUNTIME,
-                ErrorCategory.TEST_FAILURE,
-                ErrorCategory.NETWORK,
-                ErrorCategory.TIMEOUT,
-                ErrorCategory.UNKNOWN
+                ErrorCategory.DISK_SPACE,      // 1
+                ErrorCategory.AUTHENTICATION,  // 1
+                ErrorCategory.CONFIGURATION,   // 1
+                ErrorCategory.DEPENDENCY,      // 1
+                ErrorCategory.SYNTAX,          // 2
+                ErrorCategory.BUILD,           // 2
+                ErrorCategory.RUNTIME,         // 3
+                ErrorCategory.NETWORK,         // 3
+                ErrorCategory.TEST_FAILURE,    // 4
+                ErrorCategory.UNKNOWN          // 5
             ].map(cat => getErrorPriority(cat));
 
-            // Each priority should be less than or equal to the previous
+            // Each priority should be greater than or equal to the previous (1, 1, 1, 1, 2, 2, 3, 3, 4, 5)
             for (let i = 1; i < priorities.length; i++) {
-                expect(priorities[i]).toBeLessThanOrEqual(priorities[i - 1]);
+                expect(priorities[i]).toBeGreaterThanOrEqual(priorities[i - 1]);
             }
         });
     });
 
     describe('selectPrimaryError', () => {
-        it('should select higher priority error', () => {
+        it('should select higher priority error (lower number)', () => {
             const diskError: ClassifiedError = {
                 category: ErrorCategory.DISK_SPACE,
                 confidence: 0.9,
@@ -295,7 +295,7 @@ This is just random text
 
             expect(summary).toContain('Category: DISK_SPACE');
             expect(summary).toContain('Confidence: 95%');
-            expect(summary).toContain('Priority: 10/10');
+            expect(summary).toContain('Priority: 1/4');
             expect(summary).toContain('no space left on device');
             expect(summary).toContain('package-lock.json');
             expect(summary).toContain('Add cleanup step');
