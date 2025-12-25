@@ -10,9 +10,9 @@ This plan outlines the implementation of a `LoopDetector` service to prevent the
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Loop Detection Logic' (Protocol in workflow.md) 77c704f
 
 ## Phase 2: Agent Integration
-- [ ] Task: Modify `agent.ts` to capture state data after each iteration
-- [ ] Task: Integrate `LoopDetector` into the agent loop
-- [ ] Task: Implement prompt context injection when `LOOP_DETECTED` is true
+- [x] Task: Modify `agent.ts` to capture state data after each iteration efb3b06
+- [x] Task: Integrate `LoopDetector` into the agent loop efb3b06
+- [x] Task: Implement prompt context injection when `LOOP_DETECTED` is true efb3b06
 - [ ] Task: Write integration tests simulating a "stuck" loop and verifying the injected context
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Agent Integration' (Protocol in workflow.md)
 
