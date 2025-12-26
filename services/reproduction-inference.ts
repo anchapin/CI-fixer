@@ -17,6 +17,130 @@ export class ReproductionInferenceService {
     const workflowResult = await this.inferFromWorkflows(repoPath);
     if (workflowResult) return workflowResult;
 
+    const signatureResult = await this.inferFromSignatures(repoPath);
+    if (signatureResult) return signatureResult;
+
+    const buildToolResult = await this.inferFromBuildTools(repoPath);
+    if (buildToolResult) return buildToolResult;
+
+    return null;
+  }
+
+  private async inferFromBuildTools(repoPath: string): Promise<ReproductionInferenceResult | null> {
+    // 1. Makefile
+    try {
+      const makefilePath = path.join(repoPath, 'Makefile');
+      const content = await fs.readFile(makefilePath, 'utf8');
+      if (content.includes('test:') || content.includes('check:')) {
+        return {
+          command: 'make test',
+          confidence: 0.7,
+          strategy: 'build_tool',
+          reasoning: 'Detected Makefile with test/check target'
+        };
+      }
+    } catch (e) {
+      void 0;
+    }
+
+    // 2. Gradle
+    try {
+      await fs.stat(path.join(repoPath, 'build.gradle'));
+      return {
+        command: './gradlew test',
+        confidence: 0.7,
+        strategy: 'build_tool',
+        reasoning: 'Detected Gradle project'
+      };
+    } catch (e) {
+      void 0;
+    }
+
+    // 3. Maven
+    try {
+      await fs.stat(path.join(repoPath, 'pom.xml'));
+      return {
+        command: 'mvn test',
+        confidence: 0.7,
+        strategy: 'build_tool',
+        reasoning: 'Detected Maven project'
+      };
+    } catch (e) {
+      void 0;
+    }
+
+    // 4. Ruby/Rake
+    try {
+      await fs.stat(path.join(repoPath, 'Rakefile'));
+      return {
+        command: 'rake test',
+        confidence: 0.7,
+        strategy: 'build_tool',
+        reasoning: 'Detected Rakefile'
+      };
+    } catch (e) {
+      void 0;
+    }
+
+    return null;
+  }
+
+  private async inferFromSignatures(repoPath: string): Promise<ReproductionInferenceResult | null> {
+    const signatures: Array<{ files: string[], command: string, confidence: number, reasoning: string }> = [
+      {
+        files: ['package.json'],
+        command: 'npm test',
+        confidence: 0.8,
+        reasoning: 'Detected Node.js project (package.json)'
+      },
+      {
+        files: ['bun.lockb', 'bunfig.toml'],
+        command: 'bun test',
+        confidence: 0.8,
+        reasoning: 'Detected Bun project'
+      },
+      {
+        files: ['pytest.ini', 'tox.ini', '.pytest_cache'],
+        command: 'pytest',
+        confidence: 0.8,
+        reasoning: 'Detected Python pytest configuration'
+      },
+      {
+        files: ['requirements.txt', 'setup.py', 'pyproject.toml'],
+        command: 'pytest',
+        confidence: 0.7,
+        reasoning: 'Detected Python project'
+      },
+      {
+        files: ['go.mod'],
+        command: 'go test ./...',
+        confidence: 0.8,
+        reasoning: 'Detected Go project (go.mod)'
+      },
+      {
+        files: ['Cargo.toml'],
+        command: 'cargo test',
+        confidence: 0.8,
+        reasoning: 'Detected Rust project (Cargo.toml)'
+      }
+    ];
+
+    for (const sig of signatures) {
+      for (const file of sig.files) {
+        try {
+          await fs.stat(path.join(repoPath, file));
+          return {
+            command: sig.command,
+            confidence: sig.confidence,
+            strategy: 'signature',
+            reasoning: sig.reasoning
+          };
+        } catch {
+          void 0;
+        }
+      }
+    }
+
     return null;
   }
 
@@ -58,7 +182,7 @@ export class ReproductionInferenceService {
           }
         }
       }
-    } catch (error) {
+    } catch {
       // Workflows directory might not exist or other FS issues
       return null;
     }

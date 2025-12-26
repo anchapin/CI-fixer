@@ -10,10 +10,10 @@ This plan implements a multi-layered service to infer `reproductionCommand` when
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Service & Workflow Analysis' (Protocol in workflow.md) (556b557)
 
 ## Phase 2: Signature & Build Tool Detection
-- [ ] Task: Implement File Signature Detection (Node/Bun, Python, Go, Rust)
-- [ ] Task: Implement Build Tool Inspection (Makefile, Gradle, Maven, Rake)
-- [ ] Task: Add a priority-based dispatcher to execute strategies in order (Workflow > Signature > Build Tool)
-- [ ] Task: Write unit tests for Signature and Build Tool detection
+- [x] Task: Implement File Signature Detection (Node/Bun, Python, Go, Rust) (8867ms)
+- [x] Task: Implement Build Tool Inspection (Makefile, Gradle, Maven, Rake) (8867ms)
+- [x] Task: Add a priority-based dispatcher to execute strategies in order (Workflow > Signature > Build Tool) (8867ms)
+- [x] Task: Write unit tests for Signature and Build Tool detection (8867ms)
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Signature & Build Tool Detection' (Protocol in workflow.md)
 
 ## Phase 3: Agent Retry & Safe Scan Fallback
