@@ -19,7 +19,7 @@
 - [x] Task: Integration tests simulating a "hybrid" project failure and successful Bun recovery. [7faec97]
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Adaptive Execution Strategy' (Protocol in workflow.md)
 
-## Phase 4: Final Verification
-- [ ] Task: Run full regression suite to ensure Node-only projects are unaffected.
-- [ ] Task: Verify the "hybrid" scenario (Bun imports + Vitest config) correctly switches to Bun execution.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Final Verification' (Protocol in workflow.md)
+## Phase 4: Final Verification [checkpoint: 7faec97]
+- [x] Task: Run full regression suite to ensure Node-only projects are unaffected. [7faec97]
+- [x] Task: Verify the "hybrid" scenario (Bun imports + Vitest config) correctly switches to Bun execution. [7faec97]
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Final Verification' (Protocol in workflow.md)
