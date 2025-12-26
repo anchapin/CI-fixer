@@ -112,7 +112,7 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
 
     try {
         console.log('[Sandbox] Checking for dependencies...');
-        const check = await sandbox.runCommand('ls package.json requirements.txt pnpm-lock.yaml pnpm-workspace.yaml');
+        const check = await sandbox.runCommand('ls package.json requirements.txt pnpm-lock.yaml pnpm-workspace.yaml bun.lockb bunfig.toml');
         const output = check.stdout;
 
         console.log('[Sandbox] Installing LSP Tools (pyright, typescript)...');
@@ -132,7 +132,17 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
         }
 
         // Check for Bun
-        if (output.includes('bun.lockb') || (output.includes('package.json') && output.includes('"bun"'))) {
+        let isBun = output.includes('bun.lockb') || output.includes('bunfig.toml');
+        if (!isBun && output.includes('package.json')) {
+            try {
+                const pkgContent = await sandbox.runCommand('cat package.json');
+                if (pkgContent.stdout.includes('"bun"')) {
+                    isBun = true;
+                }
+            } catch (e) { /* ignore read error */ }
+        }
+
+        if (isBun) {
             console.log('[Sandbox] Detected Bun configuration. Installing bun...');
             await sandbox.runCommand('curl -fsSL https://bun.sh/install | bash');
             // Add bun to path persistently
