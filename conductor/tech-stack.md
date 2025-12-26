@@ -28,5 +28,8 @@
 - **Spell Checking:** CSpell (for generated patches)
 - **Dockerfile Linting:** Hadolint
 
+## Observability & Telemetry
+- **Metrics & Tracing:** OpenTelemetry SDK
+
 ## Execution Environment
 - **Sandboxing:** E2B Code Interpreter, Docker
