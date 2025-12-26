@@ -4,6 +4,9 @@ import { recordLoopDetected } from '../telemetry/metrics';
 export class LoopDetector {
   private history: LoopStateSnapshot[] = [];
   private stateMap: Map<string, number> = new Map(); // Hash -> Iteration ID
+  private hallucinationCounts: Map<string, number> = new Map();
+  private lastHallucinatedPath: string | null = null;
+  private consecutiveHallucinations: number = 0;
 
   constructor() {}
 
@@ -14,6 +17,30 @@ export class LoopDetector {
     if (!this.stateMap.has(hash)) {
       this.stateMap.set(hash, state.iteration);
     }
+  }
+
+  recordHallucination(path: string): void {
+    const count = this.hallucinationCounts.get(path) || 0;
+    this.hallucinationCounts.set(path, count + 1);
+
+    if (this.lastHallucinatedPath === path) {
+      this.consecutiveHallucinations++;
+    } else {
+      this.lastHallucinatedPath = path;
+      this.consecutiveHallucinations = 1;
+    }
+  }
+
+  getHallucinationCount(path: string): number {
+    return this.hallucinationCounts.get(path) || 0;
+  }
+
+  getTotalHallucinations(): number {
+    return Array.from(this.hallucinationCounts.values()).reduce((a, b) => a + b, 0);
+  }
+
+  shouldTriggerStrategyShift(path: string): boolean {
+    return this.lastHallucinatedPath === path && this.consecutiveHallucinations >= 2;
   }
 
   detectLoop(currentState: LoopStateSnapshot): LoopDetectionResult {
