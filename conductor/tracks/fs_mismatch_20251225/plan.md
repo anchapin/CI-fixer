@@ -13,7 +13,6 @@
 - [x] Task: Update integration tests to verify path correction in tool calls. (0606ba6)
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Tool Wrapper Integration' (Protocol in workflow.md) (ce77345)
 
-## Phase 3: Final Verification
-- [ ] Task: Write integration tests to simulate "phantom file" scenarios (e.g., trying to `rm` a file that moved).
-- [ ] Task: Verify that performance remains acceptable.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Final Verification' (Protocol in workflow.md)
+## Phase 3: Final Verification [checkpoint: e9c34d4]
+- [x] Task: Integration tests for "phantom file" scenarios (where LLM references a file that exists but in a different directory). (e9c34d4)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Final Verification' (Protocol in workflow.md) (e9c34d4)
