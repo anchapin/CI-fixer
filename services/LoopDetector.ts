@@ -50,7 +50,7 @@ export class LoopDetector {
   triggerAutomatedRecovery(): string | null {
     if (this.lastHallucinatedPath && this.shouldTriggerStrategyShift(this.lastHallucinatedPath)) {
       // Return a glob search command for the last hallucinated path
-      return `glob("**/non_existent.ts")`;
+      return `glob("**/non_existent.ts")`.replace('non_existent.ts', this.lastHallucinatedPath);
     }
     return null;
   }
