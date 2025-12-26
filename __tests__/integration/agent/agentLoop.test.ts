@@ -9,8 +9,8 @@ import * as SandboxService from '../../../services/sandbox/SandboxService';
 // Mock database client to use test database (must be first)
 vi.mock('../../../db/client', () => ({
   db: {
-    errorFact: { findFirst: vi.fn(), create: vi.fn() },
-    fileModification: { create: vi.fn() }
+    errorFact: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'mock-error-fact-id' }) },
+    fileModification: { create: vi.fn().mockResolvedValue({}) }
   }
 }));
 
@@ -182,6 +182,12 @@ describe('Agent Loop Integration', () => {
       },
       classification: {
         classifyErrorWithHistory: vi.fn().mockResolvedValue({
+          category: 'logic',
+          confidence: 0.9,
+          errorMessage: 'Error',
+          affectedFiles: [],
+        }),
+        classifyError: vi.fn().mockResolvedValue({
           category: 'logic',
           confidence: 0.9,
           errorMessage: 'Error',

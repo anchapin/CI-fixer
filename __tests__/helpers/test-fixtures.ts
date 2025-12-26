@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import * as path from 'node:path';
 import { GraphState, GraphContext } from '../../agent/graph/state.js';
 import { AppConfig, RunGroup, WorkflowRun, FileChange } from '../../types.js';
 import { SimulationSandbox } from '../../sandbox.js';
@@ -145,7 +146,7 @@ export const createMockServices = (overrides?: Partial<ServiceContainer>): Servi
                 runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
                 writeFile: vi.fn(),
                 readFile: vi.fn().mockResolvedValue('const x = 1;'),
-                getWorkDir: () => '/'
+                getWorkDir: () => '/simulation'
             })
         } as any,
         analysis: {
@@ -171,8 +172,8 @@ export const createMockServices = (overrides?: Partial<ServiceContainer>): Servi
         } as any,
         classification: {
             classifyErrorWithHistory: vi.fn().mockResolvedValue(createMockClassification()),
-            getErrorPriority: vi.fn().mockReturnValue(5),
-            classifyError: vi.fn().mockReturnValue(createMockClassification())
+            classifyError: vi.fn().mockReturnValue(createMockClassification()),
+            getErrorPriority: vi.fn().mockReturnValue(5)
         } as any,
         dependency: {
             hasBlockingDependencies: vi.fn().mockResolvedValue(false),
@@ -202,7 +203,12 @@ export const createMockServices = (overrides?: Partial<ServiceContainer>): Servi
             processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 })
         } as any,
         discovery: {
-            findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'app.ts', relativePath: 'app.ts', matches: ['app.ts'] }),
+            findUniqueFile: vi.fn().mockImplementation(async (filename, rootDir) => ({
+                found: true,
+                path: path.isAbsolute(filename) ? filename : path.join(rootDir || '/', filename),
+                relativePath: filename,
+                matches: [filename]
+            })),
             recursiveSearch: vi.fn().mockResolvedValue(null),
             checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
             fuzzySearch: vi.fn().mockResolvedValue(null),

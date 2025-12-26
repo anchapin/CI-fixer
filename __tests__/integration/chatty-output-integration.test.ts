@@ -128,7 +128,41 @@ describe('Chatty Output Integration', () => {
                     errorMessage: 'Error',
                     affectedFiles: ['requirements.txt'],
                 }),
+                classifyError: vi.fn().mockResolvedValue({
+                    category: 'logic',
+                    confidence: 0.9,
+                    errorMessage: 'Error',
+                    affectedFiles: ['requirements.txt'],
+                }),
                 getErrorPriority: vi.fn().mockReturnValue(5),
+            } as any,
+            ingestion: {
+                ingestRawData: vi.fn().mockResolvedValue({ id: 'mock-ingestion-id' }),
+            } as any,
+            learningMetrics: {
+                recordMetric: vi.fn().mockResolvedValue(undefined),
+            } as any,
+            discovery: {
+                findUniqueFile: vi.fn().mockImplementation(async (filename, rootDir) => ({
+                    found: true,
+                    path: filename,
+                    relativePath: filename,
+                    matches: [filename]
+                })),
+                recursiveSearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+                fuzzySearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+            } as any,
+            verification: {
+                verifyContentMatch: vi.fn().mockResolvedValue(true)
+            } as any,
+            fallback: {
+                generatePlaceholder: vi.fn().mockResolvedValue(undefined)
+            } as any,
+            learning: {
+                processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 }),
+                getStrategyRecommendation: vi.fn().mockResolvedValue({ strategy: 'direct', confidence: 0.9 })
             } as any,
             dependency: {
                 hasBlockingDependencies: vi.fn().mockResolvedValue(false),
@@ -143,10 +177,6 @@ describe('Chatty Output Integration', () => {
             } as any,
             repairAgent: { getRepairAgentConfig: vi.fn().mockReturnValue({}), runRepairAgent: vi.fn() } as any,
             metrics: { recordFixAttempt: vi.fn() } as any,
-            learning: {
-                getStrategyRecommendation: vi.fn().mockResolvedValue({ strategy: 'direct', confidence: 0.9 }),
-                processCompletedRun: vi.fn()
-            } as any
         };
 
         // LLM Mocks
@@ -178,7 +208,11 @@ describe('Chatty Output Integration', () => {
     it('should strip conversational filler from the generated fix before writing to sandbox', async () => {
         await runIndependentAgentLoop(config, group, 'ctx', testServices as any, mockUpdateState, mockLog);
 
-        // Verify that mockSandbox.writeFile was called with CLEAN content
-        expect(mockSandbox.writeFile).toHaveBeenCalledWith('requirements.txt', 'python-dotenv==1.2.1');
+        // Verify that mockSandbox.writeFile was called with CLEAN content for requirements.txt
+        const writeFileCalls = mockSandbox.writeFile.mock.calls;
+        const requirementsCall = writeFileCalls.find(call => call[0] === 'requirements.txt');
+        
+        expect(requirementsCall).toBeDefined();
+        expect(requirementsCall[1]).toBe('python-dotenv==1.2.1');
     });
 });

@@ -3,9 +3,9 @@
 exports[`Snapshot Tests > Error Classification Output > should match snapshot for dependency error classification 1`] = `
 {
   "affectedFiles": [],
-  "category": "network",
-  "confidence": 0.9,
-  "suggestedAction": "Check network connectivity or add retry logic",
+  "category": "dependency",
+  "confidence": 0.85,
+  "suggestedAction": "Install missing dependencies or fix package.json/requirements.txt",
 }
 `;
 

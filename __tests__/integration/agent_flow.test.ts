@@ -15,7 +15,7 @@ function createMockDb() {
         errorFact: {
             findFirst: vi.fn(() => Promise.resolve(null)),
             findMany: vi.fn(() => Promise.resolve([])),
-            create: vi.fn(() => Promise.resolve({})),
+            create: vi.fn(() => Promise.resolve({ id: 'mock-fact-id' })),
             update: vi.fn(() => Promise.resolve({})),
             delete: vi.fn(() => Promise.resolve({}))
         },
@@ -159,6 +159,8 @@ vi.mock('../../sandbox', async (importOriginal) => {
         getId = () => 'sim-mock';
         runCommand = vi.fn(() => Promise.resolve({ stdout: '', exitCode: 0 }));
         writeFile = vi.fn();
+        readFile = vi.fn().mockResolvedValue('');
+        getWorkDir = () => '/mock';
     }
 
     return {
@@ -217,6 +219,12 @@ describe('Agent Flow Integration (Mocked)', () => {
                     errorMessage: 'Error',
                     affectedFiles: [],
                 }),
+                classifyError: vi.fn().mockResolvedValue({
+                    category: 'logic',
+                    confidence: 0.9,
+                    errorMessage: 'Error',
+                    affectedFiles: [],
+                }),
                 getErrorPriority: vi.fn().mockReturnValue(5),
             } as any,
             dependency: {
@@ -239,7 +247,14 @@ describe('Agent Flow Integration (Mocked)', () => {
             metrics: {
                 recordFixAttempt: vi.fn(),
             } as any,
+            ingestion: {
+                ingestRawData: vi.fn().mockResolvedValue({ id: 'mock-ingestion-id' }),
+            } as any,
+            learningMetrics: {
+                recordMetric: vi.fn().mockResolvedValue(undefined),
+            } as any,
             learning: {
+                processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 }),
                 getStrategyRecommendation: vi.fn().mockResolvedValue({
                     preferredTools: ['llm'],
                     historicalStats: { successRate: 0.8 }
@@ -285,6 +300,9 @@ describe('Agent Flow Integration (Mocked)', () => {
     it('should complete a successful repair cycle', async () => {
         const result = await runIndependentAgentLoop(config, group, 'ctx', testServices as any, mockUpdateState, mockLog);
 
+        if (result.status !== 'success') {
+            console.log('ACTIVE LOG:', result.activeLog);
+        }
         expect(result.status).toBe('success');
         expect(result.phase).toBe(AgentPhase.SUCCESS);
 

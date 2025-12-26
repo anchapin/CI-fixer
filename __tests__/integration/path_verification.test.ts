@@ -86,7 +86,7 @@ describe('Path Verification Integration (read_file)', () => {
 
         const result = await codingNode(state, context);
         
-        expect(result.activeFileChange?.path).toBe(path.join('src', 'app.ts'));
+        expect(result.activeFileChange?.path).toBe('src/app.ts');
         expect(context.logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Auto-corrected path'));
     });
 

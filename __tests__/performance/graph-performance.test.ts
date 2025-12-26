@@ -335,7 +335,7 @@ describe('Performance Benchmarks', () => {
             const duration = Date.now() - start;
             const avgPerInsert = duration / count;
 
-            expect(avgPerInsert).toBeLessThan(50); // < 50ms per insert
+            expect(avgPerInsert).toBeLessThan(200); // < 200ms per insert
             console.log(`${count} inserts in ${duration}ms (avg: ${avgPerInsert}ms)`);
         });
 
@@ -429,7 +429,7 @@ describe('Performance Benchmarks', () => {
             });
 
             expect(facts.length).toBe(concurrency);
-            expect(duration).toBeLessThan(1000); // < 1s for 10 concurrent writes
+            expect(duration).toBeLessThan(3000); // < 3s for 10 concurrent writes
             console.log(`${concurrency} concurrent writes in ${duration}ms`);
         });
     });

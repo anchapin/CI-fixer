@@ -86,11 +86,12 @@ export const analysisNode: NodeHandler = async (state, context) => {
 
         // --- LOOP DETECTION START ---
         // Construct snapshot of current state
-        const filesChanged = Object.keys(state.files).sort();
+        const files = state.files || {};
+        const filesChanged = Object.keys(files).sort();
         const contentHash = createHash('sha256');
         for (const file of filesChanged) {
-            if (state.files[file].modified?.content) {
-                contentHash.update(state.files[file].modified.content);
+            if (files[file]?.modified?.content) {
+                contentHash.update(files[file].modified.content);
             }
         }
         const contentChecksum = contentHash.digest('hex');
@@ -107,16 +108,20 @@ export const analysisNode: NodeHandler = async (state, context) => {
             timestamp: Date.now()
         };
 
-        const loopResult = services.loopDetector.detectLoop(snapshot);
-        services.loopDetector.addState(snapshot); // Record this state
-
         let loopContext = "";
-        if (loopResult.detected) {
-            const message = `[LoopDetector] LOOP DETECTED! This state matches iteration ${loopResult.duplicateOfIteration}. You are repeating the same fix logic which leads to the same error. You MUST change your strategy.`;
-            log('WARN', message);
-            loopContext = `\nCRITICAL WARNING: ${message}\n`;
-            // Add to feedback so it persists in the loop
-            state.feedback.push(message);
+        if (services.loopDetector) {
+            const loopResult = services.loopDetector.detectLoop(snapshot);
+            services.loopDetector.addState(snapshot); // Record this state
+
+            if (loopResult.detected) {
+                const message = `[LoopDetector] LOOP DETECTED! This state matches iteration ${loopResult.duplicateOfIteration}. You are repeating the same fix logic which leads to the same error. You MUST change your strategy.`;
+                log('WARN', message);
+                loopContext = `\nCRITICAL WARNING: ${message}\n`;
+                // Add to feedback so it persists in the loop
+                state.feedback.push(message);
+            }
+        } else {
+            log('WARN', '[AnalysisNode] Loop detector service missing, skipping loop detection');
         }
         // --- LOOP DETECTION END ---
 
@@ -223,9 +228,12 @@ export const analysisNode: NodeHandler = async (state, context) => {
                 const isBlocked = await services.dependency.hasBlockingDependencies(errorFact.id);
                 if (isBlocked) {
                     const blockers = await services.dependency.getBlockedErrors(errorFact.id);
-                    log('WARN', `[Dependency] This error is blocked by ${blockers[0]?.blockedBy.length || 0} unresolved error(s)`);
-                    if (blockers[0]?.blockedBy.length > 0) {
-                        log('INFO', `[Dependency] Blocked by: ${blockers[0].blockedBy.map(b => b.summary).join(', ')}`);
+                    const blockerInfo = blockers[0];
+                    if (blockerInfo) {
+                        log('WARN', `[Dependency] This error is blocked by ${blockerInfo.blockedBy.length || 0} unresolved error(s)`);
+                        if (blockerInfo.blockedBy.length > 0) {
+                            log('INFO', `[Dependency] Blocked by: ${blockerInfo.blockedBy.map(b => b.summary).join(', ')}`);
+                        }
                     }
                     // Return early with blocked status
                     return {

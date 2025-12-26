@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as path from 'node:path';
 import { runIndependentAgentLoop } from '../../agent';
 import { AgentPhase } from '../../types';
 import * as LogAnalysisService from '../../services/analysis/LogAnalysisService.js';
@@ -98,7 +99,12 @@ describe('Dockerfile Repair Regression', () => {
             ingestion: { ingestRawData: vi.fn().mockResolvedValue({}) },
             planning: { generateDetailedPlan: vi.fn().mockResolvedValue({ goal: 'fix', tasks: [], approved: true }) },
             discovery: {
-                findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'docker/base-images/Dockerfile.python-base', relativePath: 'docker/base-images/Dockerfile.python-base', matches: ['docker/base-images/Dockerfile.python-base'] }),
+                findUniqueFile: vi.fn().mockImplementation(async (filename, rootDir) => ({
+                    found: true,
+                    path: path.isAbsolute(filename) ? filename : path.join(rootDir || '/simulation', filename),
+                    relativePath: filename,
+                    matches: [filename]
+                })),
                 recursiveSearch: vi.fn().mockResolvedValue(null),
                 checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
                 fuzzySearch: vi.fn().mockResolvedValue(null),

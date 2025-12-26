@@ -52,7 +52,7 @@ vi.mock('../../validation', () => ({
 // Mock DB
 vi.mock('../../db/client', () => ({
     db: {
-        errorFact: { create: vi.fn(), findFirst: vi.fn() },
+        errorFact: { create: vi.fn().mockResolvedValue({ id: 'mock-fact-id' }), findFirst: vi.fn().mockResolvedValue(null) },
         agentRun: { create: vi.fn(() => Promise.resolve({ id: 'run-1' })), update: vi.fn() },
         agentMetrics: { create: vi.fn() },
         fixAttempt: { create: vi.fn() },
@@ -142,6 +142,24 @@ describe('Environment Recovery Integration', () => {
             },
             ingestion: {
                 ingestRawData: vi.fn(),
+            },
+            discovery: {
+                findUniqueFile: vi.fn().mockImplementation(async (filename) => ({
+                    found: true,
+                    path: filename,
+                    relativePath: filename,
+                    matches: [filename]
+                })),
+                recursiveSearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+                fuzzySearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+            },
+            verification: {
+                verifyContentMatch: vi.fn().mockResolvedValue(true)
+            },
+            fallback: {
+                generatePlaceholder: vi.fn().mockResolvedValue(undefined)
             }
         };
 

@@ -212,7 +212,16 @@ export async function runCmd(command: string): Promise<string> {
 
                 if (verification.wasCorrected && verification.verifiedPath) {
                     pathCorrections.set(filePath, verification.verifiedPath);
-                    logPathCorrection('runCmd_auto', filePath, verification.verifiedPath, path.basename(filePath));
+                    
+                    // Identify the command for better telemetry
+                    let specificTool = 'runCmd_auto';
+                    const cmdLower = command.trim().toLowerCase();
+                    if (cmdLower.startsWith('mv ')) specificTool = 'runCmd_mv';
+                    else if (cmdLower.startsWith('rm ')) specificTool = 'runCmd_rm';
+                    else if (cmdLower.startsWith('cp ')) specificTool = 'runCmd_cp';
+                    else if (cmdLower.startsWith('cat ')) specificTool = 'runCmd_cat';
+                    
+                    logPathCorrection(specificTool, filePath, verification.verifiedPath, path.basename(filePath));
                 }
             }
         }

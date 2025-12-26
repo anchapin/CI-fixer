@@ -7,20 +7,23 @@ import * as GitHubService from '../../services/github/GitHubService.js';
 import * as AnalysisService from '../../services/analysis/LogAnalysisService.js';
 import { ServiceContainer } from '../../services/container.js';
 
-// Mock database client (helper defined inline to avoid hoisting issues)
+// Mock database client
 vi.mock('../../db/client.js', () => ({
-    db: (() => {
-        function createMockDb() {
-            return {
-                errorFact: { findFirst: vi.fn(), create: vi.fn() },
-                fileModification: { create: vi.fn() },
-                fixPattern: { findMany: vi.fn(() => Promise.resolve([])), create: vi.fn(), findFirst: vi.fn() },
-                errorSolution: { findMany: vi.fn(() => Promise.resolve([])), create: vi.fn() },
-                actionTemplate: { findMany: vi.fn(() => Promise.resolve([])), create: vi.fn() }
-            };
-        }
-        return createMockDb();
-    })()
+    db: {
+        errorFact: { 
+            findFirst: vi.fn().mockResolvedValue(null), 
+            create: vi.fn().mockResolvedValue({ id: 'mock-fact-id' }) 
+        },
+        fileModification: { create: vi.fn().mockResolvedValue({}) },
+        fixPattern: { 
+            findMany: vi.fn().mockResolvedValue([]), 
+            create: vi.fn().mockResolvedValue({}), 
+            findFirst: vi.fn().mockResolvedValue(null) 
+        },
+        errorSolution: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({}) },
+        actionTemplate: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({}) },
+        agentRun: { create: vi.fn().mockResolvedValue({ id: 'mock-run-id' }), update: vi.fn() }
+    }
 }));
 
 // Mock static imports
@@ -101,10 +104,21 @@ describe('Agent Logic (Refactored)', () => {
 
         // Construct service container
         services = {
+            ...services, // Use default or imported mocks
             llm: mockLLM as any,
             sandbox: mockSandbox as any,
             github: GitHubService as any,
-            analysis: AnalysisService as any,
+            analysis: {
+                ...AnalysisService,
+                diagnoseError: AnalysisService.diagnoseError,
+                generateFix: AnalysisService.generateFix,
+                runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: "PASS" }),
+                judgeFix: AnalysisService.judgeFix,
+                generateRepoSummary: vi.fn().mockResolvedValue("Summary"),
+                generateDetailedPlan: AnalysisService.generateDetailedPlan,
+                formatPlanToMarkdown: AnalysisService.formatPlanToMarkdown,
+                refineProblemStatement: vi.fn().mockResolvedValue("Refined")
+            } as any,
             context: {
                 smartThinLog: vi.fn().mockImplementation(async (log) => log),
                 thinLog: vi.fn().mockImplementation((log) => log),
@@ -119,13 +133,13 @@ describe('Agent Logic (Refactored)', () => {
                     errorMessage: 'Error',
                     affectedFiles: [],
                 }),
-                getErrorPriority: vi.fn().mockReturnValue(5),
-                classifyError: vi.fn().mockReturnValue({
+                classifyError: vi.fn().mockResolvedValue({
                     category: 'logic',
                     confidence: 0.9,
                     errorMessage: 'Error',
                     affectedFiles: [],
-                })
+                }),
+                getErrorPriority: vi.fn().mockReturnValue(5),
             } as any,
             dependency: {
                 hasBlockingDependencies: vi.fn().mockResolvedValue(false),
@@ -147,6 +161,12 @@ describe('Agent Logic (Refactored)', () => {
             metrics: {
                 recordFixAttempt: vi.fn(),
             } as any,
+            ingestion: {
+                ingestRawData: vi.fn().mockResolvedValue({ id: 'mock-ingestion-id' }),
+            } as any,
+            learningMetrics: {
+                recordMetric: vi.fn().mockResolvedValue(undefined),
+            } as any,
             learning: {
                 getStrategyRecommendation: vi.fn().mockResolvedValue({
                     preferredTools: ['llm'],
@@ -155,7 +175,12 @@ describe('Agent Logic (Refactored)', () => {
                 processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 })
             } as any,
             discovery: {
-                findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'src/utils.ts', relativePath: 'src/utils.ts', matches: ['src/utils.ts'] }),
+                findUniqueFile: vi.fn().mockImplementation(async (filename, rootDir) => ({
+                    found: true,
+                    path: filename,
+                    relativePath: filename,
+                    matches: [filename]
+                })),
                 recursiveSearch: vi.fn().mockResolvedValue(null),
                 checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
                 fuzzySearch: vi.fn().mockResolvedValue(null),
@@ -191,23 +216,6 @@ describe('Agent Logic (Refactored)', () => {
             score: 10,
             reasoning: "Perfect fix"
         }));
-
-        // Add extra responses to handle additional calls that happen during verification/processing
-        mockLLM.queueResponse(JSON.stringify({
-            summary: "Mock Diagnosis",
-            filePath: "src/utils.ts",
-            fixAction: "edit"
-        }));
-
-        mockLLM.queueResponse("Mock Refinement");
-
-        mockLLM.queueResponse(JSON.stringify({
-            goal: "Fix syntax",
-            tasks: [],
-            approved: true
-        }));
-
-        mockLLM.queueResponse("```typescript\nconst x = 10;\n```");
 
         // Use helper to create config
         const config = createMockConfig({

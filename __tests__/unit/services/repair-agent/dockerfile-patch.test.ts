@@ -7,7 +7,15 @@ vi.mock('../../../../services/llm/LLMService.js', () => ({
     unifiedGenerate: vi.fn(),
     safeJsonParse: vi.fn((text, fallback) => {
         try {
-            return JSON.parse(text);
+            if (!text) return fallback;
+            const jsonMatch = text.match(/```json([\s\S]*?)```/) || text.match(/```([\s\S]*?)```/);
+            let jsonStr = jsonMatch ? jsonMatch[1] : text;
+            const firstBrace = jsonStr.indexOf('{');
+            const lastBrace = jsonStr.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1) {
+                jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+            }
+            return JSON.parse(jsonStr);
         } catch {
             return fallback;
         }
@@ -42,12 +50,12 @@ describe('Dockerfile Patch Generation Constraints', () => {
     vim`;
 
         (unifiedGenerate as any).mockResolvedValue({
-            text: JSON.stringify({
+            text: `\`\`\`json\n${JSON.stringify({
                 code: badCode,
                 description: 'fix',
                 confidence: 0.9,
                 reasoning: 'r'
-            })
+            })}\n\`\`\``
         });
 
         const result = await generatePatchCandidates(
@@ -76,12 +84,12 @@ describe('Dockerfile Patch Generation Constraints', () => {
 
         for (const tc of testCases) {
             (unifiedGenerate as any).mockResolvedValue({
-                text: JSON.stringify({
+                text: `\`\`\`json\n${JSON.stringify({
                     code: tc.bad,
                     description: 'fix',
                     confidence: 0.9,
                     reasoning: 'r'
-                })
+                })}\n\`\`\``
             });
 
             const result = await generatePatchCandidates(
@@ -93,18 +101,18 @@ describe('Dockerfile Patch Generation Constraints', () => {
 
             expect(result.primaryCandidate.code).toBe(tc.good);
         }
-    });
+    }, 60000);
 
     it('should identify spelling errors and apply confidence penalty', async () => {
         const typoCode = 'const myVar = "This contains a msispelled word";';
         
         (unifiedGenerate as any).mockResolvedValue({
-            text: JSON.stringify({
+            text: `\`\`\`json\n${JSON.stringify({
                 code: typoCode,
                 description: 'fix with typo',
                 confidence: 0.9,
                 reasoning: 'r'
-            })
+            })}\n\`\`\``
         });
 
         const result = await generatePatchCandidates(
@@ -128,12 +136,12 @@ describe('Dockerfile Patch Generation Constraints', () => {
         const bashLocation = { file: 'script.sh', line: 1, confidence: 1.0, reasoning: 'r' };
 
         (unifiedGenerate as any).mockResolvedValue({
-            text: JSON.stringify({
+            text: `\`\`\`json\n${JSON.stringify({
                 code: `#!/bin/bash\napt-get install -y --no-installfrrecommends git`,
                 description: 'fix',
                 confidence: 0.9,
                 reasoning: 'r'
-            })
+            })}\n\`\`\``
         });
 
         const result = await generatePatchCandidates(

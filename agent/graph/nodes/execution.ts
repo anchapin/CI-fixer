@@ -90,7 +90,7 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
         if (sandbox) {
             const verification = await services.discovery.findUniqueFile(targetPath, sandbox.getWorkDir());
             if (verification.found && verification.path) {
-                const relativePath = path.relative(sandbox.getWorkDir(), verification.path);
+                const relativePath = path.relative(sandbox.getWorkDir(), verification.path).replace(/\\/g, '/');
                 if (relativePath !== targetPath) {
                     log('SUCCESS', `[Execution] Auto-corrected path from ${targetPath} to ${relativePath}`);
                     targetPath = relativePath;

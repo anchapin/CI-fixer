@@ -286,7 +286,7 @@ export class SimulationSandbox implements SandboxEnvironment {
         return `[SIMULATION] Content of ${path}`;
     }
 
-    getWorkDir(): string { return '/simulation'; }
+    getWorkDir(): string { return process.cwd().replace(/\\/g, '/'); }
     getId(): string { return 'sim-001'; }
     async exec(command: string) { return this.runCommand(command); }
 }

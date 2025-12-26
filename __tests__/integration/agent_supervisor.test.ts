@@ -195,6 +195,12 @@ describe('Agent Supervisor-Worker Integration', () => {
                     errorMessage: 'Error',
                     affectedFiles: [],
                 }),
+                classifyError: vi.fn().mockResolvedValue({
+                    category: 'logic',
+                    confidence: 0.9,
+                    errorMessage: 'Error',
+                    affectedFiles: [],
+                }),
                 getErrorPriority: vi.fn().mockReturnValue(5),
             } as any,
             dependency: {
@@ -217,7 +223,14 @@ describe('Agent Supervisor-Worker Integration', () => {
             metrics: {
                 recordFixAttempt: vi.fn(),
             } as any,
+            ingestion: {
+                ingestRawData: vi.fn().mockResolvedValue({ id: 'mock-ingestion-id' }),
+            } as any,
+            learningMetrics: {
+                recordMetric: vi.fn().mockResolvedValue(undefined),
+            } as any,
             learning: {
+                processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 }),
                 getStrategyRecommendation: vi.fn().mockResolvedValue({
                     preferredTools: ['llm'],
                     historicalStats: { successRate: 0.8 }

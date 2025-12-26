@@ -12,6 +12,7 @@ describe('EnvironmentService', () => {
         service = new EnvironmentService();
         sandbox = {
             runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+            getWorkDir: vi.fn().mockReturnValue('/workspace'),
         } as any;
         config = {} as any;
     });
