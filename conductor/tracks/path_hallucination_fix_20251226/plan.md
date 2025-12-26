@@ -14,8 +14,8 @@ In this phase, we will enhance the core path detection utility to support valida
 
 In this phase, we will integrate the enhanced path detection into the tool layer and provide better feedback to agents.
 
-- [ ] Task: TDD - Update `read_file` tool to use `pathDetection` validation and return suggestions on failure
-- [ ] Task: TDD - Update `replace` tool to use `pathDetection` validation and return suggestions on failure
+- [x] Task: TDD - Update `read_file` tool to use `pathDetection` validation and return suggestions on failure dac0793
+- [x] Task: TDD - Update `replace` tool to use `pathDetection` validation and return suggestions on failure dac0793
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Service Layer & Tool Integration' (Protocol in workflow.md)
 
 ## Phase 3: Loop Detection & Automated Recovery
