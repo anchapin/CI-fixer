@@ -15,7 +15,7 @@ This plan implements a hybrid solution to resolve missing test runners by updati
   - Run a smoke test container to verify all runtimes and runners are accessible via CLI.
 - [ ] Task: Conductor - User Manual Verification 'Infrastructure - Enhanced Docker Image' (Protocol in workflow.md)
 
-## Phase 2: Logic - Automated On-Demand Provisioning
+## Phase 2: Logic - Automated On-Demand Provisioning [checkpoint: 193cdff]
 
 - [x] Task: Enhance `ProvisioningService` for Runner Detection (4b959c7)
   - Implement a check to verify if a runner exists in the PATH before command execution.
