@@ -14,7 +14,7 @@
 
 ## Phase 3: Autonomous Provisioning & Path Management
 - [x] Task: Implement `services/sandbox/ProvisioningService.ts` with logic to install missing tools (e.g., `npm install -g`, `pip install`). e49781d
-- [ ] Task: Implement dynamic PATH refreshing to ensure newly installed tools are visible to the current execution context.
+- [x] Task: Implement dynamic PATH refreshing to ensure newly installed tools are visible to the current execution context. 6814ffe
 - [ ] Task: Add "Installation Loop Prevention" logic to cap retry attempts for tool provisioning.
 - [ ] Task: Write tests for the provisioning flow, mocking package manager success/failure.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Autonomous Provisioning' (Protocol in workflow.md)
