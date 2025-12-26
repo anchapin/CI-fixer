@@ -141,7 +141,7 @@ describe('runWorkerTask', () => {
         logCallback = vi.fn();
 
         // Default Mock Implementations
-        (getWorkflowLogs as Mock).mockResolvedValue({ logText: 'Error: Something went wrong', headSha: 'sha123' });
+        (getWorkflowLogs as Mock).mockResolvedValue({ logText: 'Error: Something went wrong', jobName: 'test', headSha: 'sha123' });
         (diagnoseError as Mock).mockResolvedValue({
             summary: 'Fix NullPointerException',
             filePath: 'src/main.ts',
@@ -211,8 +211,8 @@ describe('runWorkerTask', () => {
 
     it('should retry log retrieval if "No failed job found" is returned', async () => {
         (getWorkflowLogs as Mock)
-            .mockResolvedValueOnce({ logText: 'No failed job found', headSha: 'sha123' })
-            .mockResolvedValueOnce({ logText: 'Error: Real error now', headSha: 'sha123' });
+            .mockResolvedValueOnce({ logText: 'No failed job found', jobName: 'test', headSha: 'sha123' })
+            .mockResolvedValueOnce({ logText: 'Error: Real error now', jobName: 'test', headSha: 'sha123' });
 
         await runWorkerTask(
             mockConfig,
@@ -256,6 +256,7 @@ describe('runWorkerTask', () => {
     it('should trigger dependency inspector when dependency errors are found', async () => {
         (getWorkflowLogs as Mock).mockResolvedValue({
             logText: "ImportError: No module named 'numpy'",
+            jobName: 'test',
             headSha: 'sha123'
         });
 
@@ -375,14 +376,14 @@ describe('runWorkerTask', () => {
 
     it('should retry log retrieval with different strategies if logs are missing', async () => {
         (getWorkflowLogs as any)
-            .mockResolvedValueOnce({ logText: 'No failed job found', headSha: 'sha1' }) // Iteration 0 (Standard) -> Fail
+            .mockResolvedValueOnce({ logText: 'No failed job found', jobName: 'test', headSha: 'sha1' }) // Iteration 0 (Standard) -> Fail
             // Code retries in same iteration?
             // "If (currentLogText... No failed job found) ... if (i==0) strategy='extended' ... retry"
             // Wait, loop structure:
             // "if (currentLogText.includes...)"
             // "if (i === 0) strategy = 'extended'"
             // "retryResult = await getWorkflowLogs(..., strategy)"
-            .mockResolvedValueOnce({ logText: 'Actual Log Content', headSha: 'sha1' }); // Retry success
+            .mockResolvedValueOnce({ logText: 'Actual Log Content', jobName: 'test', headSha: 'sha1' }); // Retry success
 
         (diagnoseError as any).mockResolvedValue({ summary: 'Diag', fixAction: 'edit' });
         (validateFileExists as any).mockResolvedValue(true);
@@ -396,7 +397,7 @@ describe('runWorkerTask', () => {
 
     it('should fail if logs are never found after retries', async () => {
         // Mock always fail
-        (getWorkflowLogs as any).mockResolvedValue({ logText: 'No failed job found', headSha: 'sha1' });
+        (getWorkflowLogs as any).mockResolvedValue({ logText: 'No failed job found', jobName: 'test', headSha: 'sha1' });
 
         const result = await runWorkerTask(mockConfig, mockGroup, mockSandbox, undefined, '', mockServices, updateStateCallback, logCallback);
 

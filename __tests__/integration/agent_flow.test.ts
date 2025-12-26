@@ -173,7 +173,6 @@ vi.mock('../../sandbox', async (importOriginal) => {
 
 
 
-import { SimulationSandbox } from '../../sandbox';
 
 describe('Agent Flow Integration (Mocked)', () => {
     const mockUpdateState = vi.fn();
@@ -277,7 +276,7 @@ describe('Agent Flow Integration (Mocked)', () => {
 
         // Default Mock Behaviors for Happy Path
         vi.mocked(SandboxService.prepareSandbox).mockResolvedValue(new SimulationSandbox());
-        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error log...', headSha: 'sha123' });
+        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error log...', jobName: 'test', headSha: 'sha123' });
         vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
             summary: 'Fix me',
             filePath: 'src/file.ts',

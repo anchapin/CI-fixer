@@ -44,7 +44,7 @@ describe('Analysis Node', () => {
 
         mockServices = {
             github: {
-                getWorkflowLogs: vi.fn().mockResolvedValue({ logText: 'Error log', headSha: 'sha123' }),
+                getWorkflowLogs: vi.fn().mockResolvedValue({ logText: 'Error log', jobName: 'test', headSha: 'sha123' }),
             },
             context: {
                 smartThinLog: vi.fn().mockResolvedValue('Thinned log'),
@@ -82,6 +82,9 @@ describe('Analysis Node', () => {
             },
             clustering: {
                 clusterError: vi.fn(),
+            },
+            metrics: {
+                recordReproductionInference: vi.fn(),
             },
             reproductionInference: {
                 inferCommand: vi.fn().mockResolvedValue({

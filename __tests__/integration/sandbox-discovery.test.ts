@@ -140,7 +140,8 @@ describe('Sandbox File Discovery Integration', () => {
         };
 
         vi.mocked(SandboxService.prepareSandbox).mockResolvedValue(new SimulationSandbox());
-        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error log...', headSha: 'sha123' });
+        const { default: GitHubService } = await import('../../services/github/GitHubService.js');
+        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error log...', jobName: 'test', headSha: 'sha123' });
         vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
             summary: 'Missing requirements file',
             filePath: 'ai-engine-requirements.txt',

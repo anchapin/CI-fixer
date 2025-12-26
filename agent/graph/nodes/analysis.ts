@@ -213,8 +213,10 @@ export const analysisNode: NodeHandler = async (state, context) => {
             if (inferred) {
                 log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);
                 diagnosis.reproductionCommand = inferred.command;
+                services.metrics.recordReproductionInference(inferred.strategy, true);
             } else {
                 log('WARN', '[Inference] Could not infer reproduction command.');
+                services.metrics.recordReproductionInference('none', false);
             }
         }
         // ----------------------------------------------------

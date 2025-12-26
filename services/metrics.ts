@@ -1,4 +1,5 @@
 import { db as prisma } from '../db/client.js';
+import * as Telemetry from '../telemetry/metrics.js';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -50,6 +51,16 @@ export async function recordFixAttempt(
             filesChanged: JSON.stringify(filesChanged)
         }
     });
+}
+
+/**
+ * Record a reproduction command inference event
+ */
+export function recordReproductionInference(
+    strategy: string,
+    success: boolean
+): void {
+    Telemetry.recordReproductionInference(strategy, success);
 }
 
 /**

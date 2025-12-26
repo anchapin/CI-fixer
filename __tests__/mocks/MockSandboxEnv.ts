@@ -45,9 +45,15 @@ export class MockSandboxEnv implements SandboxEnvironment {
         return "/home/user/repo";
     }
 
+    getLocalPath(): string {
+        return "/home/user/repo";
+    }
+
     async teardown(): Promise<void> {
         // no-op
     }
 
     async kill(): Promise<void> { }
+
+    async exec(command: string) { return this.runCommand(command); }
 }

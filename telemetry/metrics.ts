@@ -54,6 +54,11 @@ export const loopDetected = meter.createCounter('loop_detected_total', {
     unit: '1'
 });
 
+export const reproductionInferred = meter.createCounter('reproduction_inferred_total', {
+    description: 'Total number of reproduction commands inferred',
+    unit: '1'
+});
+
 /**
  * Record a fix attempt with its outcome
  */
@@ -87,6 +92,19 @@ export function recordLoopDetected(
     loopDetected.add(1, { 
         duplicate_of: duplicateOfIteration.toString(),
         hash_prefix: hash.substring(0, 8)
+    });
+}
+
+/**
+ * Record a reproduction command inference
+ */
+export function recordReproductionInference(
+    strategy: string,
+    success: boolean
+) {
+    reproductionInferred.add(1, { 
+        strategy,
+        success: success.toString()
     });
 }
 

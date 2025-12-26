@@ -128,11 +128,11 @@ describe('Dependency Conflict Multi-Error Flow', () => {
         };
 
         vi.mocked(SandboxService.prepareSandbox).mockResolvedValue(new SimulationSandbox());
-        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ 
-            logText: 'CONFLICT LOG\nMISSING FILE LOG', 
-            headSha: 'sha123' 
-        });
-    });
+                vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({
+                    logText: 'CONFLICT LOG\nMISSING FILE LOG',
+                    jobName: 'test',
+                    headSha: 'sha123'
+                });    });
 
     it('should prioritize or include dependency conflict fix when multiple errors exist', async () => {
         // We want to see that the agent doesn't just fix the missing file and stop

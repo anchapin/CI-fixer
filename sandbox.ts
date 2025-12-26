@@ -20,6 +20,7 @@ export interface SandboxEnvironment {
 
     // Workdir context
     getWorkDir(): string;
+    getLocalPath(): string;
 
     // ID for logging
     getId(): string;
@@ -177,6 +178,10 @@ export class DockerSandbox implements SandboxEnvironment {
         return this.workspaceDir;
     }
 
+    getLocalPath(): string {
+        return this.workspaceDir;
+    }
+
     getId(): string {
         return this.containerId || 'unknown';
     }
@@ -270,6 +275,10 @@ export class E2BSandbox implements SandboxEnvironment {
         return '/home/user'; // Default E2B workdir usually
     }
 
+    getLocalPath(): string {
+        return '/home/user';
+    }
+
     getId(): string {
         return this.sandbox?.sandboxId || 'unknown';
     }
@@ -304,6 +313,7 @@ export class SimulationSandbox implements SandboxEnvironment {
     }
 
     getWorkDir(): string { return process.cwd().replace(/\\/g, '/'); }
+    getLocalPath(): string { return process.cwd(); }
     getId(): string { return 'sim-001'; }
     async exec(command: string) { return this.runCommand(command); }
 }

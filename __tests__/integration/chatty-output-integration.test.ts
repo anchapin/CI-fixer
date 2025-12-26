@@ -190,7 +190,7 @@ describe('Chatty Output Integration', () => {
         });
 
         vi.mocked(SandboxService.prepareSandbox).mockResolvedValue(mockSandbox);
-        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error: requirements.txt failure', headSha: 'sha1' });
+        vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: 'Error: requirements.txt failure', jobName: 'test', headSha: 'sha1' });
         vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
             summary: 'Error: requirements.txt failure',
             filePath: 'requirements.txt',

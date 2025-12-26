@@ -94,6 +94,7 @@ describe('Reproduction Inference Integration', () => {
         mockConfig = {
             githubToken: 'test-token',
             repoUrl: 'owner/repo',
+            selectedRuns: [],
             devEnv: 'simulation',
             checkEnv: 'simulation'
         };

@@ -22,7 +22,7 @@ import {
     classifyError, classifyErrorWithHistory, formatErrorSummary, getErrorPriority, isCascadingError,
     type ClassifiedError
 } from '../errorClassification.js';
-import { recordFixAttempt, recordAgentMetrics } from '../services/metrics.js';
+import { recordFixAttempt, recordAgentMetrics, recordReproductionInference } from '../services/metrics.js';
 import { extractFixPattern, findSimilarFixes } from '../services/knowledge-base.js';
 import { getSuggestedActions } from '../services/action-library.js';
 import { getImmediateDependencies } from '../services/dependency-analyzer.js';
@@ -90,6 +90,7 @@ export async function runWorkerTask(
         const fileAttempts: Record<string, number> = {};
         const classifiedErrors: ClassifiedError[] = [];
         const feedbackHistory: string[] = [];
+        const iterationSummaries: IterationSummary[] = [];
         const inferenceService = new ReproductionInferenceService();
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -167,8 +168,10 @@ export async function runWorkerTask(
                 if (inferred) {
                     log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);
                     diagnosis.reproductionCommand = inferred.command;
+                    recordReproductionInference(inferred.strategy, true);
                 } else {
                     log('WARN', '[Inference] Could not infer reproduction command.');
+                    recordReproductionInference('none', false);
                 }
             }
             // ----------------------------------------------------
