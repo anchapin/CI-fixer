@@ -29,7 +29,63 @@ export class ReproductionInferenceService {
     const agentRetryResult = await this.inferFromAgentRetry(repoPath);
     if (agentRetryResult) return agentRetryResult;
 
+    const safeScanResult = await this.inferFromSafeScan(repoPath);
+    if (safeScanResult) return safeScanResult;
+
     return null;
+  }
+
+  private async inferFromSafeScan(repoPath: string): Promise<ReproductionInferenceResult | null> {
+    try {
+      const files = await fs.readdir(repoPath);
+      
+      // 1. Look for test directories
+      const testDirs = ['tests', 'test', 'spec', 'specs', '__tests__'];
+      for (const dir of testDirs) {
+        if (files.includes(dir)) {
+          const stats = await fs.stat(path.join(repoPath, dir));
+          if (stats.isDirectory()) {
+            return {
+              command: this.getCommandForTestDir(dir, files),
+              confidence: 0.5,
+              strategy: 'safe_scan',
+              reasoning: `Found test directory: ${dir}`
+            };
+          }
+        }
+      }
+
+      // 2. Look for test files at root
+      const testFilePatterns = ['test.py', 'test.js', 'test.ts', 'tests.py'];
+      for (const file of testFilePatterns) {
+        if (files.includes(file)) {
+          return {
+            command: this.getCommandForTestFile(file),
+            confidence: 0.5,
+            strategy: 'safe_scan',
+            reasoning: `Found test file: ${file}`
+          };
+        }
+      }
+    } catch (error) {
+      console.error('[ReproductionInferenceService] Safe Scan failed:', error);
+    }
+
+    return null;
+  }
+
+  private getCommandForTestDir(dir: string, allFiles: string[]): string {
+    if (allFiles.includes('package.json')) return `npm test -- ${dir}`;
+    if (allFiles.includes('requirements.txt') || allFiles.includes('setup.py')) return `pytest ${dir}`;
+    if (allFiles.includes('go.mod')) return `go test ./${dir}/...`;
+    return `ls ${dir}`; // Fallback: just list it
+  }
+
+  private getCommandForTestFile(file: string): string {
+    if (file.endsWith('.py')) return `python ${file}`;
+    if (file.endsWith('.js')) return `node ${file}`;
+    if (file.endsWith('.ts')) return `npx ts-node ${file}`;
+    return `./${file}`;
   }
 
   private async inferFromAgentRetry(repoPath: string): Promise<ReproductionInferenceResult | null> {
