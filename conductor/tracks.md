@@ -20,7 +20,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [~] Track: Path Hallucination & Logic Loops
-*Link: [./conductor/tracks/path_hallucination_20251226/](./conductor/tracks/path_hallucination_20251226/)*
+## [~] Track: Robust Reproduction Command Inference
+*Link: [./conductor/tracks/reproduction_inference_20251226/](./conductor/tracks/reproduction_inference_20251226/)*
 
 

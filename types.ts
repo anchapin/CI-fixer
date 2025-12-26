@@ -202,3 +202,10 @@ export interface LoopDetectionResult {
   message?: string;
   duplicateOfIteration?: number; // The iteration this loops back to
 }
+
+export interface ReproductionInferenceResult {
+  command: string;
+  confidence: number; // 0-1
+  strategy: 'workflow' | 'signature' | 'build_tool' | 'agent_retry' | 'safe_scan';
+  reasoning: string;
+}
