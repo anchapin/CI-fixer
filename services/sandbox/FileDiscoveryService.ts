@@ -8,37 +8,56 @@ import * as path from 'node:path';
 export interface FileVerificationResult {
     found: boolean;
     path?: string;
+    relativePath?: string;  // Always provided relative to workspace root
     matches: string[];
+    relativeMatches?: string[];  // Matches as relative paths
+    depth?: number;  // Directory depth for context (0 = root, 1 = root/..., etc.)
 }
 
+/**
+ * Enhanced file discovery service that always provides relative paths from workspace root.
+ * This helps the LLM understand the directory structure without getting confused about nesting levels.
+ */
 export class FileDiscoveryService {
 
     /**
      * Searches for a unique file in the project that matches the given filename.
      * Respects common ignore patterns.
+     * ALWAYS returns relative paths from workspace root for LLM clarity.
      */
     async findUniqueFile(filename: string, rootDir: string): Promise<FileVerificationResult> {
         const absolutePath = path.isAbsolute(filename) ? filename : path.resolve(rootDir, filename);
-        
+
+        // Helper function to calculate depth
+        const calculateDepth = (filePath: string): number => {
+            const relPath = path.relative(rootDir, filePath);
+            if (relPath === '.' || relPath === filePath) return 0;
+            return relPath.split(path.sep).filter(p => p !== '..' && p !== '').length;
+        };
+
         // 1. Check if the file exists exactly where specified
         if (fs.existsSync(absolutePath)) {
             // Only return if it's a file, not a directory
             const stats = fs.statSync(absolutePath);
             if (stats.isFile()) {
+                const relativePath = path.relative(rootDir, absolutePath);
                 return {
                     found: true,
                     path: absolutePath,
-                    matches: [absolutePath]
+                    relativePath,
+                    matches: [absolutePath],
+                    relativeMatches: [relativePath],
+                    depth: calculateDepth(absolutePath)
                 };
             }
         }
 
         // 2. Search for the filename project-wide
         const basename = path.basename(filename);
-        
+
         // We search for the filename anywhere in the tree
         const pattern = `**/${basename}`;
-        
+
         const matches = (await glob(pattern, {
             cwd: rootDir,
             absolute: true,
@@ -56,17 +75,24 @@ export class FileDiscoveryService {
             ]
         })).map(p => path.normalize(p));
 
+        const relativeMatches = matches.map(m => path.relative(rootDir, m));
+
         if (matches.length === 1) {
             return {
                 found: true,
                 path: matches[0],
-                matches
+                relativePath: relativeMatches[0],
+                matches,
+                relativeMatches,
+                depth: calculateDepth(matches[0])
             };
         }
 
+        // If no matches or multiple matches, still return relative paths for context
         return {
             found: false,
-            matches
+            matches,
+            relativeMatches
         };
     }
 

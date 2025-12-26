@@ -77,13 +77,26 @@ describe('Dockerfile Recovery Integration', () => {
                 isAtomic: vi.fn().mockReturnValue(true),
                 explainComplexity: vi.fn().mockReturnValue('low'),
             },
-            learning: { 
+            learning: {
                 processRunOutcome: vi.fn().mockResolvedValue({ reward: 1 }),
                 getStrategyRecommendation: vi.fn().mockResolvedValue({ strategy: 'direct', confidence: 0.9 })
             },
             metrics: { recordFixAttempt: vi.fn() },
             ingestion: { ingestRawData: vi.fn().mockResolvedValue({}) },
-            planning: { generateDetailedPlan: vi.fn().mockResolvedValue({ goal: 'fix', tasks: [] }) }
+            planning: { generateDetailedPlan: vi.fn().mockResolvedValue({ goal: 'fix', tasks: [] }) },
+            discovery: {
+                findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'Dockerfile', relativePath: 'Dockerfile', matches: ['Dockerfile'] }),
+                recursiveSearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+                fuzzySearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+            },
+            verification: {
+                verifyContentMatch: vi.fn().mockResolvedValue(true)
+            },
+            fallback: {
+                generatePlaceholder: vi.fn().mockResolvedValue(undefined)
+            }
         };
 
         // For the graph, we need to mock planning node result if needed, but runIndependentAgentLoop handles it.

@@ -54,8 +54,14 @@ export class MockSandboxService {
             writeFile: async (path: string, content: string) => {
                 this.mockFiles.set(path, content);
             },
+            readFile: async (path: string) => {
+                if (this.mockFiles.has(path)) return this.mockFiles.get(path)!;
+                throw new Error(`File not found: ${path}`);
+            },
             init: async () => { },
-            kill: async () => { }
+            kill: async () => { },
+            teardown: async () => { },
+            getWorkDir: () => "/mock/work/dir"
         } as unknown as SandboxEnvironment;
     };
 

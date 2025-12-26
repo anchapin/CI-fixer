@@ -1,21 +1,15 @@
 {
-  "timestamp": "2025-12-19T17:35:23.249Z",
-  "totalCases": 2,
+  "timestamp": "2025-12-25T21:17:10.275Z",
+  "totalCases": 1,
   "successCount": 1,
-  "failureCount": 1,
-  "successRate": 0.5,
+  "failureCount": 0,
+  "successRate": 1,
   "results": [
     {
       "caseId": "mock-failure-01",
       "success": true,
       "durationSeconds": 0.1,
       "stepsTaken": 5
-    },
-    {
-      "caseId": "astropy__astropy-12907",
-      "success": false,
-      "durationSeconds": 266.901,
-      "stepsTaken": 0
     }
   ]
 }

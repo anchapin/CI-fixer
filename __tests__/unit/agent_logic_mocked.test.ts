@@ -120,6 +120,12 @@ describe('Agent Logic (Refactored)', () => {
                     affectedFiles: [],
                 }),
                 getErrorPriority: vi.fn().mockReturnValue(5),
+                classifyError: vi.fn().mockReturnValue({
+                    category: 'logic',
+                    confidence: 0.9,
+                    errorMessage: 'Error',
+                    affectedFiles: [],
+                })
             } as any,
             dependency: {
                 hasBlockingDependencies: vi.fn().mockResolvedValue(false),
@@ -140,6 +146,26 @@ describe('Agent Logic (Refactored)', () => {
             } as any,
             metrics: {
                 recordFixAttempt: vi.fn(),
+            } as any,
+            learning: {
+                getStrategyRecommendation: vi.fn().mockResolvedValue({
+                    preferredTools: ['llm'],
+                    historicalStats: { successRate: 0.8 }
+                }),
+                processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 })
+            } as any,
+            discovery: {
+                findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'src/utils.ts', relativePath: 'src/utils.ts', matches: ['src/utils.ts'] }),
+                recursiveSearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+                fuzzySearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+            } as any,
+            verification: {
+                verifyContentMatch: vi.fn().mockResolvedValue(true)
+            } as any,
+            fallback: {
+                generatePlaceholder: vi.fn().mockResolvedValue(undefined)
             } as any
         };
     });
@@ -158,13 +184,30 @@ describe('Agent Logic (Refactored)', () => {
             approved: true
         }));
 
-        mockLLM.queueResponse("const x = 10;");
+        mockLLM.queueResponse("```typescript\nconst x = 10;\n```");
 
         mockLLM.queueResponse(JSON.stringify({
             passed: true,
             score: 10,
             reasoning: "Perfect fix"
         }));
+
+        // Add extra responses to handle additional calls that happen during verification/processing
+        mockLLM.queueResponse(JSON.stringify({
+            summary: "Mock Diagnosis",
+            filePath: "src/utils.ts",
+            fixAction: "edit"
+        }));
+
+        mockLLM.queueResponse("Mock Refinement");
+
+        mockLLM.queueResponse(JSON.stringify({
+            goal: "Fix syntax",
+            tasks: [],
+            approved: true
+        }));
+
+        mockLLM.queueResponse("```typescript\nconst x = 10;\n```");
 
         // Use helper to create config
         const config = createMockConfig({
@@ -249,7 +292,7 @@ describe('Agent Logic (Refactored)', () => {
             fixAction: "edit"
         }));
         mockLLM.queueResponse(JSON.stringify({ goal: "Fix", tasks: [], approved: true }));
-        mockLLM.queueResponse("bad fix");
+        mockLLM.queueResponse("```typescript\nbad fix\n```");
         mockLLM.queueResponse(JSON.stringify({ passed: false, score: 2, reasoning: "Bad" }));
 
         // Second attempt - pass
@@ -259,7 +302,7 @@ describe('Agent Logic (Refactored)', () => {
             fixAction: "edit"
         }));
         mockLLM.queueResponse(JSON.stringify({ goal: "Fix", tasks: [], approved: true }));
-        mockLLM.queueResponse("good fix");
+        mockLLM.queueResponse("```typescript\ngood fix\n```");
         mockLLM.queueResponse(JSON.stringify({ passed: true, score: 10, reasoning: "Good" }));
 
         const config = createMockConfig({ checkEnv: "e2b" });

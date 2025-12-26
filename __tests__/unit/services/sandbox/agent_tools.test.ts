@@ -3,19 +3,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import { readFile, writeFile, runCmd, search, listDir } from '../../../../services/sandbox/agent_tools.js';
 
-// Mock fs.promises
+// Mock child_process exec and fs.existsSync using vi.hoisted
+const { mockExecPromise, mockExistsSync } = vi.hoisted(() => ({
+    mockExecPromise: vi.fn(),
+    mockExistsSync: vi.fn()
+}));
+
 vi.mock('fs', () => ({
     promises: {
         readFile: vi.fn(),
         writeFile: vi.fn(),
         mkdir: vi.fn(),
         readdir: vi.fn(),
-    }
-}));
-
-// Mock child_process exec
-const { mockExecPromise } = vi.hoisted(() => ({
-    mockExecPromise: vi.fn()
+    },
+    existsSync: mockExistsSync,
+    statSync: vi.fn()
 }));
 
 vi.mock('child_process', () => ({
@@ -23,20 +25,23 @@ vi.mock('child_process', () => ({
 }));
 
 // Mock util.promisify
-vi.mock('util', async () => {
-    return {
-        promisify: (fn: any) => mockExecPromise
-    };
-});
+vi.mock('util', () => ({
+    promisify: () => mockExecPromise
+}));
 
 
 describe('Agent Tools', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // Set up default mock behaviors
+        mockExistsSync.mockReturnValue(true);
+        (fs.statSync as any).mockReturnValue({ isFile: () => true });
     });
 
     describe('readFile', () => {
         it('should read file content successfully', async () => {
+            mockExistsSync.mockReturnValue(true);
+            (fs.statSync as any).mockReturnValue({ isFile: () => true });
             (fs.promises.readFile as any).mockResolvedValue('file content');
             const result = await readFile('test.txt');
             expect(result).toBe('file content');
@@ -53,6 +58,7 @@ describe('Agent Tools', () => {
 
     describe('writeFile', () => {
         it('should write file content successfully', async () => {
+            mockExistsSync.mockReturnValue(false); // File doesn't exist yet
             (fs.promises.mkdir as any).mockResolvedValue(undefined);
             (fs.promises.writeFile as any).mockResolvedValue(undefined);
 

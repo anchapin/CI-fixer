@@ -255,6 +255,11 @@ describe('LogAnalysisService', () => {
 
     describe('generateFix', () => {
         it('should generate fix code', async () => {
+            const { unifiedGenerate } = await import('../../services/llm/LLMService.js');
+            vi.mocked(unifiedGenerate).mockResolvedValueOnce({
+                text: '```typescript\nconst x = 1;\n```'
+            });
+
             const context = {
                 error: 'Syntax error',
                 code: 'const x = ',
@@ -265,6 +270,7 @@ describe('LogAnalysisService', () => {
 
             expect(fix).toBeDefined();
             expect(typeof fix).toBe('string');
+            expect(fix).toContain('const x = 1;');
         });
 
         it('should handle multi-segment responses', async () => {

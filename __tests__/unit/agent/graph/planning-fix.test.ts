@@ -27,6 +27,12 @@ const mockServices = {
     orchestration: {
         ToolOrchestrator: vi.fn(),
         AdaptiveModelSelector: vi.fn()
+    },
+    learning: {
+        getStrategyRecommendation: vi.fn().mockResolvedValue({ strategy: 'test' })
+    },
+    classification: {
+        classifyError: vi.fn().mockResolvedValue({ type: 'test', confidence: 0.9 })
     }
 } as any;
 

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "quint-code": {
+      "command": "C:\\Users\\ancha\\.local\\bin\\quint-code",
+      "args": [
+        "serve"
+      ],
+      "cwd": "C:\\Users\\ancha\\Documents\\projects\\CI-fixer",
+      "env": {
+        "QUINT_PROJECT_ROOT": "C:\\Users\\ancha\\Documents\\projects\\CI-fixer"
+      }
+    }
+  }
+}

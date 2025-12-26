@@ -71,7 +71,7 @@ async function runBenchmark(limit: number = 20, caseIdFilter?: string) {
                 selectedRuns: [],
                 llmProvider: 'zai',
                 customApiKey: process.env.ZAI_API_KEY,
-                llmModel: 'GLM-4.6',
+                llmModel: 'GLM-4.7',
                 llmTimeout: 600000 // 10 minutes
             };
 

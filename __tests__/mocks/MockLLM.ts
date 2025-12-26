@@ -48,17 +48,56 @@ export class MockLLMService {
         }
 
         console.error(`[MockLLM] Queue Empty! Returning Default.`);
-        // Return valid JSON that works for both diagnosis AND judge calls
-        return {
-            text: JSON.stringify({
-                summary: "Mock Diagnosis",
-                filePath: "src/file.ts",
-                fixAction: "edit",
-                passed: true,
-                score: 10,
-                reasoning: "Mock default response"
-            })
-        };
+
+        // Check if this looks like a code generation request to return appropriate format
+        if (prompt.includes('instruction') && (prompt.includes('Return only the full file code') || prompt.includes('Return only the complete file code'))) {
+            // This is likely a generateFix call, return code in markdown format
+            return {
+                text: "```typescript\n// Mock default code\nconsole.log('default');\n```"
+            };
+        } else if (prompt.includes('judge') || prompt.includes('Judge') || prompt.includes('passed') || (prompt.includes('verification') && prompt.includes('result'))) {
+            // This is likely a judgeFix or verification call - always return success to prevent infinite loops
+            return {
+                text: JSON.stringify({
+                    passed: true,
+                    score: 10,
+                    reasoning: "Mock judge passed - test verification succeeded"
+                })
+            };
+        } else if (prompt.includes('diagnos') || prompt.includes('summary') || prompt.includes('error') || prompt.includes('fix')) {
+            // This is likely a diagnosis call
+            return {
+                text: JSON.stringify({
+                    summary: "Mock Diagnosis",
+                    filePath: "src/file.ts",
+                    fixAction: "edit",
+                    passed: true,
+                    score: 10,
+                    reasoning: "Mock diagnosis response"
+                })
+            };
+        } else if (prompt.includes('goal') || prompt.includes('task') || prompt.includes('plan')) {
+            // This is likely a planning call
+            return {
+                text: JSON.stringify({
+                    goal: "Mock Goal",
+                    tasks: [],
+                    approved: true
+                })
+            };
+        } else {
+            // Default response for any other type of call
+            return {
+                text: JSON.stringify({
+                    summary: "Mock Response",
+                    filePath: "src/default.ts",
+                    fixAction: "edit",
+                    passed: true,
+                    score: 10,
+                    reasoning: "Default mock response to prevent infinite loops"
+                })
+            };
+        }
     };
 
     public safeJsonParse = <T>(text: string, fallback: T): T => {

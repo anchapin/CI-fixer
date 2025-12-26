@@ -95,11 +95,12 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
                     log('SUCCESS', `[Execution] Auto-corrected path from ${targetPath} to ${relativePath}`);
                     targetPath = relativePath;
                 }
-            } else if (!verification.found && verification.matches.length > 1) {
-                const matchlist = verification.matches.map(m => path.relative(sandbox.getWorkDir(), m)).join(', ');
+            } else if (verification.matches && verification.matches.length > 1) {
+                const relativeMatches = verification.matches.map(m => path.relative(sandbox.getWorkDir(), m));
+                const matchlist = relativeMatches.join(', ');
                 log('WARN', `[Execution] Multiple matches found for ${targetPath}: ${matchlist}. Aborting to avoid wrong file edit.`);
                 return {
-                    feedback: [...state.feedback, `Path Hallucination: Multiple files named '${targetPath}' found: ${matchlist}. Please specify the exact path.`],
+                    feedback: [...state.feedback, `Path Hallucination: Multiple files named '${path.basename(targetPath)}' found:\n${relativeMatches.map(m => `  - ${m}`).join('\n')}\nPlease specify the exact path.`],
                     iteration: iteration + 1,
                     currentNode: 'analysis'
                 };

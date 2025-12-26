@@ -1,3 +1,12 @@
+---
+category: docker
+priority: high
+success_count: 0
+last_updated: "2025-01-01"
+fingerprint: docker-syntax-errors
+tags: ["docker", "syntax", "errors", "runbook"]
+---
+
 # Dockerfile Syntax Errors Runbook
 
 This runbook documents common syntax errors introduced when programmatically repairing Dockerfiles and how to avoid them.

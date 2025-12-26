@@ -216,6 +216,25 @@ describe('Agent Supervisor-Worker Integration', () => {
             } as any,
             metrics: {
                 recordFixAttempt: vi.fn(),
+            } as any,
+            learning: {
+                getStrategyRecommendation: vi.fn().mockResolvedValue({
+                    preferredTools: ['llm'],
+                    historicalStats: { successRate: 0.8 }
+                })
+            } as any,
+            discovery: {
+                findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: '.github/workflows/deploy.yml', relativePath: '.github/workflows/deploy.yml', matches: ['.github/workflows/deploy.yml'] }),
+                recursiveSearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+                fuzzySearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+            } as any,
+            verification: {
+                verifyContentMatch: vi.fn().mockResolvedValue(true)
+            } as any,
+            fallback: {
+                generatePlaceholder: vi.fn().mockResolvedValue(undefined)
             } as any
         };
 

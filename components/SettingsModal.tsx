@@ -295,6 +295,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                                             </>
                                         ) : formData.llmProvider === 'zai' ? (
                                             <>
+                                                <option value="GLM-4.7">GLM-4.7</option>
                                                 <option value="GLM-4.6">GLM-4.6</option>
                                                 <option value="GLM-4.5">GLM-4.5</option>
                                                 <option value="GLM-4.5-air">GLM-4.5 Air</option>

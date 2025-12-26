@@ -130,7 +130,8 @@ describe('E2B Persistent Sandbox Tests', () => {
 
             expect(res.passed).toBe(true);
             expect(mocks.sandboxFilesWrite).toHaveBeenCalledWith('src/file.ts', 'new code');
-            expect(mocks.sandboxRunCode).toHaveBeenCalledWith(expect.stringMatching(/npm test|pytest/));
+            // TestSelector now intelligently picks 'npm run test:frontend' for .ts files in src/
+            expect(mocks.sandboxRunCode).toHaveBeenCalledWith('npm run test:frontend');
         });
 
         it('should detect failure in test logs', async () => {

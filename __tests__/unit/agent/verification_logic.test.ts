@@ -14,6 +14,9 @@ describe('VerificationNode Logic', () => {
         services: {
             analysis: {
                 runSandboxTest: vi.fn()
+            },
+            classification: {
+                classifyError: vi.fn().mockResolvedValue({ type: 'test', confidence: 0.9 })
             }
         }
     } as any;

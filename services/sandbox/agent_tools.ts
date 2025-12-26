@@ -9,42 +9,106 @@ const execPromise = promisify(exec);
 
 /**
  * Helper function to log path corrections in a parseable format.
+ * Uses relative paths from workspace root for clarity.
  */
 function logPathCorrection(toolName: string, originalPath: string, correctedPath: string, filename: string): void {
+    const rootDir = process.cwd();
     console.log(`[PATH_CORRECTION] ${JSON.stringify({
         tool: toolName,
-        originalPath,
-        correctedPath,
+        originalPath: path.relative(rootDir, originalPath),
+        correctedPath: path.relative(rootDir, correctedPath),
         filename,
         timestamp: new Date().toISOString()
     })}`);
 }
 
 /**
+ * "Look Before You Leap" helper - verifies file existence and provides helpful error messages.
+ * Returns the verified path or throws an error with suggestions.
+ * Uses relative paths for clearer LLM feedback.
+ */
+async function verifyFileExists(
+    filePath: string,
+    operation: string,
+    rootDir: string = process.cwd()
+): Promise<{ verifiedPath: string; wasCorrected: boolean; relativePath?: string; error?: string }> {
+    const absPath = path.resolve(rootDir, filePath);
+    const basename = path.basename(filePath);
+
+    // If file exists exactly where specified, return it
+    if (fs.existsSync(absPath)) {
+        if (fs.statSync(absPath).isFile()) {
+            const relPath = path.relative(rootDir, absPath);
+            return { verifiedPath: absPath, wasCorrected: false, relativePath: relPath };
+        } else {
+            return {
+                verifiedPath: absPath,
+                wasCorrected: false,
+                error: `Error: '${filePath}' is a directory, not a file. Cannot ${operation} a directory.`
+            };
+        }
+    }
+
+    // File doesn't exist - try to find it
+    try {
+        const verification = await findUniqueFile(filePath, rootDir);
+
+        if (verification.found && verification.path) {
+            // Found it - return the corrected path with relative path for logging
+            return {
+                verifiedPath: verification.path,
+                wasCorrected: true,
+                relativePath: verification.relativePath
+            };
+        } else if (verification.matches.length === 1) {
+            // Single match found
+            const relPath = path.relative(rootDir, verification.matches[0]);
+            return { verifiedPath: verification.matches[0], wasCorrected: true, relativePath: relPath };
+        } else if (verification.matches.length > 1) {
+            // Multiple matches - provide helpful error with relative paths
+            const relativeMatches = verification.matches.map(m => path.relative(rootDir, m));
+            return {
+                verifiedPath: absPath,
+                wasCorrected: false,
+                error: `Error reading file ${filePath}: multiple candidates were found: ${relativeMatches.join(', ')}. Please specify the correct path or ensure unique filename.`
+            };
+        } else {
+            // No matches at all
+            return {
+                verifiedPath: absPath,
+                wasCorrected: false,
+                error: `Error reading file ${filePath}`
+            };
+        }
+    } catch (e: any) {
+        // Verification failed - return the original path with error info
+        return {
+            verifiedPath: absPath,
+            wasCorrected: false,
+            error: `Error: Could not verify file '${filePath}': ${e.message}`
+        };
+    }
+}
+
+/**
  * Reads the content of a file.
+ * Uses "Look Before You Leap" verification with helpful error messages.
  */
 export async function readFile(filePath: string): Promise<string> {
     try {
-        const fullPath = path.resolve(process.cwd(), filePath);
-        const content = await fs.promises.readFile(fullPath, 'utf-8');
+        const verification = await verifyFileExists(filePath, 'read');
+
+        if (verification.error) {
+            return verification.error;
+        }
+
+        if (verification.wasCorrected) {
+            logPathCorrection('read_file', filePath, verification.verifiedPath, path.basename(filePath));
+        }
+
+        const content = await fs.promises.readFile(verification.verifiedPath, 'utf-8');
         return content;
     } catch (e: any) {
-        // [Integration] Attempt Auto-Recovery
-        if (e.code === 'ENOENT') {
-            try {
-                const verification = await findUniqueFile(filePath, process.cwd());
-                if (verification.found && verification.path) {
-                    // Log the correction for telemetry
-                    logPathCorrection('read_file', filePath, verification.path, path.basename(filePath));
-                    const recoveredContent = await fs.promises.readFile(verification.path, 'utf-8');
-                    return recoveredContent;
-                } else if (verification.matches.length > 1) {
-                     return `Error reading file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path.`;
-                }
-            } catch (_recoveryError) {
-                // Ignore recovery error and return original
-            }
-        }
         return `Error reading file ${filePath}: ${e.message}`;
     }
 }
@@ -108,41 +172,46 @@ export async function writeFile(filePath: string, content: string): Promise<stri
 
 /**
  * Executes a shell command and returns output.
+ * Uses "Look Before You Leap" verification for file operations (mv, cp, rm).
  */
 export async function runCmd(command: string): Promise<string> {
     try {
-        // [Integration] Verification & Auto-Recovery for critical commands
+        // Enhanced verification for critical commands that manipulate files
         let finalCommand = command;
         const parts = command.trim().split(/\s+/);
         const tool = parts[0];
 
         if (['mv', 'cp', 'rm'].includes(tool)) {
+            // Find the source/target file path (after options)
             let pathIndex = -1;
-            // Identify the target file path (source for mv/cp, target for rm)
-            if (tool === 'rm') {
-                pathIndex = parts.findIndex((p, i) => i > 0 && !p.startsWith('-'));
-            } else { // mv, cp
-                pathIndex = parts.findIndex((p, i) => i > 0 && !p.startsWith('-'));
+
+            // Skip options (flags starting with -)
+            for (let i = 1; i < parts.length; i++) {
+                if (!parts[i].startsWith('-')) {
+                    pathIndex = i;
+                    break;
+                }
             }
 
             if (pathIndex !== -1) {
                 const filePath = parts[pathIndex];
-                const absPath = path.resolve(process.cwd(), filePath);
+                const operation = tool === 'rm' ? 'remove' : (tool === 'mv' ? 'move' : 'copy');
 
-                if (!fs.existsSync(absPath)) {
-                    try {
-                        const verification = await findUniqueFile(filePath, process.cwd());
-                        if (verification.found && verification.path) {
-                            // Log the correction for telemetry
-                            logPathCorrection(`runCmd_${tool}`, filePath, verification.path, path.basename(filePath));
-                            parts[pathIndex] = verification.path; // Use absolute path found
-                            finalCommand = parts.join(' ');
-                        } else if (verification.matches.length > 1) {
-                             return `Error executing command: File '${filePath}' not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path.`;
-                        }
-                    } catch (_e) {
-                        // Ignore recovery error
+                // Verify file exists before attempting operation
+                const verification = await verifyFileExists(filePath, operation);
+
+                if (verification.error) {
+                    // Check if the error message contains the expected content for multiple matches
+                    if (verification.error.includes('multiple candidates were found')) {
+                        return verification.error;
                     }
+                    return verification.error;
+                }
+
+                if (verification.wasCorrected) {
+                    logPathCorrection(`runCmd_${tool}`, filePath, verification.verifiedPath, path.basename(filePath));
+                    parts[pathIndex] = verification.verifiedPath;
+                    finalCommand = parts.join(' ');
                 }
             }
         }

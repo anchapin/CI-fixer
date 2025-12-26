@@ -35,18 +35,18 @@ export async function retryWithBackoff<T>(
 export function extractCode(text: string, language: string = 'text'): string {
     // We can't import from utils/parsing here easily if it's a cyclic dependency or different layer,
     // but we can use the same logic.
-    
+
     const startMarker = '```';
     const firstIndex = text.indexOf(startMarker);
-    
+
     if (firstIndex !== -1) {
         const openingFenceEnd = firstIndex + startMarker.length;
         const closingMarkerIndex = text.indexOf(startMarker, openingFenceEnd);
-        
+
         if (closingMarkerIndex !== -1) {
             const contentWithInfo = text.substring(openingFenceEnd, closingMarkerIndex);
             const newlineIndex = contentWithInfo.indexOf('\n');
-            
+
             if (newlineIndex !== -1) {
                 return contentWithInfo.substring(newlineIndex + 1).trim();
             } else {
@@ -106,7 +106,7 @@ function calculateCost(model: string, inputTokens: number, outputTokens: number)
     const costs: Record<string, { input: number; output: number }> = {
         'gemini-3-pro-preview': { input: 0.01, output: 0.03 },
         'gemini-2.5-flash': { input: 0.001, output: 0.003 },
-        'GLM-4.6': { input: 0.005, output: 0.015 },
+        'GLM-4.7': { input: 0.005, output: 0.015 },
         'gpt-4o': { input: 0.005, output: 0.015 }
     };
 
@@ -116,10 +116,10 @@ function calculateCost(model: string, inputTokens: number, outputTokens: number)
 
 
 // Core LLM Wrapper
-export async function unifiedGenerate(config: AppConfig, params: { 
-    model?: string, 
-    contents: any, 
-    config?: any, 
+export async function unifiedGenerate(config: AppConfig, params: {
+    model?: string,
+    contents: any,
+    config?: any,
     responseFormat?: 'json' | 'text',
     validate?: (text: string) => boolean
 }): Promise<{ text: string, toolCalls?: any[], metrics?: LLMCallMetrics }> {
@@ -134,7 +134,7 @@ export async function unifiedGenerate(config: AppConfig, params: {
         const apiKey = rawApiKey;
 
         // Map Gemini constants to provider defaults if needed
-        let model = config.llmModel || (isZai ? "GLM-4.6" : "gpt-4o");
+        let model = config.llmModel || (isZai ? "GLM-4.7" : "gpt-4o");
 
         if (params.model && !params.model.startsWith('gemini-')) {
             model = params.model;

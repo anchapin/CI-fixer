@@ -32,6 +32,9 @@ describe('Verification Node', () => {
             },
             learning: {
                 processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 })
+            },
+            classification: {
+                classifyError: vi.fn().mockResolvedValue({ type: 'test_failure', confidence: 0.9 })
             }
         };
 

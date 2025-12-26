@@ -3,12 +3,12 @@
 ## 1. Environment Configuration
 
 ### LLM Provider
-You can choose between **Google Gemini** (default) or **Z.ai (GLM-4.6)**.
+You can choose between **Google Gemini** (default) or **Z.ai (GLM-4.7)**.
 
 **For Z.ai (Recommended for Coding specific tasks):**
 1.  Set `VITE_LLM_PROVIDER=zai` in `.env.local`.
 2.  Obtain an API Key from [Z.ai Dashboard](https://z.ai/manage-apikey/apikey-list).
-    *   **CRITICAL**: Ensure you have subscribed to the **Coding Plan**. The standard free/paid keys may not support the `Coding Plan` model (`GLM-4.6`).
+    *   **CRITICAL**: Ensure you have subscribed to the **Coding Plan**. The standard free/paid keys may not support the `Coding Plan` model (`GLM-4.7`).
 3.  Set `GEMINI_API_KEY=your_z_ai_key` in `.env.local` (We reuse the variable name for simplicity).
 
 **For Gemini:**

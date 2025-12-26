@@ -211,7 +211,27 @@ describe('Agent Loop Integration', () => {
       },
       analytics: { recordTrajectory: vi.fn(), getOptimalActions: vi.fn() },
       preferences: { getPreferences: vi.fn(), updatePreferences: vi.fn() },
-      orchestrator: { selectTools: vi.fn() }
+      orchestrator: { selectTools: vi.fn() },
+      learning: {
+        getStrategyRecommendation: vi.fn().mockResolvedValue({
+          preferredTools: ['llm'],
+          historicalStats: { successRate: 0.8 }
+        }),
+        processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 })
+      },
+      discovery: {
+        findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'f.py', relativePath: 'f.py', matches: ['f.py'] }),
+        recursiveSearch: vi.fn().mockResolvedValue(null),
+        checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+        fuzzySearch: vi.fn().mockResolvedValue(null),
+        checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+      },
+      verification: {
+        verifyContentMatch: vi.fn().mockResolvedValue(true)
+      },
+      fallback: {
+        generatePlaceholder: vi.fn().mockResolvedValue(undefined)
+      }
     };
 
     // Reset default values for happy path

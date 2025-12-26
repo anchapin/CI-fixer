@@ -238,6 +238,25 @@ describe('Agent Flow Integration (Mocked)', () => {
             } as any,
             metrics: {
                 recordFixAttempt: vi.fn(),
+            } as any,
+            learning: {
+                getStrategyRecommendation: vi.fn().mockResolvedValue({
+                    preferredTools: ['llm'],
+                    historicalStats: { successRate: 0.8 }
+                })
+            } as any,
+            discovery: {
+                findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'src/file.ts', relativePath: 'src/file.ts', matches: ['src/file.ts'] }),
+                recursiveSearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
+                fuzzySearch: vi.fn().mockResolvedValue(null),
+                checkGitHistoryForDeletion: vi.fn().mockResolvedValue(false)
+            } as any,
+            verification: {
+                verifyContentMatch: vi.fn().mockResolvedValue(true)
+            } as any,
+            fallback: {
+                generatePlaceholder: vi.fn().mockResolvedValue(undefined)
             } as any
         };
 

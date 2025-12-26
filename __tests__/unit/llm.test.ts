@@ -40,7 +40,7 @@ describe('LLM Provider & Tools', () => {
         });
 
         it('should call Z.AI (via fetch) when provider is zai', async () => {
-            const config: AppConfig = { llmProvider: 'zai', customApiKey: 'key', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation', llmModel: 'GLM-4.6' };
+            const config: AppConfig = { llmProvider: 'zai', customApiKey: 'key', githubToken: '', repoUrl: '', selectedRuns: [], devEnv: 'simulation', checkEnv: 'simulation', llmModel: 'GLM-4.7' };
 
             fetchSpy.mockResolvedValueOnce({
                 ok: true,
@@ -53,15 +53,15 @@ describe('LLM Provider & Tools', () => {
             // Check that fetch was called with the Z.AI model
             const callArgs = fetchSpy.mock.calls[0];
             const body = JSON.parse(callArgs[1]?.body as string);
-            expect(body.model).toBe('GLM-4.6');
+            expect(body.model).toBe('GLM-4.7');
         });
 
         it('should ignore Gemini model constant and use configured model if provider is Z.AI', async () => {
-            // Case: Internal function passes 'gemini-2.5-flash' but user selected Z.AI / GLM-4.6
+            // Case: Internal function passes 'gemini-2.5-flash' but user selected Z.AI / GLM-4.7
             const config: AppConfig = {
                 llmProvider: 'zai',
                 customApiKey: 'key',
-                llmModel: 'GLM-4.6',
+                llmModel: 'GLM-4.7',
                 githubToken: '',
                 repoUrl: '',
                 selectedRuns: [],
@@ -80,8 +80,8 @@ describe('LLM Provider & Tools', () => {
             const callArgs = fetchSpy.mock.calls[0];
             const body = JSON.parse(callArgs[1]?.body as string);
 
-            // Expect it to override 'gemini-2.5-flash' with 'GLM-4.6'
-            expect(body.model).toBe('GLM-4.6');
+            // Expect it to override 'gemini-2.5-flash' with 'GLM-4.7'
+            expect(body.model).toBe('GLM-4.7');
         });
 
         it('should retry Gemini calls on 429/503 errors', async () => {
