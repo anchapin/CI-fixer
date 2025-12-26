@@ -40,6 +40,20 @@ interface ErrorPattern {
 }
 
 const ERROR_PATTERNS: ErrorPattern[] = [
+    // Infrastructure Errors (Command Not Found)
+    {
+        category: ErrorCategory.INFRASTRUCTURE,
+        patterns: [
+            /command not found/i,
+            /not found/i,
+            /is not recognized as the name of a cmdlet/i, // PowerShell
+            /cannot find the path/i,
+            /no such file or directory/i
+        ],
+        confidence: 0.9,
+        suggestedAction: "Install the missing tool or ensure it is in the PATH"
+    },
+
     // Disk Space Errors
     {
         category: ErrorCategory.DISK_SPACE,

@@ -487,6 +487,19 @@ ModuleNotFoundError: No module named 'pydantic.v1'
     });
 
     describe('Environmental Error Detection', () => {
+        it('should classify command not found as infrastructure error', () => {
+            const logs = 'sh: 1: vitest: not found';
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
+            expect(result.errorMessage).toContain('vitest');
+        });
+
+        it('should classify bash command not found as infrastructure error', () => {
+            const logs = 'bash: vitest: command not found';
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
+        });
+
         it('should classify patch-package failure', () => {
             const logs = `
 error: patch-package: failed to apply patch for @mui/material
