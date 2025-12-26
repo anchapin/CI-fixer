@@ -6,11 +6,11 @@
 - [x] Task: Write unit tests in `__tests__/unit/errorClassification.test.ts` to verify correct categorization of "command not found" errors. 0435069
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Error Classification' (Protocol in workflow.md)
 
-## Phase 2: Capability Probing & Manifest Mapping
+## Phase 2: Capability Probing & Manifest Mapping [checkpoint: b7a42e4]
 - [x] Task: Create `services/sandbox/CapabilityProbe.ts` to implement the "Initial Capability Probe" (`tool --version`). 8b0229e
 - [x] Task: Implement mapping logic to cross-reference `package.json` and `requirements.txt` with required binaries (e.g., `vitest`, `pytest`). bece730
 - [x] Task: Write tests to ensure the probe correctly identifies missing binaries based on project files. bece730
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Capability Probing' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Capability Probing' (Protocol in workflow.md)
 
 ## Phase 3: Autonomous Provisioning & Path Management
 - [ ] Task: Implement `services/sandbox/ProvisioningService.ts` with logic to install missing tools (e.g., `npm install -g`, `pip install`).
