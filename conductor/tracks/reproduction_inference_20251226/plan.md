@@ -24,8 +24,8 @@ This plan implements a multi-layered service to infer `reproductionCommand` when
 - [x] Task: Write integration tests for the full inference pipeline (4d3e2b4)
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Agent Retry & Safe Scan Fallback' (Protocol in workflow.md) (08e8736)
 
-## Phase 4: Final Integration & Verification
-- [~] Task: Verify end-to-end flow with a mock CI failure missing a `reproductionCommand`
-- [ ] Task: Ensure telemetry and logging capture inference success/failure
-- [ ] Task: Final code review and linting check
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Final Integration & Verification' (Protocol in workflow.md)
+## Phase 4: Final Integration & Verification [checkpoint: c6e943c]
+- [x] Task: Verify end-to-end flow with a mock CI failure missing a `reproductionCommand` (c6e943c)
+- [x] Task: Ensure telemetry and logging capture inference success/failure (c6e943c)
+- [x] Task: Final code review and linting check (c6e943c)
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Final Integration & Verification' (Protocol in workflow.md) (c6e943c)
