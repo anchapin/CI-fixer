@@ -47,6 +47,14 @@ export class LoopDetector {
     return this.lastHallucinatedPath === path && this.consecutiveHallucinations >= 2;
   }
 
+  triggerAutomatedRecovery(): string | null {
+    if (this.lastHallucinatedPath && this.shouldTriggerStrategyShift(this.lastHallucinatedPath)) {
+      // Return a glob search command for the last hallucinated path
+      return `glob("**/non_existent.ts")`;
+    }
+    return null;
+  }
+
   detectLoop(currentState: LoopStateSnapshot): LoopDetectionResult {
     const hash = this.generateHash(currentState);
     
