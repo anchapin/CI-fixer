@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getSuggestedActions, addActionTemplate, recordActionUsage } from '../../services/action-library.js';
-import { ErrorCategory } from '../../errorClassification.js';
+import { ErrorCategory } from '../../types.js';
 import { setupInMemoryDb, getTestDb, clearTestData } from '../helpers/vitest-setup.js';
 
 // Use real test database (no auto-seeding)

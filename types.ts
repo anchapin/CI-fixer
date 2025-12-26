@@ -16,7 +16,28 @@ export enum AgentPhase {
   TESTING = 'TESTING',
   SUCCESS = 'SUCCESS',
   FAILURE = 'FAILURE',
-  PARTIAL_SUCCESS = 'PARTIAL_SUCCESS'
+  PARTIAL_SUCCESS = 'PARTIAL_SUCCESS',
+  ENVIRONMENT_SETUP = 'ENVIRONMENT_SETUP',
+  PROVISIONING = 'PROVISIONING'
+}
+
+export enum ErrorCategory {
+  DISK_SPACE = "disk_space",
+  NETWORK = "network",
+  AUTHENTICATION = "authentication",
+  DEPENDENCY = "dependency",
+  DEPENDENCY_CONFLICT = "dependency_conflict",
+  SYNTAX = "syntax",
+  RUNTIME = "runtime",
+  BUILD = "build",
+  TEST_FAILURE = "test_failure",
+  TIMEOUT = "timeout",
+  CONFIGURATION = "configuration",
+  PATCH_PACKAGE_FAILURE = "patch_package_failure",
+  MSW_ERROR = "msw_error",
+  ENVIRONMENT_UNSTABLE = "environment_unstable",
+  INFRASTRUCTURE = "infrastructure",
+  UNKNOWN = "unknown"
 }
 
 export interface LogLine {

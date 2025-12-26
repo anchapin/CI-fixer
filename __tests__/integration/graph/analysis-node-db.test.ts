@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { analysisNode } from '../../../agent/graph/nodes/analysis.js';
 import { GraphState, GraphContext } from '../../../agent/graph/state.js';
 import { TestDatabaseManager } from '../../helpers/test-database.js';
-import { ErrorCategory } from '../../../errorClassification.js';
+import { ErrorCategory } from '../../../../types.js';
 import { SimulationSandbox } from '../../../sandbox.js';
 import { registerCustomMatchers } from '../../helpers/custom-assertions.js';
 import { diagnoseError } from '../../../services/analysis/LogAnalysisService.js';

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { generateErrorFingerprint, extractFixPattern, findSimilarFixes, updateFixPatternStats, getTopFixPatterns } from '../../services/knowledge-base.js';
-import { ErrorCategory } from '../../errorClassification.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ErrorCategory } from '../../types.js';
+import { findSimilarFixes, getRelevantRunbooks } from '../../services/knowledge-base.js';
 
 describe('Knowledge Base', () => {
     describe('generateErrorFingerprint', () => {

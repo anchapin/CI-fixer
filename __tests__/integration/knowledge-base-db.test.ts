@@ -6,7 +6,7 @@ import {
     updateFixPatternStats,
     getTopFixPatterns
 } from '../../services/knowledge-base.js';
-import { ErrorCategory } from '../../errorClassification.js';
+import { ErrorCategory } from '../../types.js';
 import { TestDatabaseManager } from '../helpers/test-database.js';
 
 describe('Knowledge Base - Database Integration Tests', () => {

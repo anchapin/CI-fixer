@@ -5,7 +5,8 @@ import { AppConfig, RunGroup, WorkflowRun, FileChange } from '../../types.js';
 import { SimulationSandbox } from '../../sandbox.js';
 import { ServiceContainer } from '../../services/container.js';
 import { DiagnosisResult } from '../../services/analysis/LogAnalysisService.js';
-import { ClassifiedError, ErrorCategory } from '../../errorClassification.js';
+import { ErrorCategory, AgentPhase } from '../../types.js';
+import { ClassifiedError } from '../../errorClassification.js';
 
 /**
  * Default mock configuration for tests

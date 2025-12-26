@@ -6,7 +6,7 @@ import * as GitHubService from '../../services/github/GitHubService.js';
 import * as SandboxService from '../../services/sandbox/SandboxService.js';
 import * as LLMService from '../../services/llm/LLMService.js';
 import { SimulationSandbox } from '../../sandbox';
-import { ErrorCategory } from '../../errorClassification';
+import { ErrorCategory } from '../../types.js';
 
 // Mock Services
 vi.mock('../../services/analysis/CodeAnalysisService.js', () => ({

@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
+import { ErrorCategory } from '../../types.js';
 import { 
-    ErrorCategory, 
     ClassifiedError, 
     selectPrimaryError, 
     getErrorPriority,

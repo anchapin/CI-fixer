@@ -1,3 +1,5 @@
+import { ErrorCategory } from './types.js';
+
 /**
  * Error Classification System for CI-Fixer
  * 
@@ -11,24 +13,6 @@
 // ============================================================================
 // ERROR TAXONOMY
 // ============================================================================
-
-export enum ErrorCategory {
-    DISK_SPACE = "disk_space",
-    NETWORK = "network",
-    AUTHENTICATION = "authentication",
-    DEPENDENCY = "dependency",
-    DEPENDENCY_CONFLICT = "dependency_conflict",
-    SYNTAX = "syntax",
-    RUNTIME = "runtime",
-    BUILD = "build",
-    TEST_FAILURE = "test_failure",
-    TIMEOUT = "timeout",
-    CONFIGURATION = "configuration",
-    PATCH_PACKAGE_FAILURE = "patch_package_failure",
-    MSW_ERROR = "msw_error",
-    ENVIRONMENT_UNSTABLE = "environment_unstable",
-    UNKNOWN = "unknown"
-}
 
 export interface ClassifiedError {
     category: ErrorCategory;
@@ -526,6 +510,7 @@ export function getErrorPriority(category: ErrorCategory): number {
         [ErrorCategory.PATCH_PACKAGE_FAILURE]: 1,
         [ErrorCategory.MSW_ERROR]: 1,
         [ErrorCategory.DEPENDENCY]: 1,
+        [ErrorCategory.INFRASTRUCTURE]: 1,
         
         // Priority 2: Linting / Build / Syntax
         [ErrorCategory.SYNTAX]: 2,

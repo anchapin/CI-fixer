@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { ErrorCategory } from '../../types.js';
 import {
     classifyError,
     getErrorPriority,
     selectPrimaryError,
-    formatErrorSummary,
     isCascadingError,
-    ErrorCategory,
+    formatErrorSummary,
     type ClassifiedError
 } from '../../errorClassification.js';
 

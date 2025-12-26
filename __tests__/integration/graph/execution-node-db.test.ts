@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { codingNode } from '../../../agent/graph/nodes/execution.js';
-import { GraphState, GraphContext } from '../../../agent/graph/state.js';
+import { AgentPhase, ErrorCategory } from '../../../../types.js';
+import { ExecutionNode } from '../../../../agent/graph/nodes/execution.js';
 import { TestDatabaseManager } from '../../helpers/test-database.js';
 import { ErrorCategory } from '../../../errorClassification.js';
 import { SimulationSandbox } from '../../../sandbox.js';
