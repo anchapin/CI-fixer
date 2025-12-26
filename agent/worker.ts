@@ -87,6 +87,7 @@ export async function runWorkerTask(
         let diagnosis: DiagnosisResult = { summary: "", filePath: "", fixAction: 'edit', reproductionCommand: undefined };
         let targetFile: { file: any, path: string } | null = null;
         let currentErrorFactId: string | undefined = undefined;
+        const fileAttempts: Record<string, number> = {};
         const classifiedErrors: ClassifiedError[] = [];
         const feedbackHistory: string[] = [];
         const inferenceService = new ReproductionInferenceService();

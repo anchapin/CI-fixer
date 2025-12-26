@@ -5,6 +5,8 @@ import { ServiceContainer } from '../../services/container.js';
 import { SandboxEnvironment } from '../../sandbox.js';
 import * as fs from 'fs/promises';
 
+vi.mock('fs/promises');
+
 // Mocks
 vi.mock('../../db/client.js', () => ({
     db: {
@@ -61,17 +63,14 @@ vi.mock('../../errorClassification.js', () => ({
     isCascadingError: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../services/reproduction-inference.js', () => {
+import { ReproductionInferenceService } from '../../services/reproduction-inference.js';
+
+vi.mock('../../services/reproduction-inference.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../services/reproduction-inference.js')>();
     return {
+        ...actual,
         ReproductionInferenceService: vi.fn().mockImplementation(function() {
-            return {
-                inferCommand: vi.fn().mockResolvedValue({
-                    command: 'npm test inferred',
-                    strategy: 'safe_scan',
-                    confidence: 0.5,
-                    reasoning: 'Found tests directory'
-                })
-            };
+            return new actual.ReproductionInferenceService();
         })
     };
 });
@@ -80,7 +79,6 @@ vi.mock('../../services/reproduction-inference.js', () => {
 import { getWorkflowLogs } from '../../services/github/GitHubService.js';
 import { diagnoseError, runSandboxTest } from '../../services/analysis/LogAnalysisService.js';
 import { validateCommand } from '../../validation.js';
-import { ReproductionInferenceService } from '../../services/reproduction-inference.js';
 
 describe('Reproduction Inference Integration', () => {
     let mockConfig: AppConfig;
@@ -139,12 +137,19 @@ describe('Reproduction Inference Integration', () => {
     });
 
     it('should infer reproduction command if diagnoseError does not provide one', async () => {
+        // Mock filesystem for Safe Scan (tests directory)
+        vi.mocked(fs.stat).mockImplementation(async (p: any) => {
+            if (p.toString().includes('tests')) return { isDirectory: () => true } as any;
+            throw new Error('File not found');
+        });
+        vi.mocked(fs.readdir).mockResolvedValue(['tests'] as any);
+
         // Mock diagnoseError to NOT provide a reproductionCommand
         (diagnoseError as Mock).mockResolvedValue({
             summary: 'Fix NullPointerException',
             filePath: 'src/main.ts',
             fixAction: 'edit',
-            reproductionCommand: undefined // MISSING
+            reproductionCommand: undefined
         });
 
         const result = await runWorkerTask(
@@ -160,13 +165,103 @@ describe('Reproduction Inference Integration', () => {
 
         // Check if inference service was used
         expect(ReproductionInferenceService).toHaveBeenCalled();
-        const instance = vi.mocked(ReproductionInferenceService).mock.results[0].value;
-        expect(instance.inferCommand).toHaveBeenCalledWith(expect.any(String), expect.any(Object), mockSandbox);
         
         // Check if the inferred command was used in logs
-        expect(logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Inferred command: npm test inferred'), 'group-1', 'Test Group');
+        // Note: Safe Scan for 'tests' directory without package.json returns 'ls tests'
+        expect(logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Inferred command: ls tests'), 'group-1', 'Test Group');
         
         // Check if the inferred command was executed
-        expect(mockSandbox.runCommand).toHaveBeenCalledWith('npm test inferred');
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith('ls tests');
+    });
+
+    it('should prioritize Workflow over other strategies in full pipeline', async () => {
+        // Mock everything to return something, but Workflow should win
+        const { ReproductionInferenceService } = await import('../../services/reproduction-inference.js');
+        const serviceInstance = new ReproductionInferenceService();
+        
+        // We'll use the REAL service but mock the file system and sandbox
+        vi.mocked(ReproductionInferenceService).mockImplementation(function() {
+            return serviceInstance;
+        });
+
+        // Mock filesystem for workflow
+        vi.mocked(fs.stat).mockImplementation(async (p: any) => {
+            const pathStr = p.toString().replace(/\\/g, '/');
+            if (pathStr.includes('.github/workflows')) return { isDirectory: () => true } as any;
+            if (pathStr.includes('ci.yml')) return { isFile: () => true } as any;
+            if (pathStr.includes('package.json')) return { isFile: () => true } as any;
+            throw new Error('File not found');
+        });
+        vi.mocked(fs.readdir).mockImplementation(async (p: any) => {
+            const pathStr = p.toString().replace(/\\/g, '/');
+            if (pathStr.includes('.github/workflows')) return ['ci.yml'] as any;
+            return ['package.json', '.github'] as any;
+        });
+        vi.mocked(fs.readFile).mockResolvedValue(`
+jobs:
+  test:
+    steps:
+      - run: npm run test:workflow
+`);
+
+        (diagnoseError as Mock).mockResolvedValue({
+            summary: 'Error',
+            filePath: 'src/main.ts',
+            fixAction: 'edit',
+            reproductionCommand: undefined
+        });
+
+        await runWorkerTask(mockConfig, mockGroup, mockSandbox, undefined, '', mockServices, updateStateCallback, logCallback);
+
+        expect(logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Inferred command: npm run test:workflow'), 'group-1', 'Test Group');
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith('npm run test:workflow');
+    });
+
+    it('should fallback to next strategy if first one fails dry-run', async () => {
+        const { ReproductionInferenceService } = await import('../../services/reproduction-inference.js');
+        const serviceInstance = new ReproductionInferenceService();
+        
+        vi.mocked(ReproductionInferenceService).mockImplementation(function() {
+            return serviceInstance;
+        });
+
+        // package.json (Signature) and test.py (Safe Scan)
+        vi.mocked(fs.stat).mockImplementation(async (p: any) => {
+            const pathStr = p.toString().replace(/\\/g, '/');
+            if (pathStr.includes('package.json')) return { isFile: () => true } as any;
+            if (pathStr.includes('test.py')) return { isFile: () => true } as any;
+            throw new Error('File not found');
+        });
+        vi.mocked(fs.readdir).mockImplementation(async (p: any) => {
+            const pathStr = p.toString().replace(/\\/g, '/');
+            if (pathStr.includes('.github/workflows')) throw new Error('Not found');
+            return ['package.json', 'test.py'] as any;
+        });
+        // Ensure no build tools match
+        vi.mocked(fs.readFile).mockImplementation(async (p: any) => {
+            throw new Error('File not found');
+        });
+
+        // First command (npm test) fails dry-run
+        // We need to account for all potential runCommand calls
+        (mockSandbox.runCommand as Mock).mockImplementation(async (cmd: string) => {
+            if (cmd === 'npm test') return { stdout: '', stderr: 'npm: not found', exitCode: 127 };
+            return { stdout: '', stderr: '', exitCode: 1 }; // Pass dry-run for others
+        });
+
+        (diagnoseError as Mock).mockResolvedValue({
+            summary: 'Error',
+            filePath: 'src/main.ts',
+            fixAction: 'edit',
+            reproductionCommand: undefined
+        });
+
+        await runWorkerTask(mockConfig, mockGroup, mockSandbox, undefined, '', mockServices, updateStateCallback, logCallback);
+
+        // Should have tried npm test first (and failed dry-run)
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith('npm test');
+        // Should have then tried python test.py (from Safe Scan)
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith('python test.py');
+        expect(logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Inferred command: python test.py'), 'group-1', 'Test Group');
     });
 });
