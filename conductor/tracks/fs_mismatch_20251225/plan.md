@@ -3,7 +3,7 @@
 ## Phase 1: Enhanced Path Analysis & Search Utilities
 - [x] Task: Create `utils/pathDetection.ts` with regex-based heuristics to extract all potential file paths from a shell command string. (3dcbd64)
 - [x] Task: Enhance `utils/fileVerification.ts` to include Levenshtein-based similarity and `git ls-files` awareness. (e1ddf75)
-- [ ] Task: Write unit tests for the new path detection and fuzzy search logic.
+- [x] Task: Write unit tests for the new path detection and fuzzy search logic. (3dcbd64, e1ddf75)
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Enhanced Path Analysis & Search Utilities' (Protocol in workflow.md)
 
 ## Phase 2: Tool Wrapper Integration
