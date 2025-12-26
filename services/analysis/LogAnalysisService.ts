@@ -7,7 +7,7 @@ import { filterLogs, summarizeLogs } from '../context-compiler.js';
 import { getWorkflowLogs, pushMultipleFilesToGitHub } from '../github/GitHubService.js';
 import { ContextManager, ContextPriority } from '../context-manager.js';
 import { postProcessPatch } from '../repair-agent/post-processor.js';
-import { extractCodeBlock } from '../../utils/parsing.js';
+import { extractCodeBlock, extractCodeBlockStrict } from '../../utils/parsing.js';
 
 const MODEL_SMART = "gemini-3-pro-preview";
 const MODEL_FAST = "gemini-2.5-flash";
@@ -342,17 +342,22 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
             segments.push(res.text);
         }
 
-        let fullCode = "";
-        segments.forEach((seg) => {
-            const clean = seg.trim().replace(/^```[\w]*\s*/, '').replace(/\s*```$/, '');
-            fullCode += clean;
+        // Concatenate all segments into a single response
+        // For continuation segments, strip the leading fence to avoid duplicate fences
+        const processedSegments = segments.map((seg, index) => {
+            if (index === 0) return seg;
+            // Strip leading fence from continuation segments
+            return seg.replace(/^```[\w]*\n?/, '');
         });
+        const fullResponse = processedSegments.join('');
 
-        const rawCode = extractCodeBlock(fullCode) || fullCode.trim();
-        
+        // STRICT CODE BLOCK EXTRACTION: Never trust raw LLM output for file writing
+        // This prevents writing conversational filler or unstructured text to files
+        const rawCode = extractCodeBlockStrict(fullResponse);
+
         // Apply automated post-processing (flags, Docker comments, spell-check)
         const processedCode = postProcessPatch(context.filePath || 'file.txt', rawCode);
-        
+
         return processedCode;
     } catch (e: any) {
         console.error('[generateFix] Error:', e);
@@ -464,15 +469,83 @@ export async function runSandboxTest(config: AppConfig, group: RunGroup, iterati
             if (testCommand) {
                 cmd = testCommand;
             } else {
-                // Fallback auto-detection
-                const lsCheck = await sandbox.runCommand("ls package.json requirements.txt");
-                if (lsCheck.stdout.includes('requirements.txt') && !lsCheck.stdout.includes('package.json')) {
-                    cmd = "pytest";
+                // [Intelligent Test Isolation] Use TestSelector to pick the best test command
+                const { TestSelector } = await import('../TestSelector.js');
+                const selector = new TestSelector();
+                cmd = selector.selectTestCommand([fileChange.path]);
+                
+                // [Autonomous Test Generation] Check if specific test exists, if not generate it
+                // Skip if the modified file is already a test file to avoid recursion
+                const isTestFile = fileChange.path.includes('.test.') || 
+                                   fileChange.path.includes('.spec.') || 
+                                   fileChange.path.includes('__tests__') || 
+                                   fileChange.path.startsWith('tests/');
+
+                if (!isTestFile) {
+                    const { TestGenerator } = await import('../TestGenerator.js');
+                    const generator = new TestGenerator(config);
+                    const expectedTestPath = generator.determineTestPath(fileChange.path);
+                    
+                    // Check if test exists
+                    const testExistsRes = await sandbox.runCommand(`ls "${expectedTestPath}"`);
+                    if (testExistsRes.exitCode !== 0) {
+                        logCallback('INFO', `Test file not found at ${expectedTestPath}. Generating new test...`);
+                        try {
+                            const testContent = await generator.generateTest(fileChange.path, fileChange.modified.content);
+                            if (testContent) {
+                                await sandbox.writeFile(expectedTestPath, testContent);
+                                logCallback('INFO', `Generated and wrote test to ${expectedTestPath}`);
+                                
+                                // Update command to run the new test
+                                if (expectedTestPath.endsWith('.py')) {
+                                    cmd = `pytest "${expectedTestPath}"`;
+                                } else {
+                                    // Default to npx vitest for JS/TS as it's the project standard
+                                    cmd = `npx vitest run "${expectedTestPath}"`; 
+                                }
+                            }
+                        } catch (genError: any) {
+                            logCallback('WARN', `Failed to generate test: ${genError.message}`);
+                        }
+                    }
                 }
+                
+                logCallback('INFO', `Selected test command: ${cmd} for file: ${fileChange.path}`);
             }
 
-            const result = await sandbox.runCommand(cmd);
-            const fullLog = result.stdout + "\n" + result.stderr;
+            let result = await sandbox.runCommand(cmd);
+            let fullLog = result.stdout + "\n" + result.stderr;
+
+            // [Adaptive Execution] Check for Bun-specific failures and retry
+            if (result.exitCode !== 0 || fullLog.includes('FAIL') || (fullLog.includes('failed') && !fullLog.includes('0 failed'))) {
+                const { BunErrorPattern } = await import('./BunErrorPattern.js');
+                const diagnosis = BunErrorPattern.diagnose(fullLog);
+                
+                if (diagnosis.isBunError) {
+                    logCallback('INFO', `Detected Bun-specific error: ${diagnosis.description}. Retrying with 'bun test'...`);
+                    
+                    // Attempt to switch to bun test
+                    // If original was "npx vitest run path/to/test.ts", try "bun test path/to/test.ts"
+                    let bunCmd = 'bun test';
+                    const fileMatch = cmd.match(/\S+\.(ts|js|tsx|jsx)$/);
+                    if (fileMatch) {
+                        bunCmd = `bun test ${fileMatch[0]}`;
+                    }
+
+                    logCallback('INFO', `Retry command: ${bunCmd}`);
+                    const retryResult = await sandbox.runCommand(bunCmd);
+                    const retryLog = retryResult.stdout + "\n" + retryResult.stderr;
+                    
+                    if (retryResult.exitCode === 0 && !(retryLog.includes('FAIL') || (retryLog.includes('failed') && !retryLog.includes('0 failed')))) {
+                        logCallback('INFO', 'Retry with Bun succeeded.');
+                        return { passed: true, logs: retryLog };
+                    } else {
+                        logCallback('WARN', 'Retry with Bun failed.');
+                        fullLog = retryLog; // Return the retry log for analysis
+                        result = retryResult;
+                    }
+                }
+            }
 
             if (result.exitCode !== 0) return { passed: false, logs: fullLog };
             if (fullLog.includes('FAIL') || (fullLog.includes('failed') && !fullLog.includes('0 failed'))) {
