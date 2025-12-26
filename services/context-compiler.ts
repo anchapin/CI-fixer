@@ -17,7 +17,7 @@ export function filterLogs(rawLogs: string): string {
     // 1. Identify key lines
     lines.forEach((line, index) => {
         const lower = line.toLowerCase();
-        if (lower.includes('error') || lower.includes('fail') || lower.includes('exception')) {
+        if (lower.includes('error') || lower.includes('fail') || lower.includes('exception') || lower.includes('loop detected')) {
             // Add context window (+/- 5 lines)
             for (let i = Math.max(0, index - 5); i <= Math.min(lines.length - 1, index + 5); i++) {
                 relevantIndices.add(i);
