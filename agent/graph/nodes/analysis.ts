@@ -122,6 +122,23 @@ export const analysisNode: NodeHandler = async (state, context) => {
                 // Add to feedback so it persists in the loop
                 state.feedback.push(message);
             }
+
+            // --- NEW: Path Hallucination Strategy Shift ---
+            const totalHallucinations = services.loopDetector.getTotalHallucinations();
+            if (totalHallucinations > 0) {
+                // We check if the last targeted path (from any tool) triggered a shift
+                // The LoopDetector tracks this internally now.
+                // We need a way to check if a shift is active.
+                
+                // For now, let's assume we want to warn the agent if they are hallucinating.
+                const lastPath = services.loopDetector.getLastHallucinatedPath();
+                if (lastPath && services.loopDetector.shouldTriggerStrategyShift(lastPath)) {
+                    const hallMsg = `[LoopDetector] STRATEGY SHIFT REQUIRED! You have repeatedly targeted the non-existent path '${lastPath}'. STOP using file modification tools on this path. Use 'ls' (listDir), 'glob', or 'search' to discover the correct location first.`;
+                    log('WARN', hallMsg);
+                    loopContext += `\nCRITICAL WARNING: ${hallMsg}\n`;
+                    state.feedback.push(hallMsg);
+                }
+            }
         } else {
             log('WARN', '[AnalysisNode] Loop detector service missing, skipping loop detection');
         }

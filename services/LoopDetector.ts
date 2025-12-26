@@ -10,6 +10,10 @@ export class LoopDetector {
 
   constructor() {}
 
+  public getLastHallucinatedPath(): string | null {
+    return this.lastHallucinatedPath;
+  }
+
   addState(state: LoopStateSnapshot): void {
     this.history.push(state);
     const hash = this.generateHash(state);

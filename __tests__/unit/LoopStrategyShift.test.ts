@@ -1,62 +1,81 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { filterLogs } from '../../services/context-compiler';
-import { diagnoseError } from '../../services/analysis/LogAnalysisService';
-import { AppConfig } from '../../types';
-import * as LLMService from '../../services/llm/LLMService';
+import { analysisNode } from './agent/graph/nodes/analysis.js';
+import { GraphState, GraphContext } from './agent/graph/state.js';
+import { LoopDetector } from './services/LoopDetector.js';
+import { AgentPhase } from './types.js';
 
-// Mock LLMService
-vi.mock('../../services/llm/LLMService', () => ({
-    unifiedGenerate: vi.fn(),
-    safeJsonParse: vi.fn((text, fallback) => fallback),
-    extractCode: vi.fn(),
-    extractCodeBlockStrict: vi.fn(),
-}));
+describe('Strategy Shift Mitigation', () => {
+    let mockState: any;
+    let mockContext: any;
+    let loopDetector: LoopDetector;
 
-describe('Loop Strategy Shift Verification', () => {
-    
-    describe('Log Filtering', () => {
-        it('should preserve LoopDetector warnings in filtered logs', () => {
-            const warning = "[LoopDetector] LOOP DETECTED! You MUST change your strategy.";
-            // Create a long log to bypass "last 10 lines" fallback
-            const padding = Array(50).fill("Info: Standard log line").join('\n');
-            const logs = `
-            ${padding}
-            ${warning}
-            ${padding}
-            `;
+    beforeEach(() => {
+        loopDetector = new LoopDetector();
+        
+        mockState = {
+            config: {},
+            group: { id: 'G1', name: 'Group 1', runIds: ['R1'], mainRun: {} },
+            iteration: 1,
+            maxIterations: 5,
+            status: 'working',
+            activeLog: '',
+            files: {},
+            feedback: [],
+            complexityHistory: [],
+            currentLogText: 'Error: Path NOT FOUND'
+        };
 
-            // Note: The warning does NOT contain "error", "fail", or "exception".
-            // This test verifies if filterLogs captures it or if we need to update filterLogs.
-            const filtered = filterLogs(logs);
-            
-            expect(filtered).toContain("LOOP DETECTED");
-        });
+        mockContext = {
+            logCallback: vi.fn(),
+            sandbox: {
+                runCommand: vi.fn().mockResolvedValue({ stdout: '', exitCode: 0 }),
+                getWorkDir: () => '/work'
+            },
+            services: {
+                loopDetector,
+                github: { getWorkflowLogs: vi.fn() },
+                context: { smartThinLog: vi.fn(l => l) },
+                classification: { 
+                    classifyErrorWithHistory: vi.fn().mockResolvedValue({ category: 'runtime', errorMessage: 'err' }),
+                    getErrorPriority: vi.fn().mockReturnValue(3)
+                },
+                analysis: {
+                    generateRepoSummary: vi.fn().mockResolvedValue('summary'),
+                    diagnoseError: vi.fn().mockResolvedValue({ summary: 'diag', fixAction: 'edit' }),
+                    refineProblemStatement: vi.fn().mockResolvedValue('refined statement')
+                },
+                complexity: {
+                    estimateComplexity: vi.fn().mockReturnValue(5),
+                    detectConvergence: vi.fn().mockReturnValue({ trend: 'stable' }),
+                    isAtomic: vi.fn().mockReturnValue(false),
+                    explainComplexity: vi.fn().mockReturnValue('low')
+                }
+            }
+        };
     });
 
-    describe('Diagnosis Prompt Injection', () => {
-        const mockConfig = {} as AppConfig;
+    it('should inject Strategy Shift warning after 2 hallucinations', async () => {
+        const hallucinatedPath = 'missing.ts';
+        
+        // Record 2 hallucinations
+        loopDetector.recordHallucination(hallucinatedPath);
+        loopDetector.recordHallucination(hallucinatedPath);
 
-        beforeEach(() => {
-            vi.clearAllMocks();
-        });
+        await analysisNode(mockState, mockContext);
 
-        it('should include LoopDetector warning in the LLM prompt', async () => {
-            const warning = "[LoopDetector] LOOP DETECTED! You MUST change your strategy.";
-            const logSnippet = `Error: Something failed\n${warning}`;
+        // Verify diagnoseError was called with the warning in logSnippet
+        expect(mockContext.services.analysis.diagnoseError).toHaveBeenCalledWith(
+            expect.any(Object),
+            expect.stringContaining('STRATEGY SHIFT REQUIRED'),
+            expect.any(String),
+            undefined,
+            expect.any(Object),
+            expect.any(Array)
+        );
 
-            // Mock unifiedGenerate to return a dummy response
-            (LLMService.unifiedGenerate as any).mockResolvedValue({ text: "{}" });
-
-            await diagnoseError(mockConfig, logSnippet);
-
-            const generateMock = LLMService.unifiedGenerate as any;
-            expect(generateMock).toHaveBeenCalled();
-
-            const callArgs = generateMock.mock.calls[0][1]; // options
-            const prompt = callArgs.contents;
-
-            expect(prompt).toContain("LOOP DETECTED");
-            expect(prompt).toContain("You MUST change your strategy");
-        });
+        // Verify feedback was updated
+        expect(mockState.feedback).toEqual(
+            expect.arrayContaining([expect.stringContaining('STRATEGY SHIFT REQUIRED')])
+        );
     });
 });
