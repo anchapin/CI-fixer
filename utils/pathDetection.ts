@@ -1,10 +1,81 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import Fuse from 'fuse.js';
 
 /**
- * Utility to extract potential file paths from a shell command string.
- * Uses regex-based heuristics to identify strings that look like paths.
+ * Result of a path validation operation.
  */
+export interface PathValidationResult {
+    valid: boolean;
+    exists: boolean;
+    absolutePath: string;
+    closestParent?: string;
+    suggestions?: string[];
+}
+
+/**
+ * Validates a path, checking for existence and providing suggestions if it doesn't exist.
+ * 
+ * @param targetPath The path to validate
+ * @returns PathValidationResult
+ */
+export function validatePath(targetPath: string): PathValidationResult {
+    const absolutePath = path.resolve(targetPath);
+    const exists = fs.existsSync(absolutePath);
+
+    if (exists) {
+        return {
+            valid: true,
+            exists: true,
+            absolutePath
+        };
+    }
+
+    // Path doesn't exist, find closest parent and suggestions
+    const closestParent = findClosestExistingParent(absolutePath);
+    const suggestions = fuzzyMatchPath(targetPath);
+
+    return {
+        valid: false,
+        exists: false,
+        absolutePath,
+        closestParent,
+        suggestions
+    };
+}
+
+/**
+ * Attempts to find similar existing paths to the target path.
+ * 
+ * @param targetPath The hallucinated path
+ * @returns Array of suggested existing paths
+ */
+export function fuzzyMatchPath(targetPath: string): string[] {
+    const filename = path.basename(targetPath);
+    const dirname = path.dirname(targetPath);
+    const closestParent = findClosestExistingParent(targetPath);
+
+    // If the directory doesn't exist, we look in the closest parent
+    const searchDir = fs.existsSync(dirname) ? dirname : closestParent;
+    
+    try {
+        const files = fs.readdirSync(searchDir, { recursive: true }) as string[];
+        
+        if (!files || !Array.isArray(files)) {
+            return [];
+        }
+
+        const fuse = new Fuse(files, {
+            includeScore: true,
+            threshold: 0.4
+        });
+
+        const results = fuse.search(filename);
+        return results.map(r => path.join(searchDir, r.item)).slice(0, 3);
+    } catch (error) {
+        return [];
+    }
+}
 
 /**
  * Finds the closest existing parent directory for a given path.
