@@ -1,13 +1,16 @@
-import { ReproductionInferenceResult } from '../types';
+import { ReproductionInferenceResult, AppConfig } from '../types';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { unifiedGenerate, safeJsonParse } from './llm/LLMService';
 
 /**
  * Service responsible for inferring the reproduction command for a repository
  * when it is missing from agent output.
  */
 export class ReproductionInferenceService {
+  constructor(private config?: AppConfig) {}
+
   /**
    * Infers a reproduction command for the given repository path.
    * @param repoPath The absolute path to the repository root
@@ -22,6 +25,50 @@ export class ReproductionInferenceService {
 
     const buildToolResult = await this.inferFromBuildTools(repoPath);
     if (buildToolResult) return buildToolResult;
+
+    const agentRetryResult = await this.inferFromAgentRetry(repoPath);
+    if (agentRetryResult) return agentRetryResult;
+
+    return null;
+  }
+
+  private async inferFromAgentRetry(repoPath: string): Promise<ReproductionInferenceResult | null> {
+    if (!this.config) return null;
+
+    try {
+      // List top-level files to provide context to the LLM
+      const files = await fs.readdir(repoPath);
+      const fileContext = files.slice(0, 50).join(', ');
+
+      const prompt = `
+You are an expert developer assistant. I need to reproduce a CI failure in this repository, but I don't know the exact test command.
+The repository root contains the following files: ${fileContext}
+
+Based on these files, please infer the most likely command to run the tests and reproduce the failure.
+Return your answer in JSON format:
+{
+  "command": "the test command",
+  "reasoning": "brief explanation of why this command was chosen"
+}
+`;
+
+      const response = await unifiedGenerate(this.config, {
+        contents: prompt,
+        responseFormat: 'json'
+      });
+
+      const parsed = safeJsonParse(response.text, null as any);
+      if (parsed && parsed.command) {
+        return {
+          command: parsed.command,
+          confidence: 0.6,
+          strategy: 'agent_retry',
+          reasoning: parsed.reasoning || 'Inferred by agent through repository structure analysis'
+        };
+      }
+    } catch (error) {
+      console.error('[ReproductionInferenceService] Agent Retry failed:', error);
+    }
 
     return null;
   }
