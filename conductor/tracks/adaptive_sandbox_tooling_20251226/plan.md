@@ -2,7 +2,7 @@
 
 ## Phase 1: Error Classification & Infrastructure Detection
 - [x] Task: Update `types.ts` to include infrastructure-specific error categories and execution statuses (e.g., `INFRASTRUCTURE_ERROR`). 1965b62
-- [ ] Task: Enhance `errorClassification.ts` to distinguish between logic failures (exit code 1) and infrastructure failures (exit code 127/command not found) using regex on stderr.
+- [x] Task: Enhance `errorClassification.ts` to distinguish between logic failures (exit code 1) and infrastructure failures (exit code 127/command not found) using regex on stderr. ce4c6c8
 - [ ] Task: Write unit tests in `__tests__/unit/errorClassification.test.ts` to verify correct categorization of "command not found" errors.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Error Classification' (Protocol in workflow.md)
 
