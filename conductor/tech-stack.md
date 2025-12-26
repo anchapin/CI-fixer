@@ -2,7 +2,7 @@
 
 ## Core Technologies
 - **Programming Language:** TypeScript
-- **Runtime Environment:** Node.js
+- **Runtime Environment:** Node.js, Bun (for context-sensitive execution)
 
 ## Frontend
 - **Framework:** React
