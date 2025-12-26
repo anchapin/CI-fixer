@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { unifiedGenerate, safeJsonParse } from './llm/LLMService';
+import { SandboxEnvironment } from '../sandbox';
 
 /**
  * Service responsible for inferring the reproduction command for a repository
@@ -15,25 +16,52 @@ export class ReproductionInferenceService {
    * Infers a reproduction command for the given repository path.
    * @param repoPath The absolute path to the repository root
    * @param config Optional application configuration for LLM-based inference
+   * @param sandbox Optional sandbox environment to perform validation dry-runs
    * @returns The inferred reproduction command and details, or null if inference failed
    */
-  async inferCommand(repoPath: string, config?: AppConfig): Promise<ReproductionInferenceResult | null> {
-    const workflowResult = await this.inferFromWorkflows(repoPath);
-    if (workflowResult) return workflowResult;
+  async inferCommand(repoPath: string, config?: AppConfig, sandbox?: SandboxEnvironment): Promise<ReproductionInferenceResult | null> {
+    const strategies = [
+      () => this.inferFromWorkflows(repoPath),
+      () => this.inferFromSignatures(repoPath),
+      () => this.inferFromBuildTools(repoPath),
+      () => this.inferFromAgentRetry(repoPath, config),
+      () => this.inferFromSafeScan(repoPath)
+    ];
 
-    const signatureResult = await this.inferFromSignatures(repoPath);
-    if (signatureResult) return signatureResult;
-
-    const buildToolResult = await this.inferFromBuildTools(repoPath);
-    if (buildToolResult) return buildToolResult;
-
-    const agentRetryResult = await this.inferFromAgentRetry(repoPath, config);
-    if (agentRetryResult) return agentRetryResult;
-
-    const safeScanResult = await this.inferFromSafeScan(repoPath);
-    if (safeScanResult) return safeScanResult;
+    for (const strategy of strategies) {
+      const result = await strategy();
+      if (result) {
+        if (sandbox) {
+          const isValid = await this.validateCommand(result.command, sandbox);
+          if (isValid) {
+            return result;
+          } else {
+            console.warn(`[ReproductionInferenceService] Command failed dry-run: ${result.command}. Trying next strategy.`);
+            continue;
+          }
+        }
+        return result;
+      }
+    }
 
     return null;
+  }
+
+  private async validateCommand(command: string, sandbox: SandboxEnvironment): Promise<boolean> {
+    try {
+      // Perform a basic dry-run. We don't necessarily care about the exit code 
+      // (since reproduction is EXPECTED to fail), but we care about "command not found".
+      // Usually "command not found" is exit code 127 on Unix.
+      const res = await sandbox.runCommand(command);
+      
+      if (res.exitCode === 127 || res.stderr.toLowerCase().includes('command not found')) {
+        return false;
+      }
+      
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async inferFromSafeScan(repoPath: string): Promise<ReproductionInferenceResult | null> {

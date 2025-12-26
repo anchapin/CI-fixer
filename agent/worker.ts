@@ -161,7 +161,7 @@ export async function runWorkerTask(
             if (!diagnosis.reproductionCommand && sandbox) {
                 log('INFO', '[Inference] Reproduction command missing. Attempting inference...');
                 const repoPath = sandbox.getLocalPath();
-                const inferred = await inferenceService.inferCommand(repoPath, config);
+                const inferred = await inferenceService.inferCommand(repoPath, config, sandbox);
                 
                 if (inferred) {
                     log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);

@@ -160,6 +160,8 @@ describe('Reproduction Inference Integration', () => {
 
         // Check if inference service was used
         expect(ReproductionInferenceService).toHaveBeenCalled();
+        const instance = vi.mocked(ReproductionInferenceService).mock.results[0].value;
+        expect(instance.inferCommand).toHaveBeenCalledWith(expect.any(String), expect.any(Object), mockSandbox);
         
         // Check if the inferred command was used in logs
         expect(logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Inferred command: npm test inferred'), 'group-1', 'Test Group');
