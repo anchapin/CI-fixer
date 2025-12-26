@@ -21,8 +21,8 @@ This plan implements a multi-layered service to infer `reproductionCommand` when
 - [x] Task: Implement "Safe Scan" fallback for deep-search of test-like files (e46cd5c)
 - [x] Task: Integrate `ReproductionInferenceService` into the main agent loop (`agent.ts` or `services/repair-agent/`) (c2e0985)
 - [x] Task: Implement validation "dry-run" for inferred commands (1977909)
-- [~] Task: Write integration tests for the full inference pipeline
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Agent Retry & Safe Scan Fallback' (Protocol in workflow.md)
+- [x] Task: Write integration tests for the full inference pipeline (4d3e2b4)
+- [~] Task: Conductor - User Manual Verification 'Phase 3: Agent Retry & Safe Scan Fallback' (Protocol in workflow.md)
 
 ## Phase 4: Final Integration & Verification
 - [ ] Task: Verify end-to-end flow with a mock CI failure missing a `reproductionCommand`
