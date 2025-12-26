@@ -22,8 +22,8 @@ In this phase, we will integrate the enhanced path detection into the tool layer
 
 In this phase, we will update the `LoopDetector` to handle path-related failures and trigger automated recovery (discovery).
 
-- [ ] Task: TDD - Update `LoopDetector` to track repeated "No such file or directory" errors
-- [ ] Task: TDD - Implement automated `glob` search trigger upon path-related loop detection
+- [x] Task: TDD - Update `LoopDetector` to track repeated "No such file or directory" errors 7d91da8
+- [x] Task: TDD - Implement automated `glob` search trigger upon path-related loop detection 7d91da8
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Loop Detection & Automated Recovery' (Protocol in workflow.md)
 
 ## Phase 4: Final Integration & Verification
