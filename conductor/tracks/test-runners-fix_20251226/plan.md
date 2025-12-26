@@ -30,11 +30,11 @@ This plan implements a hybrid solution to resolve missing test runners by updati
 
 ## Phase 3: Integration & Verification
 
-- [ ] Task: Update Agent Sandbox Configuration
+- [x] Task: Update Agent Sandbox Configuration (2e5f31b)
   - Point the sandbox configuration to use the new "thicker" Docker image.
-- [ ] Task: Integration Test - Pre-installed Runners
+- [x] Task: Integration Test - Pre-installed Runners (2e5f31b)
   - Run a test suite that uses `pytest` and `vitest` without any installation steps.
-- [ ] Task: Integration Test - On-demand Runners
+- [x] Task: Integration Test - On-demand Runners (2e5f31b)
   - Run a test suite using a runner NOT in the base image (e.g., a specific older version of a tool).
   - Verify the system installs it and then successfully runs the tests.
 - [ ] Task: Conductor - User Manual Verification 'Integration & Verification' (Protocol in workflow.md)
