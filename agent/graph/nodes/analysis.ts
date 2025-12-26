@@ -11,7 +11,9 @@ import { clusterError } from '../../../services/error-clustering.js';
 import { estimateComplexity, detectConvergence, isAtomic, explainComplexity } from '../../../services/complexity-estimator.js';
 import { withSpan, setAttributes, addEvent } from '../../../telemetry/tracing.js';
 import { createHash } from 'crypto';
-import { LoopStateSnapshot } from '../../../types.js';
+import { LoopStateSnapshot, AgentPhase } from '../../../types.js';
+import { CapabilityProbe } from '../../../services/sandbox/CapabilityProbe.js';
+import { ProvisioningService } from '../../../services/sandbox/ProvisioningService.js';
 
 export const analysisNode: NodeHandler = async (state, context) => {
     return withSpan('analysis-node', async (span) => {
@@ -137,6 +139,36 @@ export const analysisNode: NodeHandler = async (state, context) => {
         };
 
         log('INFO', `Diagnosing error (Category: ${classified.category})...`);
+
+        // --- NEW: Proactive Provisioning (Phase 4) ---
+        if (classified.category === 'infrastructure' && sandbox) {
+            log(AgentPhase.ENVIRONMENT_SETUP, '[Infrastructure] Detected missing tool. Attempting provisioning...');
+            const probe = new CapabilityProbe(sandbox);
+            const provisioning = new ProvisioningService(sandbox);
+            
+            const required = await probe.getRequiredTools();
+            const available = await probe.probe(required);
+            
+            for (const tool of required) {
+                if (!available.get(tool)) {
+                    log(AgentPhase.PROVISIONING, `[Provisioning] Installing ${tool}...`);
+                    const runtime = (tool === 'python' || tool === 'pip' || tool === 'pytest') ? 'python' : 'node';
+                    const success = await provisioning.provision(tool, runtime as any);
+                    if (success) {
+                        log('SUCCESS', `Successfully provisioned ${tool}`);
+                        const binPath = await provisioning.getGlobalBinPath();
+                        if (binPath && !sandbox.envOverrides?.['PATH']?.includes(binPath)) {
+                            if (!sandbox.envOverrides) sandbox.envOverrides = {};
+                            sandbox.envOverrides['PATH'] = `$PATH:${binPath}`;
+                        }
+                    } else {
+                        log('WARN', `Failed to provision ${tool}`);
+                    }
+                }
+            }
+        }
+        // ---------------------------------------------
+
         const diagnosis = await context.services.analysis.diagnoseError(
             config, 
             currentLogText + loopContext, // Inject loop context here

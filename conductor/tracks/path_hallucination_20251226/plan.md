@@ -8,7 +8,7 @@ Focus on the tracking mechanism and the base middleware structure.
 - [x] Task: Create `LoopDetector` service to track hallucination counts per session. c734ca7
 - [x] Task: Implement `PathValidator` utility to find the "closest existing parent" of a hallucinated path. b95cd35
 - [x] Task: Write unit tests for `LoopDetector` and `PathValidator`. e8380b9
-- [ ] Task: Conductor - User Manual Verification 'Infrastructure & Loop Detection Core' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Infrastructure & Loop Detection Core' (Protocol in workflow.md)
 
 ## Phase 2: Tool Pre-processor & Discovery
 Integrate the validation into the tool execution flow.

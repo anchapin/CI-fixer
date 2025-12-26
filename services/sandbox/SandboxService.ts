@@ -1,11 +1,13 @@
 
-import { AppConfig, CodeFile } from '../../types.js';
+import { AppConfig, CodeFile, AgentPhase } from '../../types.js';
 import { SandboxEnvironment, createSandbox } from '../../sandbox.js';
 import { Sandbox } from '@e2b/code-interpreter';
 import * as yaml from 'js-yaml';
 import { toolDefinition } from '@tanstack/ai';
 import { z } from 'zod';
 import { retryWithBackoff, unifiedGenerate, safeJsonParse } from '../llm/LLMService.js';
+import { CapabilityProbe } from './CapabilityProbe.js';
+import { ProvisioningService } from './ProvisioningService.js';
 
 // Environment Detection
 const IS_BROWSER = typeof window !== 'undefined' && typeof window.document !== 'undefined';
@@ -49,7 +51,12 @@ export async function runDevShellCommand(config: AppConfig, command: string, san
     return { output: `[SIMULATION] Shell command executed: ${command}\n> (Mock Output)`, exitCode: 0 };
 }
 
-export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha?: string): Promise<SandboxEnvironment> {
+export async function prepareSandbox(
+    config: AppConfig, 
+    repoUrl: string, 
+    headSha?: string,
+    logCallback?: (level: AgentPhase | 'INFO' | 'SUCCESS' | 'ERROR' | 'WARN', content: string) => void
+): Promise<SandboxEnvironment> {
     const sandbox = createSandbox(config);
 
     try {
@@ -114,6 +121,38 @@ export async function prepareSandbox(config: AppConfig, repoUrl: string, headSha
         console.log('[Sandbox] Checking for dependencies...');
         const check = await sandbox.runCommand('ls package.json requirements.txt pnpm-lock.yaml pnpm-workspace.yaml bun.lockb bunfig.toml');
         const output = check.stdout;
+
+        // --- NEW: Infrastructure Awareness (Phase 2 & 3) ---
+        if (logCallback) logCallback(AgentPhase.ENVIRONMENT_SETUP, "Probing sandbox capabilities...");
+        const probe = new CapabilityProbe(sandbox);
+        const provisioning = new ProvisioningService(sandbox);
+
+        const requiredTools = await probe.getRequiredTools();
+        const availableTools = await probe.probe(requiredTools);
+
+        for (const tool of requiredTools) {
+            if (!availableTools.get(tool)) {
+                if (logCallback) logCallback(AgentPhase.PROVISIONING, `Installing missing tool: ${tool}`);
+                const runtime = (tool === 'python' || tool === 'pip' || tool === 'pytest') ? 'python' : 'node';
+                const success = await provisioning.provision(tool, runtime as any);
+                
+                if (success) {
+                    if (logCallback) logCallback('SUCCESS', `Successfully installed ${tool}`);
+                    // Refresh PATH if needed (Phase 3)
+                    const binPath = await provisioning.getGlobalBinPath();
+                    if (binPath) {
+                        if (!sandbox.envOverrides) sandbox.envOverrides = {};
+                        // Ensure we don't duplicate
+                        if (!sandbox.envOverrides['PATH']?.includes(binPath)) {
+                            sandbox.envOverrides['PATH'] = `$PATH:${binPath}`;
+                        }
+                    }
+                } else {
+                    if (logCallback) logCallback('WARN', `Failed to install ${tool}. Agent might encounter infrastructure errors.`);
+                }
+            }
+        }
+        // ----------------------------------------------------
 
         console.log('[Sandbox] Installing LSP Tools (pyright, typescript)...');
         await sandbox.runCommand('npm install -g typescript pyright || pip install pyright');

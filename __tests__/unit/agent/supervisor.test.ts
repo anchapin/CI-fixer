@@ -77,7 +77,7 @@ describe('runSupervisorAgent', () => {
             logCallback
         );
 
-        expect(mockServices.sandbox.prepareSandbox).toHaveBeenCalledWith(mockConfig, 'owner/repo', 'sha123');
+        expect(mockServices.sandbox.prepareSandbox).toHaveBeenCalledWith(mockConfig, 'owner/repo', 'sha123', expect.any(Function));
         expect(analyzeRepository).toHaveBeenCalled();
         expect(runGraphAgent).toHaveBeenCalled();
         expect(mockSandbox.teardown).toHaveBeenCalled();

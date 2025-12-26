@@ -23,6 +23,9 @@ export interface SandboxEnvironment {
 
     // ID for logging
     getId(): string;
+
+    // Environment management
+    envOverrides?: Record<string, string>;
 }
 
 export class DockerSandbox implements SandboxEnvironment {
@@ -30,6 +33,7 @@ export class DockerSandbox implements SandboxEnvironment {
     private readonly imageName: string;
     private readonly workspaceDir = '/workspace';
     private readonly containerName: string;
+    public envOverrides: Record<string, string> = {};
 
     // Node module references
     private execAsync: any;
@@ -90,9 +94,15 @@ export class DockerSandbox implements SandboxEnvironment {
 
         console.log(`[Docker] Executing: ${command}`);
 
+        const envPrefix = Object.entries(this.envOverrides)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(' ');
+        
+        const fullCommand = envPrefix ? `${envPrefix} ${command}` : command;
+
         return new Promise((resolve) => {
             // using spawn to avoid shell quoting hell on Windows host
-            const child = this.spawn('docker', ['exec', this.containerName, '/bin/bash', '-c', command]);
+            const child = this.spawn('docker', ['exec', this.containerName, '/bin/bash', '-c', fullCommand]);
 
             let stdout = '';
             let stderr = '';
@@ -178,6 +188,7 @@ export class E2BSandbox implements SandboxEnvironment {
     private sandbox: Sandbox | undefined;
     private readonly apiKey: string;
     private readonly browserProxy: boolean;
+    public envOverrides: Record<string, string> = {};
 
     constructor(apiKey: string, browserProxy: boolean = false) {
         this.apiKey = apiKey;
@@ -221,7 +232,13 @@ export class E2BSandbox implements SandboxEnvironment {
 
     async runCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
         if (!this.sandbox) throw new Error("Sandbox not initialized");
-        const res = await this.sandbox.runCode(command, { language: 'bash' });
+        
+        const envPrefix = Object.entries(this.envOverrides)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(' ');
+        
+        const fullCommand = envPrefix ? `${envPrefix} ${command}` : command;
+        const res = await this.sandbox.runCode(fullCommand, { language: 'bash' });
 
         const stdout = res.logs.stdout.join('\n');
         const stderr = res.logs.stderr.join('\n');

@@ -18,3 +18,9 @@ This file tracks all major tracks for the project. Each track has its own detail
     - **Status**: COMPLETED
 *Link: [./conductor/archive/adaptive_sandbox_tooling_20251226/](./conductor/archive/adaptive_sandbox_tooling_20251226/)*
 
+---
+
+## [~] Track: Path Hallucination & Logic Loops
+*Link: [./conductor/tracks/path_hallucination_20251226/](./conductor/tracks/path_hallucination_20251226/)*
+
+

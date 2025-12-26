@@ -40,6 +40,21 @@ export class ProvisioningService {
   }
 
   /**
+   * Returns the global binary path for the current runtime.
+   */
+  async getGlobalBinPath(): Promise<string | null> {
+    try {
+      const { stdout, exitCode } = await this.sandbox.runCommand('npm config get prefix');
+      if (exitCode === 0 && stdout.trim()) {
+        return `${stdout.trim()}/bin`;
+      }
+    } catch (e) {
+      // Ignore errors when getting npm prefix
+    }
+    return null;
+  }
+
+  /**
    * Attempts to install a missing tool in the sandbox.
    * @param tool The name of the tool to install (e.g., 'vitest', 'pytest')
    * @param runtime The runtime associated with the tool

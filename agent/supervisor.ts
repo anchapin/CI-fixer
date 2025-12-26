@@ -24,7 +24,9 @@ export async function runSupervisorAgent(
         try {
             logCallback('INFO', 'Initializing Supervisor Environment (Shared Sandbox)...', group.id, group.name);
             const sha = group.mainRun.head_sha || undefined;
-            sandbox = await services.sandbox.prepareSandbox(config, config.repoUrl, sha);
+            sandbox = await services.sandbox.prepareSandbox(config, config.repoUrl, sha, (phase, msg) => {
+                logCallback(phase as any, msg, group.id, group.name);
+            });
             logCallback('SUCCESS', `Sandbox Ready (${sandbox.getId()}).`, group.id, group.name);
         } catch (e: any) {
             logCallback('ERROR', `Sandbox Init Failed: ${e.message}. Falling back to Simulation.`, group.id, group.name);
