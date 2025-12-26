@@ -9,12 +9,12 @@ This plan implements a multi-layered service to infer `reproductionCommand` when
 - [x] Task: Write unit tests for Workflow Analysis strategy (8af714e)
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Service & Workflow Analysis' (Protocol in workflow.md) (556b557)
 
-## Phase 2: Signature & Build Tool Detection
-- [x] Task: Implement File Signature Detection (Node/Bun, Python, Go, Rust) (8867ms)
-- [x] Task: Implement Build Tool Inspection (Makefile, Gradle, Maven, Rake) (8867ms)
-- [x] Task: Add a priority-based dispatcher to execute strategies in order (Workflow > Signature > Build Tool) (8867ms)
-- [x] Task: Write unit tests for Signature and Build Tool detection (8867ms)
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Signature & Build Tool Detection' (Protocol in workflow.md)
+## Phase 2: Signature & Build Tool Detection [checkpoint: b5d6f31]
+- [x] Task: Implement File Signature Detection (Node/Bun, Python, Go, Rust) (e28c297)
+- [x] Task: Implement Build Tool Inspection (Makefile, Gradle, Maven, Rake) (e28c297)
+- [x] Task: Add a priority-based dispatcher to execute strategies in order (Workflow > Signature > Build Tool) (e28c297)
+- [x] Task: Write unit tests for Signature and Build Tool detection (e28c297)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Signature & Build Tool Detection' (Protocol in workflow.md) (b5d6f31)
 
 ## Phase 3: Agent Retry & Safe Scan Fallback
 - [ ] Task: Implement Agent Retry logic to request missing command specifically
