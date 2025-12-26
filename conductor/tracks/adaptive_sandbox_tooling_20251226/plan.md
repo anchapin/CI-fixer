@@ -1,10 +1,10 @@
 # Plan: Adaptive Sandbox Tooling & Infrastructure Detection
 
-## Phase 1: Error Classification & Infrastructure Detection
+## Phase 1: Error Classification & Infrastructure Detection [checkpoint: 23e7c2e]
 - [x] Task: Update `types.ts` to include infrastructure-specific error categories and execution statuses (e.g., `INFRASTRUCTURE_ERROR`). 1965b62
 - [x] Task: Enhance `errorClassification.ts` to distinguish between logic failures (exit code 1) and infrastructure failures (exit code 127/command not found) using regex on stderr. ce4c6c8
 - [x] Task: Write unit tests in `__tests__/unit/errorClassification.test.ts` to verify correct categorization of "command not found" errors. 0435069
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Error Classification' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Error Classification' (Protocol in workflow.md)
 
 ## Phase 2: Capability Probing & Manifest Mapping
 - [ ] Task: Create `services/sandbox/CapabilityProbe.ts` to implement the "Initial Capability Probe" (`tool --version`).
