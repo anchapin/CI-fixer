@@ -44,7 +44,7 @@ export class BunDetector {
                 const fullPath = path.join(dirPath, entry.name);
 
                 if (entry.isDirectory()) {
-                    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'build') {
+                    if (['node_modules', '.git', 'dist', 'build', '__tests__', 'tests', 'coverage'].includes(entry.name)) {
                         continue;
                     }
                     const foundInSubDir = await this.scanForBunImports(fullPath, depth + 1, maxDepth);
@@ -52,7 +52,8 @@ export class BunDetector {
                 } else if (entry.isFile()) {
                     if (/\.(ts|js|tsx|jsx|mjs|cjs)$/.test(entry.name)) {
                         const content = await fs.readFile(fullPath, 'utf-8');
-                        if (content.includes('from "bun:') || content.includes("from 'bun:")) {
+                        // Split strings to avoid self-detection
+                        if (content.includes('from "bu' + 'n:') || content.includes("from 'bu" + "n:")) {
                             return true;
                         }
                     }
