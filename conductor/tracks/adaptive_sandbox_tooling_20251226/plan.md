@@ -7,7 +7,7 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Error Classification' (Protocol in workflow.md)
 
 ## Phase 2: Capability Probing & Manifest Mapping
-- [ ] Task: Create `services/sandbox/CapabilityProbe.ts` to implement the "Initial Capability Probe" (`tool --version`).
+- [x] Task: Create `services/sandbox/CapabilityProbe.ts` to implement the "Initial Capability Probe" (`tool --version`). 8b0229e
 - [ ] Task: Implement mapping logic to cross-reference `package.json` and `requirements.txt` with required binaries (e.g., `vitest`, `pytest`).
 - [ ] Task: Write tests to ensure the probe correctly identifies missing binaries based on project files.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Capability Probing' (Protocol in workflow.md)
