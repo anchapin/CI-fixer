@@ -57,6 +57,7 @@ vi.mock('../../../errorClassification.js', () => ({
 vi.mock('../../../services/metrics.js', () => ({
     recordFixAttempt: vi.fn(),
     recordAgentMetrics: vi.fn(),
+    recordReproductionInference: vi.fn(),
 }));
 
 vi.mock('../../../services/knowledge-base.js', () => ({
@@ -338,21 +339,39 @@ describe('runWorkerTask', () => {
             filePath: '',
         });
 
-        // Command fails
+        // Command sequence:
+        // 1. inferCommand -> validateCommand -> runCommand (Success)
+        // 2. reproduce -> runCommand (Failure/Reproduced)
+        // 3. implement -> runCommand (Failure -> Secondary Issue)
+        // 4. (Next iteration) implement -> runCommand (Success)
         (mockSandbox.runCommand as Mock)
-            .mockResolvedValueOnce({ stdout: '', stderr: 'Error: Connection refused', exitCode: 1 })
-            .mockResolvedValueOnce({ stdout: 'Done', stderr: '', exitCode: 0 });
+            .mockResolvedValueOnce({ stdout: 'Validated', stderr: '', exitCode: 0 }) // 1. Inference
+            .mockResolvedValueOnce({ stdout: 'Repro failure', stderr: '', exitCode: 1 }) // 2. Repro
+            .mockResolvedValueOnce({ stdout: '', stderr: 'Error: Connection refused', exitCode: 1 }) // 3. Implementation failure
+            .mockResolvedValueOnce({ stdout: 'Done', stderr: '', exitCode: 0 }); // 4. Final success
 
         // Secondary classification mocking
         const { classifyErrorWithHistory } = await import('../../../errorClassification.js');
         (classifyErrorWithHistory as Mock)
-            .mockResolvedValueOnce({ // Initial classification
+            .mockResolvedValue({ // Default
                 category: 'logic',
                 errorMessage: 'Run setup',
                 confidence: 0.9,
                 affectedFiles: [],
             })
-            .mockResolvedValueOnce({ // Secondary classification (inside command failure)
+            .mockResolvedValueOnce({ // Iteration 0 Start
+                category: 'logic',
+                errorMessage: 'Run setup',
+                confidence: 0.9,
+                affectedFiles: [],
+            })
+            .mockResolvedValueOnce({ // Inside command failure (Secondary Discovery)
+                category: 'network',
+                errorMessage: 'Connection refused',
+                confidence: 0.9,
+                affectedFiles: [],
+            })
+            .mockResolvedValueOnce({ // Iteration 1 Start
                 category: 'network',
                 errorMessage: 'Connection refused',
                 confidence: 0.9,

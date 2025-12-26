@@ -18,9 +18,5 @@ This file tracks all major tracks for the project. Each track has its own detail
     - **Status**: COMPLETED
 *Link: [./conductor/archive/adaptive_sandbox_tooling_20251226/](./conductor/archive/adaptive_sandbox_tooling_20251226/)*
 
----
-
-## [~] Track: Robust Reproduction Command Inference
-*Link: [./conductor/tracks/reproduction_inference_20251226/](./conductor/tracks/reproduction_inference_20251226/)*
 
 

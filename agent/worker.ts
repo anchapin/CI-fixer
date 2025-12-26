@@ -162,7 +162,7 @@ export async function runWorkerTask(
             // --- NEW: Reproduction Command Inference (Phase 3) ---
             if (!diagnosis.reproductionCommand && sandbox) {
                 log('INFO', '[Inference] Reproduction command missing. Attempting inference...');
-                const repoPath = sandbox.getLocalPath();
+                const repoPath = typeof sandbox.getLocalPath === 'function' ? sandbox.getLocalPath() : '.';
                 const inferred = await inferenceService.inferCommand(repoPath, config, sandbox);
                 
                 if (inferred) {

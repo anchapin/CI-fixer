@@ -205,18 +205,22 @@ export const analysisNode: NodeHandler = async (state, context) => {
         log('INFO', `Diagnosis: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
 
         // --- NEW: Reproduction Command Inference (Phase 3) ---
-        if (!diagnosis.reproductionCommand && sandbox) {
+        if (!diagnosis.reproductionCommand && sandbox && services.reproductionInference) {
             log('INFO', '[Inference] Reproduction command missing. Attempting inference...');
-            const repoPath = sandbox.getLocalPath();
+            const repoPath = typeof sandbox.getLocalPath === 'function' ? sandbox.getLocalPath() : '.';
             const inferred = await services.reproductionInference.inferCommand(repoPath, config, sandbox);
             
             if (inferred) {
                 log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);
                 diagnosis.reproductionCommand = inferred.command;
-                services.metrics.recordReproductionInference(inferred.strategy, true);
+                if (services.metrics) {
+                    services.metrics.recordReproductionInference(inferred.strategy, true);
+                }
             } else {
                 log('WARN', '[Inference] Could not infer reproduction command.');
-                services.metrics.recordReproductionInference('none', false);
+                if (services.metrics) {
+                    services.metrics.recordReproductionInference('none', false);
+                }
             }
         }
         // ----------------------------------------------------

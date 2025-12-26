@@ -55,13 +55,13 @@ describe('Path Verification Integration in agent_tools', () => {
 
         it('should fail if multiple matches found', async () => {
             const content = await readFile('wrong/path/duplicate.txt');
-            expect(content).toContain('Error reading file');
+            expect(content).toContain('Error: Path NOT FOUND');
             expect(content).toContain('multiple candidates were found');
         });
 
         it('should fail if no matches found', async () => {
             const content = await readFile('wrong/path/nonexistent.txt');
-            expect(content).toContain('Error reading file');
+            expect(content).toContain('Error: Path NOT FOUND');
         });
     });
 

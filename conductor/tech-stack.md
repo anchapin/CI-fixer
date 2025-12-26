@@ -24,6 +24,7 @@
 - **Unit & Integration Testing:** Vitest
 - **End-to-End Testing:** Playwright
 - **Fuzzy Search:** Fuse.js
+- **Workflow Parsing:** js-yaml
 - **Linting & Formatting:** ESLint, Prettier
 - **Spell Checking:** CSpell (for generated patches)
 - **Dockerfile Linting:** Hadolint

@@ -20,6 +20,7 @@ CI-Fixer aims to be the definitive tool for autonomous DevOps, transforming how 
 - **Adaptive Runtime Management:** Context-sensitive environment detection (Bun vs. Node) with automatic provisioning and runtime-aware test execution.
 - **Automated Root Cause Analysis:** Employs intelligent log parsing, robust file discovery (including fuzzy search and git history tracking), and AST-based code analysis to pinpoint the exact source of failures.
 - **Prioritized Error Diagnosis:** Uses a hierarchical error classification system to identify and resolve blocking infrastructure/dependency issues before addressing downstream test failures.
+- **Robust Reproduction Inference:** Automatically infers missing reproduction commands through multi-layered analysis of GitHub workflows, project signatures (e.g., package.json, requirements.txt), build tools (e.g., Makefile), and LLM-based repository analysis. Includes a **Safe Scan** fallback for deep-search of test-like files and performs **sandbox-based dry-run validation** to ensure command viability before verification.
 - **Self-Healing:** Autonomously generates, applies, and verifies code fixes, closing the loop on CI failures.
 - **Intelligent Test Isolation**: Dynamically maps code changes to relevant test suites and autonomously generates targeted unit tests when coverage is missing, preventing false negatives from unrelated failures.
 - **Loop Detection & Mitigation**: Identifies when the agent is repeating failed strategies and forces a strategy shift to prevent infinite loops.
