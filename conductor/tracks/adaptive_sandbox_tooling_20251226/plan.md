@@ -9,7 +9,7 @@
 ## Phase 2: Capability Probing & Manifest Mapping
 - [x] Task: Create `services/sandbox/CapabilityProbe.ts` to implement the "Initial Capability Probe" (`tool --version`). 8b0229e
 - [x] Task: Implement mapping logic to cross-reference `package.json` and `requirements.txt` with required binaries (e.g., `vitest`, `pytest`). bece730
-- [ ] Task: Write tests to ensure the probe correctly identifies missing binaries based on project files.
+- [x] Task: Write tests to ensure the probe correctly identifies missing binaries based on project files. bece730
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Capability Probing' (Protocol in workflow.md)
 
 ## Phase 3: Autonomous Provisioning & Path Management
