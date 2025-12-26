@@ -3,10 +3,10 @@
 This plan implements a multi-layered service to infer `reproductionCommand` when it's missing from agent output, ensuring verification can always proceed.
 
 ## Phase 1: Core Service & Workflow Analysis
-- [x] Task: Create `ReproductionInferenceService` skeleton and types in `services/reproduction-inference.ts`
-- [x] Task: Implement Workflow Parser to extract run commands from `.github/workflows/*.yml`
-- [x] Task: Add logic to filter out non-test steps (e.g., checkout, setup-node) from workflow commands
-- [x] Task: Write unit tests for Workflow Analysis strategy
+- [x] Task: Create `ReproductionInferenceService` skeleton and types in `services/reproduction-inference.ts` (8af714e)
+- [x] Task: Implement Workflow Parser to extract run commands from `.github/workflows/*.yml` (8af714e)
+- [x] Task: Add logic to filter out non-test steps (e.g., checkout, setup-node) from workflow commands (8af714e)
+- [x] Task: Write unit tests for Workflow Analysis strategy (8af714e)
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Service & Workflow Analysis' (Protocol in workflow.md)
 
 ## Phase 2: Signature & Build Tool Detection
