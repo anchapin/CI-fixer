@@ -9,6 +9,8 @@ export type ToolRuntime = 'node' | 'python' | 'unknown';
 export class ProvisioningService {
   private sandbox: SandboxEnvironment;
   private cachedPathCommand: string | null = null;
+  private attemptRegistry = new Map<string, number>();
+  private readonly MAX_ATTEMPTS = 3;
 
   constructor(sandbox: SandboxEnvironment) {
     this.sandbox = sandbox;
@@ -44,6 +46,13 @@ export class ProvisioningService {
    * @returns true if installation succeeded
    */
   async provision(tool: string, runtime: ToolRuntime): Promise<boolean> {
+    const attempts = this.attemptRegistry.get(tool) || 0;
+    if (attempts >= this.MAX_ATTEMPTS) {
+      return false;
+    }
+
+    this.attemptRegistry.set(tool, attempts + 1);
+
     let command = '';
 
     if (runtime === 'node') {
