@@ -1,48 +1,57 @@
 import { describe, it, expect } from 'vitest';
 import { extractPaths } from '../../utils/pathDetection';
 
-describe('extractPaths', () => {
-    it('should extract simple relative paths', () => {
-        const cmd = 'rm src/index.ts';
-        expect(extractPaths(cmd)).toContain('src/index.ts');
-    });
+describe('pathDetection - extractPaths', () => {
+  it('should extract paths with separators', () => {
+    const command = 'cat src/utils/helper.ts';
+    expect(extractPaths(command)).toContain('src/utils/helper.ts');
+  });
 
-    it('should extract multiple paths', () => {
-        const cmd = 'cp src/main.ts dist/main.js';
-        const paths = extractPaths(cmd);
-        expect(paths).toContain('src/main.ts');
-        expect(paths).toContain('dist/main.js');
-    });
+  it('should extract paths with common extensions', () => {
+    const command = 'touch README.md index.tsx';
+    const paths = extractPaths(command);
+    expect(paths).toContain('README.md');
+    expect(paths).toContain('index.tsx');
+  });
 
-    it('should extract paths with dots and dashes', () => {
-        const cmd = 'cat ./my-file.test.js';
-        expect(extractPaths(cmd)).toContain('./my-file.test.js');
-    });
+  it('should handle quoted paths with spaces', () => {
+    const command = 'ls "my documents/file with spaces.txt"';
+    expect(extractPaths(command)).toContain('my documents/file with spaces.txt');
+  });
 
-    it('should extract paths with nested directories', () => {
-        const cmd = 'ls -la /var/log/syslog';
-        expect(extractPaths(cmd)).toContain('/var/log/syslog');
-    });
+  it('should handle single quoted paths', () => {
+    const command = "rm 'temp files/old.log'";
+    expect(extractPaths(command)).toContain('temp files/old.log');
+  });
 
-    it('should handle Windows style paths', () => {
-        const cmd = 'type .\\src\\app.tsx';
-        expect(extractPaths(cmd)).toContain('.\\src\\app.tsx');
-    });
+  it('should handle Windows style paths', () => {
+    const command = 'type .\\src\\app.tsx';
+    expect(extractPaths(command)).toContain('.\\src\\app.tsx');
+  });
 
-    it('should ignore common command flags', () => {
-        const cmd = 'rm -rf /tmp/data';
-        const paths = extractPaths(cmd);
-        expect(paths).toContain('/tmp/data');
-        expect(paths).not.toContain('-rf');
-    });
+  it('should ignore shell flags', () => {
+    const command = 'ls -la src/index.ts';
+    const paths = extractPaths(command);
+    expect(paths).toContain('src/index.ts');
+    expect(paths).not.toContain('-la');
+  });
 
-    it('should ignore single words without extensions or slashes', () => {
-        const cmd = 'git status';
-        expect(extractPaths(cmd)).toEqual([]);
-    });
+  it('should extract paths starting with ./ or ../', () => {
+    const command = 'cat ./local.txt ../parent.txt';
+    const paths = extractPaths(command);
+    expect(paths).toContain('./local.txt');
+    expect(paths).toContain('../parent.txt');
+  });
 
-    it('should extract paths in quotes', () => {
-        const cmd = 'rm "src/space file.ts"';
-        expect(extractPaths(cmd)).toContain('src/space file.ts');
-    });
+  it('should ignore non-path tokens without extensions or separators', () => {
+    const command = 'echo hello world';
+    expect(extractPaths(command)).toEqual([]);
+  });
+
+  it('should handle multiple paths in one command', () => {
+    const command = 'cp src/main.ts dist/main.js';
+    const paths = extractPaths(command);
+    expect(paths).toContain('src/main.ts');
+    expect(paths).toContain('dist/main.js');
+  });
 });
