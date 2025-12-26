@@ -12,8 +12,42 @@ export class ProvisioningService {
   private attemptRegistry = new Map<string, number>();
   private readonly MAX_ATTEMPTS = 3;
 
+  private static readonly RUNNER_MAPPING: Record<string, ToolRuntime> = {
+    'pytest': 'python',
+    'unittest': 'python',
+    'tox': 'python',
+    'vitest': 'node',
+    'jest': 'node',
+    'mocha': 'node',
+  };
+
   constructor(sandbox: SandboxEnvironment) {
     this.sandbox = sandbox;
+  }
+
+  /**
+   * Ensures a test runner is available in the sandbox.
+   * If not found, attempts to install it automatically.
+   */
+  async ensureRunner(runner: string): Promise<boolean> {
+    // Check if runner exists
+    try {
+      const { exitCode } = await this.sandbox.runCommand(`which ${runner}`);
+      if (exitCode === 0) {
+        return true;
+      }
+    } catch (e) {
+      // Ignore error, proceed to installation
+    }
+
+    // Try to install
+    const runtime = ProvisioningService.RUNNER_MAPPING[runner] || 'unknown';
+    if (runtime === 'unknown') {
+      return false;
+    }
+
+    console.log(`[Provisioning] Test runner '${runner}' missing. Attempting installation...`);
+    return this.provision(runner, runtime);
   }
 
   /**

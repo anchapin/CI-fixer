@@ -1,6 +1,7 @@
 import { NodeHandler } from '../state.js';
 import { withNodeTracing } from './tracing-wrapper.js';
 import { DockerfileValidator } from '../../../services/analysis/DockerfileValidator.js';
+import { ProvisioningService } from '../../../services/sandbox/ProvisioningService.js';
 
 const verificationNodeHandler: NodeHandler = async (state, context) => {
     const { config, group, iteration, diagnosis, files } = state;
@@ -44,6 +45,16 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
     // 2. Local Verification (Reproduction Command)
     if (diagnosis?.reproductionCommand && sandbox) {
         log('INFO', `Running reproduction command: ${diagnosis.reproductionCommand}`);
+
+        // Ensure test runner is present
+        const provisioning = new ProvisioningService(sandbox);
+        const runnerMatch = diagnosis.reproductionCommand.match(/^(pytest|vitest|jest|mocha|tox|unittest)\b/);
+        if (runnerMatch) {
+            const runner = runnerMatch[1];
+            log('VERBOSE', `[Provisioning] Ensuring runner '${runner}' is available...`);
+            await provisioning.ensureRunner(runner);
+        }
+
         const res = await sandbox.runCommand(diagnosis.reproductionCommand);
         if (res.exitCode !== 0) {
             log('WARN', `Reproduction command failed: ${res.stdout}\n${res.stderr}`);

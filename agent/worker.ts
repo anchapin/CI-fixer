@@ -35,6 +35,7 @@ import { recordDecision, recordAttempt as recordNoteAttempt, formatNotesForPromp
 import { clusterError } from '../services/error-clustering.js';
 
 import { ServiceContainer } from '../services/container.js';
+import { ProvisioningService } from '../services/sandbox/ProvisioningService.js';
 
 export async function runWorkerTask(
     config: AppConfig,
@@ -333,6 +334,15 @@ export async function runWorkerTask(
                 currentState.phase = AgentPhase.REPRODUCE;
                 updateStateCallback(group.id, { ...currentState });
                 log('INFO', `Attempting to reproduce failure...`);
+
+                // Ensure test runner is present
+                const provisioning = new ProvisioningService(sandbox);
+                const runnerMatch = diagnosis.reproductionCommand.match(/^(pytest|vitest|jest|mocha|tox|unittest)\b/);
+                if (runnerMatch) {
+                    const runner = runnerMatch[1];
+                    log('VERBOSE', `[Provisioning] Ensuring runner '${runner}' is available...`);
+                    await provisioning.ensureRunner(runner);
+                }
 
                 const res = await sandbox.runCommand(diagnosis.reproductionCommand);
                 const repro = {
