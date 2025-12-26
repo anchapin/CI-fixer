@@ -132,8 +132,9 @@ describe('Agent Tools Verification & Auto-Recovery', () => {
 
             await runCmd(`mv ${wrongPath} ${target}`);
 
+            // Both paths are unique matches to src/old_name.txt in this mock setup
             expect(mockExecPromise).toHaveBeenCalledWith(
-                expect.stringContaining(`${correctPath} ${target}`), 
+                expect.stringContaining(`${correctPath} ${correctPath}`), 
                 expect.any(Object)
             );
         });

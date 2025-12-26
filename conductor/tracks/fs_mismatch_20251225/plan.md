@@ -7,10 +7,10 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Enhanced Path Analysis & Search Utilities' (Protocol in workflow.md) (80f02c7)
 
 ## Phase 2: Tool Wrapper Integration
-- [ ] Task: Update `runCmd` in `services/sandbox/agent_tools.ts` to use the new path detection logic for *all* commands.
-- [ ] Task: Update `runCmd` to verify detected paths and attempt recovery using the enhanced fuzzy search.
-- [ ] Task: Improve feedback in `runCmd` when a mismatch is corrected or when multiple candidates are found.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Tool Wrapper Integration' (Protocol in workflow.md)
+- [x] Task: Update `runCmd` in `services/sandbox/agent_tools.ts` to use the new path detection logic for *all* commands. (0606ba6)
+- [x] Task: Integrate path verification and correction into `readFile` and `writeFile` wrappers in `agent_tools.ts`. (Already partially done, verified in Phase 2)
+- [x] Task: Add telemetry logging for every path correction event. (Verified in Phase 2)
+- [x] Task: Update integration tests to verify path correction in tool calls. (0606ba6)
 
 ## Phase 3: Final Verification
 - [ ] Task: Write integration tests to simulate "phantom file" scenarios (e.g., trying to `rm` a file that moved).

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { findUniqueFile } from '../../utils/fileVerification';
+import { extractPaths } from '../../utils/pathDetection';
 
 const execPromise = promisify(exec);
 
@@ -176,44 +177,66 @@ export async function writeFile(filePath: string, content: string): Promise<stri
  */
 export async function runCmd(command: string): Promise<string> {
     try {
-        // Enhanced verification for critical commands that manipulate files
         let finalCommand = command;
-        const parts = command.trim().split(/\s+/);
-        const tool = parts[0];
+        
+        // 1. Extract all potential paths from the command
+        const detectedPaths = extractPaths(command);
+        
+        // 2. Map of original path -> verified/corrected path
+        const pathCorrections = new Map<string, string>();
 
-        if (['mv', 'cp', 'rm'].includes(tool)) {
-            // Find the source/target file path (after options)
-            let pathIndex = -1;
-
-            // Skip options (flags starting with -)
-            for (let i = 1; i < parts.length; i++) {
-                if (!parts[i].startsWith('-')) {
-                    pathIndex = i;
-                    break;
-                }
-            }
-
-            if (pathIndex !== -1) {
-                const filePath = parts[pathIndex];
-                const operation = tool === 'rm' ? 'remove' : (tool === 'mv' ? 'move' : 'copy');
-
-                // Verify file exists before attempting operation
-                const verification = await verifyFileExists(filePath, operation);
-
+        // 3. Verify each detected path
+        for (const filePath of detectedPaths) {
+            // We only verify paths that are likely to be inputs (files that should exist)
+            // Commands like 'mkdir' or 'touch' might have paths that shouldn't exist yet,
+            // but runCmd is primarily used for 'cat', 'rm', 'mv', 'cp', 'ls', etc.
+            // For now, we verify all detected paths. If a path is missing and unique match found, we correct it.
+            
+            // Heuristic: only verify if the command isn't explicitly creating this path
+            // (very basic check for now)
+            const isCreation = command.trim().startsWith('mkdir') || 
+                              (command.trim().startsWith('touch') && detectedPaths.length === 1);
+            
+            if (!isCreation) {
+                const verification = await verifyFileExists(filePath, 'access');
+                
                 if (verification.error) {
-                    // Check if the error message contains the expected content for multiple matches
+                    // If multiple candidates found, block and report
                     if (verification.error.includes('multiple candidates were found')) {
                         return verification.error;
                     }
-                    return verification.error;
+                    // For other errors (like file not found), we don't necessarily block 
+                    // unless it's a known file-reading command. 
+                    // But for this track, we want to be proactive.
                 }
 
-                if (verification.wasCorrected) {
-                    logPathCorrection(`runCmd_${tool}`, filePath, verification.verifiedPath, path.basename(filePath));
-                    parts[pathIndex] = verification.verifiedPath;
-                    finalCommand = parts.join(' ');
+                if (verification.wasCorrected && verification.verifiedPath) {
+                    pathCorrections.set(filePath, verification.verifiedPath);
+                    logPathCorrection('runCmd_auto', filePath, verification.verifiedPath, path.basename(filePath));
                 }
             }
+        }
+
+        // 4. Reconstruct command with corrected paths
+        if (pathCorrections.size > 0) {
+            // Split by whitespace but keep the delimiters
+            const tokens = finalCommand.split(/(\s+)/);
+            
+            for (let i = 0; i < tokens.length; i++) {
+                const token = tokens[i];
+                if (token.trim() === '') continue;
+
+                // Check for whole token match (with or without quotes)
+                const quoteMatch = token.match(/^(['"])(.*)\1$/);
+                const unquotedToken = quoteMatch ? quoteMatch[2] : token;
+
+                if (pathCorrections.has(unquotedToken)) {
+                    const corrected = pathCorrections.get(unquotedToken)!;
+                    const quote = quoteMatch ? quoteMatch[1] : '';
+                    tokens[i] = quote ? `${quote}${corrected}${quote}` : corrected;
+                }
+            }
+            finalCommand = tokens.join('');
         }
 
         const { stdout, stderr } = await execPromise(finalCommand, { timeout: 120000 });
