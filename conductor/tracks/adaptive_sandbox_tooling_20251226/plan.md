@@ -16,7 +16,7 @@
 - [x] Task: Implement `services/sandbox/ProvisioningService.ts` with logic to install missing tools (e.g., `npm install -g`, `pip install`). e49781d
 - [x] Task: Implement dynamic PATH refreshing to ensure newly installed tools are visible to the current execution context. 6814ffe
 - [x] Task: Add "Installation Loop Prevention" logic to cap retry attempts for tool provisioning. 8df7357
-- [ ] Task: Write tests for the provisioning flow, mocking package manager success/failure.
+- [x] Task: Write tests for the provisioning flow, mocking package manager success/failure. e49781d
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Autonomous Provisioning' (Protocol in workflow.md)
 
 ## Phase 4: Integration & Agent Workflow Update
