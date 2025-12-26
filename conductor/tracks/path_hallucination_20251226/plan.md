@@ -27,9 +27,9 @@ Implement the logic to force the agent out of the loop.
 - [x] Task: Write tests simulating 2+ failures and verifying the prompt injection. c432764
 - [x] Task: Conductor - User Manual Verification 'Mitigation & Strategy Shift' (Protocol in workflow.md) c432764
 
-## Phase 4: Integration & Verification
+## Phase 4: Integration & Verification [checkpoint: 4ce8b28]
 Ensure CrimsonArchitect and CyberSentinel use the new protections.
 
-- [ ] Task: Verify end-to-end flow with a simulated hallucination scenario (e.g., the `test_cache_simple.py` case).
-- [ ] Task: Ensure coverage for the new modules meets the >80% requirement.
-- [ ] Task: Conductor - User Manual Verification 'Integration & Verification' (Protocol in workflow.md)
+- [x] Task: Verify end-to-end flow with a simulated hallucination scenario (e.g., the `test_cache_simple.py` case). 4ce8b28
+- [x] Task: Ensure coverage for the new modules meets the >80% requirement. 4ce8b28
+- [x] Task: Conductor - User Manual Verification 'Integration & Verification' (Protocol in workflow.md) 4ce8b28
