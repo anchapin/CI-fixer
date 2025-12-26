@@ -43,7 +43,7 @@ export class DockerSandbox implements SandboxEnvironment {
     private path: any;
     private os: any;
 
-    constructor(imageName: string = 'nikolaik/python-nodejs:python3.11-nodejs20-bullseye') {
+    constructor(imageName: string = 'ci-fixer-sandbox') {
         this.imageName = imageName;
         this.containerName = `agent-${Math.random().toString(36).substr(2, 9)}`;
     }
