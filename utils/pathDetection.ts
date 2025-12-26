@@ -1,7 +1,30 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 /**
  * Utility to extract potential file paths from a shell command string.
  * Uses regex-based heuristics to identify strings that look like paths.
  */
+
+/**
+ * Finds the closest existing parent directory for a given path.
+ * Useful for diagnosing path hallucinations.
+ * 
+ * @param targetPath The path to validate
+ * @returns The absolute path of the closest existing parent
+ */
+export function findClosestExistingParent(targetPath: string): string {
+    let currentPath = path.resolve(targetPath);
+    
+    while (currentPath !== path.parse(currentPath).root) {
+        if (fs.existsSync(currentPath)) {
+            return currentPath;
+        }
+        currentPath = path.dirname(currentPath);
+    }
+    
+    return path.parse(currentPath).root;
+}
 
 /**
  * Extracts potential file paths from a command string.
