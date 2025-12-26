@@ -49,6 +49,11 @@ export const llmLatency = meter.createHistogram('llm_latency_ms', {
     unit: 'ms'
 });
 
+export const loopDetected = meter.createCounter('loop_detected_total', {
+    description: 'Total number of detected agent loops',
+    unit: '1'
+});
+
 /**
  * Record a fix attempt with its outcome
  */
@@ -70,6 +75,19 @@ export function recordFixAttempt(
 
     fixDuration.record(duration, attributes);
     iterationsPerFix.record(iterations, attributes);
+}
+
+/**
+ * Record a detected loop
+ */
+export function recordLoopDetected(
+    duplicateOfIteration: number,
+    hash: string
+) {
+    loopDetected.add(1, { 
+        duplicate_of: duplicateOfIteration.toString(),
+        hash_prefix: hash.substring(0, 8)
+    });
 }
 
 /**

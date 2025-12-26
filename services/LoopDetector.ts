@@ -1,4 +1,5 @@
 import { LoopStateSnapshot, LoopDetectionResult } from '../types';
+import { recordLoopDetected } from '../telemetry/metrics';
 
 export class LoopDetector {
   private history: LoopStateSnapshot[] = [];
@@ -20,6 +21,11 @@ export class LoopDetector {
     
     if (this.stateMap.has(hash)) {
       const previousIteration = this.stateMap.get(hash);
+      
+      if (previousIteration !== undefined) {
+        recordLoopDetected(previousIteration, hash);
+      }
+
       return {
         detected: true,
         duplicateOfIteration: previousIteration,
