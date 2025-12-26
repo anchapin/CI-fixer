@@ -19,8 +19,10 @@
 - [x] Task: Write tests for the provisioning flow, mocking package manager success/failure. e49781d
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Autonomous Provisioning' (Protocol in workflow.md)
 
-## Phase 4: Integration & Agent Workflow Update
-- [ ] Task: Integrate `CapabilityProbe` and `ProvisioningService` into the main sandbox execution loop in `services/sandbox/`.
-- [ ] Task: Update the agent's feedback loop (likely in `agent/worker.ts` or `services/repair-agent/`) to report "Environment Setup" status instead of "Fix Failed" when provisioning.
-- [ ] Task: Perform end-to-end verification using a mock CI failure that requires a missing tool.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration' (Protocol in workflow.md)
+## Phase 4: Integration & Agent Workflow Update [checkpoint: 64d9735]
+- [x] Task: Integrate `CapabilityProbe` and `ProvisioningService` into the main sandbox execution loop in `services/sandbox/`. bece730
+- [x] Task: Update the agent's feedback loop (likely in `agent/worker.ts` or `services/repair-agent/`) to report "Environment Setup" status instead of "Fix Failed" when provisioning. bece730
+- [x] Task: Perform end-to-end verification using a mock CI failure that requires a missing tool. bece730
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Integration' (Protocol in workflow.md)
+
+**Track Completed Successfully.**
