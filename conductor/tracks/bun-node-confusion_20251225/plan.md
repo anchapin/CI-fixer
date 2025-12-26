@@ -13,10 +13,10 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Sandbox & Container Provisioning' (Protocol in workflow.md)
 
 ## Phase 3: Adaptive Execution Strategy
-- [ ] Task: Implement the "Context-Sensitive" switching logic in the command execution service.
-- [ ] Task: Update the test execution service to switch from `vitest` to `bun test` upon detecting Bun-specific failure signatures.
-- [ ] Task: Update dependency installation logic to prefer `bun install` when in a Bun context.
-- [ ] Task: Integration tests simulating a "hybrid" project failure and successful Bun recovery.
+- [x] Task: Implement the "Context-Sensitive" switching logic in the command execution service. [7faec97]
+- [x] Task: Update the test execution service to switch from `vitest` to `bun test` upon detecting Bun-specific failure signatures. [7faec97]
+- [x] Task: Update dependency installation logic to prefer `bun install` when in a Bun context. [7faec97]
+- [x] Task: Integration tests simulating a "hybrid" project failure and successful Bun recovery. [7faec97]
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Adaptive Execution Strategy' (Protocol in workflow.md)
 
 ## Phase 4: Final Verification
