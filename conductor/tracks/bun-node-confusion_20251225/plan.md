@@ -1,10 +1,10 @@
 # Plan: Environment Context Confusion (Bun vs. Node)
 
-## Phase 1: Environment Detection & Diagnostics
+## Phase 1: Environment Detection & Diagnostics [checkpoint: 829f07f]
 - [x] Task: Implement `BunDetector` utility to check for `bun.lockb`, `bunfig.toml`, and `bun:` imports. [6f5d1cd]
 - [x] Task: Create a diagnostic helper to identify "Bun-specific" error patterns in command output (e.g., `Cannot bundle built-in module "bun:test"`). [079159a]
 - [x] Task: Unit tests for `BunDetector` and error pattern matching. [079159a]
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Environment Detection & Diagnostics' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Environment Detection & Diagnostics' (Protocol in workflow.md)
 
 ## Phase 2: Sandbox & Container Provisioning
 - [ ] Task: Update Dockerfile/Container provisioning scripts to include Bun installation.
