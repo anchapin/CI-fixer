@@ -1,4 +1,3 @@
-
 import { AppConfig, CodeFile, AgentPhase } from '../../types.js';
 import { SandboxEnvironment, createSandbox } from '../../sandbox.js';
 import { Sandbox } from '@e2b/code-interpreter';
@@ -8,6 +7,7 @@ import { z } from 'zod';
 import { retryWithBackoff, unifiedGenerate, safeJsonParse } from '../llm/LLMService.js';
 import { CapabilityProbe } from './CapabilityProbe.js';
 import { ProvisioningService } from './ProvisioningService.js';
+import { LoopDetector } from '../LoopDetector.js';
 
 // Environment Detection
 const IS_BROWSER = typeof window !== 'undefined' && typeof window.document !== 'undefined';
@@ -260,7 +260,6 @@ export async function toolCodeSearch(config: AppConfig, query: string, sandbox?:
         }
     }
     return [];
-    return [];
 }
 
 export async function toolSemanticCodeSearch(config: AppConfig, query: string, sandbox: SandboxEnvironment): Promise<string[]> {
@@ -331,17 +330,10 @@ export async function toolSemanticCodeSearch(config: AppConfig, query: string, s
     return candidates;
 }
 
-export async function toolRunCodeMode(config: AppConfig, script: string, sandbox?: SandboxEnvironment): Promise<string> {
+export async function toolRunCodeMode(config: AppConfig, script: string, sandbox?: SandboxEnvironment, loopDetector?: LoopDetector): Promise<string> {
     if (!sandbox) return "Error: Sandbox not available for Code Mode.";
 
     // We wrap the user's script to import the tools
-    // Assuming we use ts-node or similar. We need to install ts-node in the sandbox if not present?
-    // We already installed 'typescript' globally. 'ts-node' might not be there.
-    // simpler: compile with tsc and run node? or use ts-node from npx.
-    // 'agent_tools.ts' is in root.
-
-    // We'll create 'current_task.ts'. 
-    // We need to import * as agent_tools from './agent_tools'.
     const fullScript = `
 import * as agent_tools from './agent_tools';
 
@@ -364,27 +356,29 @@ main();
     const scriptPath = "current_task.ts";
     await sandbox.writeFile(scriptPath, fullScript);
 
-    // Run it. We rely on npx ts-node.
-    // NOTE: This might be slow on first run if it downloads ts-node.
-    // Alternatively: tsc current_task.ts agent_tools.ts --target esnext --module commonjs && node current_task.js
-    // Let's try direct tsc compilation as it is more robust without internet (if cached) or cleaner.
-    // But sandbox has internet.
-    // Let's stick to ts-node if possible, or tsc.
-    // "npx ts-node" is elegant but slow.
-    // Let's do: tsc first.
-
-    // But agent_tools is a module.
-    // Let's use 'tsx' if available? No.
-    // Let's use npx ts-node with --skip-project to avoid reading tsconfig that might interfere
-    // Or just "npx ts-node -T current_task.ts" (transpile only)
-
-    // Actually, we can just run: "npx tsx current_task.ts" is often faster/better modern replacement?
-    // Let's stick to installing ts-node in prepareSandbox? Or just 'npx -y ts-node'.
-
     const cmd = `npx -y ts-node -T -O '{"module":"commonjs"}' ${scriptPath}`;
     const result = await sandbox.runCommand(cmd);
 
     const output = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
+    
+    // MIDDLEWARE: Intercept Path Hallucinations
+    if (loopDetector && output.includes('[PATH_NOT_FOUND]')) {
+        const lines = output.split('\n');
+        for (const line of lines) {
+            if (line.includes('[PATH_NOT_FOUND]')) {
+                try {
+                    const jsonStr = line.split('[PATH_NOT_FOUND]')[1].trim();
+                    const data = JSON.parse(jsonStr);
+                    if (data.path) {
+                        loopDetector.recordHallucination(data.path);
+                    }
+                } catch (e) {
+                    console.warn("Failed to parse path hallucination log", e);
+                }
+            }
+        }
+    }
+
     return output.trim() || "[No Output]";
 }
 
@@ -434,8 +428,6 @@ export async function toolLintCheck(config: AppConfig, code: string, language: s
         model: MODEL_FAST
     });
     return safeJsonParse(res.text, { valid: true });
-
-
 }
 
 export async function toolLSPDefinition(config: AppConfig, file: string, line: number, sandbox?: SandboxEnvironment): Promise<string> {
@@ -575,29 +567,8 @@ export async function testE2BConnection(apiKey: string): Promise<{ success: bool
     }
 }
 
-export function createTools(config: AppConfig, sandbox?: SandboxEnvironment) {
+export function createTools(config: AppConfig, sandbox?: SandboxEnvironment, loopDetector?: LoopDetector) {
     return {
-        /*
-        check: toolDefinition({
-            name: 'check',
-            description: 'Check code for syntax errors or linting issues',
-            inputSchema: z.object({
-                code: z.string(),
-                language: z.string()
-            })
-        }).server(async ({ code, language }) => {
-            return toolLintCheck(config, code, language, sandbox);
-        }),
-        search: toolDefinition({
-            name: 'search',
-            description: 'Search the repository for a string',
-            inputSchema: z.object({
-                query: z.string()
-            })
-        }).server(async ({ query }) => {
-            return toolCodeSearch(config, query, sandbox);
-        }),
-        */
         webSearch: toolDefinition({
             name: 'webSearch',
             description: 'Search the web for information (using Tavily or Google)',
@@ -614,7 +585,7 @@ export function createTools(config: AppConfig, sandbox?: SandboxEnvironment) {
                 script: z.string().describe('The TypeScript script to execute. Use `await agent_tools.functionName()`')
             })
         }).server(async ({ script }) => {
-            return toolRunCodeMode(config, script, sandbox);
+            return toolRunCodeMode(config, script, sandbox, loopDetector);
         })
     };
 }

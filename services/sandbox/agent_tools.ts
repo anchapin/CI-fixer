@@ -6,6 +6,8 @@ import { promisify } from 'util';
 import { findUniqueFile } from '../../utils/fileVerification';
 import { extractPaths } from '../../utils/pathDetection';
 
+import { findClosestExistingParent } from '../../utils/pathDetection';
+
 const execPromise = promisify(exec);
 
 /**
@@ -24,6 +26,17 @@ function logPathCorrection(toolName: string, originalPath: string, correctedPath
 }
 
 /**
+ * Helper function to log path hallucinations for the main agent to detect loops.
+ */
+function logPathHallucination(toolName: string, path: string): void {
+    console.log(`[PATH_NOT_FOUND] ${JSON.stringify({
+        tool: toolName,
+        path: path,
+        timestamp: new Date().toISOString()
+    })}`);
+}
+
+/**
  * "Look Before You Leap" helper - verifies file existence and provides helpful error messages.
  * Returns the verified path or throws an error with suggestions.
  * Uses relative paths for clearer LLM feedback.
@@ -34,7 +47,6 @@ async function verifyFileExists(
     rootDir: string = process.cwd()
 ): Promise<{ verifiedPath: string; wasCorrected: boolean; relativePath?: string; error?: string }> {
     const absPath = path.resolve(rootDir, filePath);
-    const basename = path.basename(filePath);
 
     // If file exists exactly where specified, return it
     if (fs.existsSync(absPath)) {
@@ -55,34 +67,44 @@ async function verifyFileExists(
         const verification = await findUniqueFile(filePath, rootDir);
 
         if (verification.found && verification.path) {
-            // Found it - return the corrected path with relative path for logging
+            // Found it - return the corrected path
             return {
                 verifiedPath: verification.path,
                 wasCorrected: true,
-                relativePath: verification.relativePath
-            };
-        } else if (verification.matches.length === 1) {
-            // Single match found
-            const relPath = path.relative(rootDir, verification.matches[0]);
-            return { verifiedPath: verification.matches[0], wasCorrected: true, relativePath: relPath };
-        } else if (verification.matches.length > 1) {
-            // Multiple matches - provide helpful error with relative paths
-            const relativeMatches = verification.matches.map(m => path.relative(rootDir, m));
-            return {
-                verifiedPath: absPath,
-                wasCorrected: false,
-                error: `Error reading file ${filePath}: multiple candidates were found: ${relativeMatches.join(', ')}. Please specify the correct path or ensure unique filename.`
+                relativePath: path.relative(rootDir, verification.path)
             };
         } else {
-            // No matches at all
+            // No unique match found - trigger directory discovery
+            const closestParent = findClosestExistingParent(absPath);
+            const parentRelative = path.relative(rootDir, closestParent) || '.';
+            
+            let dirContent: string[] = [];
+            try {
+                dirContent = fs.readdirSync(closestParent).slice(0, 20); // Limit to 20 items
+            } catch (e) {
+                // Ignore readdir errors if mock is missing or dir inaccessible
+            }
+            
+            logPathHallucination(operation, filePath);
+
+            let errorMsg = `Error: Path NOT FOUND '${filePath}'.\n`;
+            errorMsg += `Closest existing parent directory: '${parentRelative}'\n`;
+            if (dirContent.length > 0) {
+                errorMsg += `Contents of '${parentRelative}':\n${dirContent.map(f => `  - ${f}`).join('\n')}`;
+            }
+
+            if (verification.matches.length > 0) {
+                const relativeMatches = verification.matches.map(m => path.relative(rootDir, m));
+                errorMsg += `\n\nNote: multiple candidates were found: ${relativeMatches.join(', ')}. Please specify the correct path or ensure unique filename.`;
+            }
+
             return {
                 verifiedPath: absPath,
                 wasCorrected: false,
-                error: `Error reading file ${filePath}`
+                error: errorMsg
             };
         }
     } catch (e: any) {
-        // Verification failed - return the original path with error info
         return {
             verifiedPath: absPath,
             wasCorrected: false,
