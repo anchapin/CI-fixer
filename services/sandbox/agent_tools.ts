@@ -4,9 +4,7 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { findUniqueFile } from '../../utils/fileVerification';
-import { extractPaths } from '../../utils/pathDetection';
-
-import { findClosestExistingParent } from '../../utils/pathDetection';
+import { extractPaths, validatePath, findClosestExistingParent } from '../../utils/pathDetection';
 
 const execPromise = promisify(exec);
 
@@ -47,9 +45,10 @@ async function verifyFileExists(
     rootDir: string = process.cwd()
 ): Promise<{ verifiedPath: string; wasCorrected: boolean; relativePath?: string; error?: string }> {
     const absPath = path.resolve(rootDir, filePath);
+    const validation = validatePath(absPath);
 
     // If file exists exactly where specified, return it
-    if (fs.existsSync(absPath)) {
+    if (validation.exists) {
         if (fs.statSync(absPath).isFile()) {
             const relPath = path.relative(rootDir, absPath);
             return { verifiedPath: absPath, wasCorrected: false, relativePath: relPath };
@@ -62,7 +61,7 @@ async function verifyFileExists(
         }
     }
 
-    // File doesn't exist - try to find it
+    // File doesn't exist - try to find it project-wide
     try {
         const verification = await findUniqueFile(filePath, rootDir);
 
@@ -75,27 +74,21 @@ async function verifyFileExists(
             };
         } else {
             // No unique match found - trigger directory discovery
-            const closestParent = findClosestExistingParent(absPath);
-            const parentRelative = path.relative(rootDir, closestParent) || '.';
-            
-            let dirContent: string[] = [];
-            try {
-                dirContent = fs.readdirSync(closestParent).slice(0, 20); // Limit to 20 items
-            } catch (e) {
-                // Ignore readdir errors if mock is missing or dir inaccessible
-            }
+            const parentRelative = path.relative(rootDir, validation.closestParent || '.') || '.';
             
             logPathHallucination(operation, filePath);
 
             let errorMsg = `Error: Path NOT FOUND '${filePath}'.\n`;
             errorMsg += `Closest existing parent directory: '${parentRelative}'\n`;
-            if (dirContent.length > 0) {
-                errorMsg += `Contents of '${parentRelative}':\n${dirContent.map(f => `  - ${f}`).join('\n')}`;
+
+            if (validation.suggestions && validation.suggestions.length > 0) {
+                const relativeSuggestions = validation.suggestions.map(s => path.relative(rootDir, s));
+                errorMsg += `Did you mean:\n${relativeSuggestions.map(s => `  - ${s}`).join('\n')}\n`;
             }
 
             if (verification.matches.length > 0) {
                 const relativeMatches = verification.matches.map(m => path.relative(rootDir, m));
-                errorMsg += `\n\nNote: multiple candidates were found: ${relativeMatches.join(', ')}. Please specify the correct path or ensure unique filename.`;
+                errorMsg += `\nNote: multiple candidates were found: ${relativeMatches.join(', ')}. Please specify the correct path or ensure unique filename.`;
             }
 
             return {
@@ -143,26 +136,26 @@ export async function readFile(filePath: string): Promise<string> {
 export async function writeFile(filePath: string, content: string): Promise<string> {
     try {
         let targetPath = path.resolve(process.cwd(), filePath);
-        let pathWasCorrected = false;
-
+        
         // [Integration] Verification & Auto-Recovery
-        if (!fs.existsSync(targetPath)) {
-            // File doesn't exist, check for potential halluncination
-            try {
-                const verification = await findUniqueFile(filePath, process.cwd());
-                if (verification.found && verification.path) {
-                    const originalPath = targetPath;
-                    targetPath = verification.path;
-                    pathWasCorrected = true;
-                    // Log the correction for telemetry
-                    logPathCorrection('write_file', filePath, verification.path, path.basename(filePath));
-                } else if (verification.matches.length > 1) {
-                    return `Error writing to file ${filePath}: File not found, but multiple candidates were found: ${verification.matches.join(', ')}. Please specify the correct path or ensure unique filename.`;
-                }
-                // If not found, we assume it's a new file creation (verification.found === false)
-            } catch (_recoveryError) {
-                // Ignore recovery error
+        const verification = await verifyFileExists(filePath, 'write');
+
+        if (verification.error) {
+            // If it's just "Path NOT FOUND", we can proceed with creation
+            // UNLESS it was a directory error.
+            if (verification.error.includes('is a directory')) {
+                return verification.error;
             }
+            
+            // If multiple candidates, return the error
+            if (verification.error.includes('multiple candidates')) {
+                return verification.error;
+            }
+        }
+
+        if (verification.wasCorrected && verification.verifiedPath) {
+            targetPath = verification.verifiedPath;
+            logPathCorrection('write_file', filePath, targetPath, path.basename(filePath));
         }
 
         const fullPath = targetPath;
