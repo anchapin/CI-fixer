@@ -500,6 +500,18 @@ ModuleNotFoundError: No module named 'pydantic.v1'
             expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
         });
 
+        it('should classify powershell command not found as infrastructure error', () => {
+            const logs = "vitest : The term 'vitest' is not recognized as the name of a cmdlet, function, script file, or operable program.";
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
+        });
+
+        it('should classify no such file or directory as infrastructure error', () => {
+            const logs = 'env: node: No such file or directory';
+            const result = classifyError(logs);
+            expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
+        });
+
         it('should classify patch-package failure', () => {
             const logs = `
 error: patch-package: failed to apply patch for @mui/material
