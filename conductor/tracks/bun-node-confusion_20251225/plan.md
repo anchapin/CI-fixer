@@ -12,12 +12,12 @@
 - [x] Task: Verify Bun availability within the sandbox environment. [7aa2e7d]
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Sandbox & Container Provisioning' (Protocol in workflow.md)
 
-## Phase 3: Adaptive Execution Strategy
+## Phase 3: Adaptive Execution Strategy [checkpoint: 4d05488]
 - [x] Task: Implement the "Context-Sensitive" switching logic in the command execution service. [7faec97]
 - [x] Task: Update the test execution service to switch from `vitest` to `bun test` upon detecting Bun-specific failure signatures. [7faec97]
 - [x] Task: Update dependency installation logic to prefer `bun install` when in a Bun context. [7faec97]
 - [x] Task: Integration tests simulating a "hybrid" project failure and successful Bun recovery. [7faec97]
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Adaptive Execution Strategy' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Adaptive Execution Strategy' (Protocol in workflow.md)
 
 ## Phase 4: Final Verification
 - [ ] Task: Run full regression suite to ensure Node-only projects are unaffected.
