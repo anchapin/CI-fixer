@@ -10,14 +10,14 @@ Focus on the tracking mechanism and the base middleware structure.
 - [x] Task: Write unit tests for `LoopDetector` and `PathValidator`. e8380b9
 - [x] Task: Conductor - User Manual Verification 'Infrastructure & Loop Detection Core' (Protocol in workflow.md) 52d7200
 
-## Phase 2: Tool Pre-processor & Discovery
+## Phase 2: Tool Pre-processor & Discovery [checkpoint: dd99a67]
 Integrate the validation into the tool execution flow.
 
-- [ ] Task: Implement middleware in `ActionLibrary` or tool executor to intercept file-system calls.
-- [ ] Task: Integrate `Fuse.js` for fuzzy path matching on hallucinated targets.
-- [ ] Task: Implement automated `ls` capture for parent directories of missing paths.
-- [ ] Task: Write integration tests for the pre-processor intercepting a `read_file` call.
-- [ ] Task: Conductor - User Manual Verification 'Tool Pre-processor & Discovery' (Protocol in workflow.md)
+- [x] Task: Implement middleware in `ActionLibrary` or tool executor to intercept file-system calls. dd99a67
+- [x] Task: Integrate `Fuse.js` for fuzzy path matching on hallucinated targets. dd99a67
+- [x] Task: Implement automated `ls` capture for parent directories of missing paths. dd99a67
+- [x] Task: Write integration tests for the pre-processor intercepting a `read_file` call. dd99a67
+- [x] Task: Conductor - User Manual Verification 'Tool Pre-processor & Discovery' (Protocol in workflow.md) dd99a67
 
 ## Phase 3: Mitigation & Strategy Shift
 Implement the logic to force the agent out of the loop.
