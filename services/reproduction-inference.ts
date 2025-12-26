@@ -9,14 +9,15 @@ import { unifiedGenerate, safeJsonParse } from './llm/LLMService';
  * when it is missing from agent output.
  */
 export class ReproductionInferenceService {
-  constructor(private config?: AppConfig) {}
+  constructor() {}
 
   /**
    * Infers a reproduction command for the given repository path.
    * @param repoPath The absolute path to the repository root
+   * @param config Optional application configuration for LLM-based inference
    * @returns The inferred reproduction command and details, or null if inference failed
    */
-  async inferCommand(repoPath: string): Promise<ReproductionInferenceResult | null> {
+  async inferCommand(repoPath: string, config?: AppConfig): Promise<ReproductionInferenceResult | null> {
     const workflowResult = await this.inferFromWorkflows(repoPath);
     if (workflowResult) return workflowResult;
 
@@ -26,7 +27,7 @@ export class ReproductionInferenceService {
     const buildToolResult = await this.inferFromBuildTools(repoPath);
     if (buildToolResult) return buildToolResult;
 
-    const agentRetryResult = await this.inferFromAgentRetry(repoPath);
+    const agentRetryResult = await this.inferFromAgentRetry(repoPath, config);
     if (agentRetryResult) return agentRetryResult;
 
     const safeScanResult = await this.inferFromSafeScan(repoPath);
@@ -88,8 +89,8 @@ export class ReproductionInferenceService {
     return `./${file}`;
   }
 
-  private async inferFromAgentRetry(repoPath: string): Promise<ReproductionInferenceResult | null> {
-    if (!this.config) return null;
+  private async inferFromAgentRetry(repoPath: string, config?: AppConfig): Promise<ReproductionInferenceResult | null> {
+    if (!config) return null;
 
     try {
       // List top-level files to provide context to the LLM
@@ -108,7 +109,7 @@ Return your answer in JSON format:
 }
 `;
 
-      const response = await unifiedGenerate(this.config, {
+      const response = await unifiedGenerate(config, {
         contents: prompt,
         responseFormat: 'json'
       });

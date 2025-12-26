@@ -19,8 +19,8 @@ describe('ReproductionInferenceService - Agent Retry', () => {
   };
 
   beforeEach(() => {
-    // ReproductionInferenceService now takes config
-    service = new ReproductionInferenceService(mockConfig);
+    // ReproductionInferenceService now is stateless
+    service = new ReproductionInferenceService();
     vi.clearAllMocks();
     vi.mocked(fs.stat).mockRejectedValue(new Error('File not found'));
     vi.mocked(fs.readdir).mockResolvedValue(['manage.py', 'requirements.txt', 'app/'] as any);
@@ -41,7 +41,7 @@ describe('ReproductionInferenceService - Agent Retry', () => {
       metrics: { tokensInput: 0, tokensOutput: 0, cost: 0, latency: 0, model: 'test' }
     });
 
-    const result = await service.inferCommand(mockRepoPath);
+    const result = await service.inferCommand(mockRepoPath, mockConfig);
     
     expect(result).not.toBeNull();
     expect(result?.command).toBe('python manage.py test');

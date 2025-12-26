@@ -19,6 +19,7 @@ import { FileFallbackService } from './sandbox/FileFallbackService.js';
 import { EnvironmentService } from './sandbox/EnvironmentService.js';
 import { db } from '../db/client.js';
 import { LoopDetector } from './LoopDetector.js';
+import { ReproductionInferenceService } from './reproduction-inference.js';
 
 export interface ServiceContainer {
     github: typeof GitHub;
@@ -40,6 +41,7 @@ export interface ServiceContainer {
     ingestion: DataIngestionService;
     learning: LearningLoopService;
     learningMetrics: LearningMetricService;
+    reproductionInference: ReproductionInferenceService;
 }
 
 export const defaultServices: ServiceContainer = {
@@ -61,6 +63,7 @@ export const defaultServices: ServiceContainer = {
     metrics: Metrics,
     ingestion: new DataIngestionService(db),
     learning: new LearningLoopService(db),
-    learningMetrics: new LearningMetricService(db)
+    learningMetrics: new LearningMetricService(db),
+    reproductionInference: new ReproductionInferenceService()
 };
 

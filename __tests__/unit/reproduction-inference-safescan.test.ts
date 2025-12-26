@@ -18,7 +18,7 @@ describe('ReproductionInferenceService - Safe Scan', () => {
   };
 
   beforeEach(() => {
-    service = new ReproductionInferenceService(mockConfig);
+    service = new ReproductionInferenceService();
     vi.clearAllMocks();
     vi.mocked(fs.stat).mockRejectedValue(new Error('File not found'));
   });
@@ -37,7 +37,7 @@ describe('ReproductionInferenceService - Safe Scan', () => {
         throw new Error('File not found');
     });
 
-    const result = await service.inferCommand(mockRepoPath);
+    const result = await service.inferCommand(mockRepoPath, mockConfig);
     
     expect(result).not.toBeNull();
     expect(result?.strategy).toBe('safe_scan');
@@ -51,7 +51,7 @@ describe('ReproductionInferenceService - Safe Scan', () => {
         return [] as any;
     });
 
-    const result = await service.inferCommand(mockRepoPath);
+    const result = await service.inferCommand(mockRepoPath, mockConfig);
     
     expect(result).not.toBeNull();
     expect(result?.strategy).toBe('safe_scan');

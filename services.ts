@@ -2,6 +2,7 @@ export * from './services/llm/LLMService.js';
 export * from './services/github/GitHubService.js';
 export * from './services/sandbox/SandboxService.js';
 export * from './services/analysis/LogAnalysisService.js';
+export * from './services/reproduction-inference.js';
 
 import { AppConfig, CodeFile } from './types.js';
 

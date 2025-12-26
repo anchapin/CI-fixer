@@ -14,6 +14,7 @@ import {
     diagnoseError, generateDetailedPlan, generateFix, judgeFix,
     generateRepoSummary, DiagnosisResult, runSandboxTest
 } from '../services/analysis/LogAnalysisService.js';
+import { ReproductionInferenceService } from '../services/reproduction-inference.js';
 import {
     validateFileExists, validateCommand, type RepositoryProfile
 } from '../validation.js';
@@ -85,16 +86,12 @@ export async function runWorkerTask(
         // Loop State
         let diagnosis: DiagnosisResult = { summary: "", filePath: "", fixAction: 'edit', reproductionCommand: undefined };
         let targetFile: { file: any, path: string } | null = null;
-        const feedbackHistory: string[] = [];
-        const iterationSummaries: IterationSummary[] = []; // [New] Structured history
-        let currentErrorFactId: string | null = null; // Track current error fact for dependency linking
-
-        // Classification & Validation State (Stage 1: Passive)
+        let currentErrorFactId: string | undefined = undefined;
         const classifiedErrors: ClassifiedError[] = [];
-        const fileAttempts: Record<string, number> = {};
+        const feedbackHistory: string[] = [];
+        const inferenceService = new ReproductionInferenceService();
 
-        // --- DYNAMIC AGENT LOOP ---
-        for (let i = 0; i < MAX_ITERATIONS; i++) {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
             currentState.iteration = i;
             updateStateCallback(group.id, { ...currentState });
 
@@ -159,6 +156,21 @@ export async function runWorkerTask(
             diagnosis = await diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, feedbackHistory);
 
             log('INFO', `Diagnosis [v${i + 1}]: ${diagnosis.summary} (Action: ${diagnosis.fixAction})`);
+
+            // --- NEW: Reproduction Command Inference (Phase 3) ---
+            if (!diagnosis.reproductionCommand && sandbox) {
+                log('INFO', '[Inference] Reproduction command missing. Attempting inference...');
+                const repoPath = sandbox.getLocalPath();
+                const inferred = await inferenceService.inferCommand(repoPath, config);
+                
+                if (inferred) {
+                    log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);
+                    diagnosis.reproductionCommand = inferred.command;
+                } else {
+                    log('WARN', '[Inference] Could not infer reproduction command.');
+                }
+            }
+            // ----------------------------------------------------
 
             // [Knowledge Graph] Check History & Create Error Fact
             if (i === 0) { // Check only on first pass to avoid spamming self-loops

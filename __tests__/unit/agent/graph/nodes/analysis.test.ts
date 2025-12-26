@@ -82,12 +82,20 @@ describe('Analysis Node', () => {
             },
             clustering: {
                 clusterError: vi.fn(),
+            },
+            reproductionInference: {
+                inferCommand: vi.fn().mockResolvedValue({
+                    command: 'npm test inferred',
+                    strategy: 'safe_scan'
+                })
             }
         };
 
         mockContext = {
             logCallback: vi.fn(),
-            sandbox: {},
+            sandbox: {
+                getLocalPath: vi.fn().mockReturnValue('/mock/repo')
+            },
             profile: {},
             dbClient: db,
             services: mockServices,
@@ -165,5 +173,19 @@ describe('Analysis Node', () => {
             expect.arrayContaining([dockerFeedback]), // feedback
             undefined // previousStatement
         );
+    });
+
+    it('should infer reproduction command if missing from diagnosis', async () => {
+        mockServices.analysis.diagnoseError.mockResolvedValueOnce({
+            summary: 'Diagnosis',
+            filePath: 'file.ts',
+            fixAction: 'edit',
+            reproductionCommand: undefined
+        });
+
+        await analysisNode(mockState, mockContext);
+
+        expect(mockServices.reproductionInference.inferCommand).toHaveBeenCalled();
+        expect(mockContext.logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Inferred command: npm test inferred'));
     });
 });
