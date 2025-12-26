@@ -16,13 +16,13 @@ This plan implements a multi-layered service to infer `reproductionCommand` when
 - [x] Task: Write unit tests for Signature and Build Tool detection (e28c297)
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Signature & Build Tool Detection' (Protocol in workflow.md) (b5d6f31)
 
-## Phase 3: Agent Retry & Safe Scan Fallback
+## Phase 3: Agent Retry & Safe Scan Fallback [checkpoint: 08e8736]
 - [x] Task: Implement Agent Retry logic to request missing command specifically (147d2e0)
 - [x] Task: Implement "Safe Scan" fallback for deep-search of test-like files (e46cd5c)
 - [x] Task: Integrate `ReproductionInferenceService` into the main agent loop (`agent.ts` or `services/repair-agent/`) (c2e0985)
 - [x] Task: Implement validation "dry-run" for inferred commands (1977909)
 - [x] Task: Write integration tests for the full inference pipeline (4d3e2b4)
-- [~] Task: Conductor - User Manual Verification 'Phase 3: Agent Retry & Safe Scan Fallback' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Agent Retry & Safe Scan Fallback' (Protocol in workflow.md) (08e8736)
 
 ## Phase 4: Final Integration & Verification
 - [ ] Task: Verify end-to-end flow with a mock CI failure missing a `reproductionCommand`
