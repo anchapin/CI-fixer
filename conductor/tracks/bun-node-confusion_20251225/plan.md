@@ -7,9 +7,9 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Environment Detection & Diagnostics' (Protocol in workflow.md)
 
 ## Phase 2: Sandbox & Container Provisioning
-- [ ] Task: Update Dockerfile/Container provisioning scripts to include Bun installation.
-- [ ] Task: Modify the environment setup logic to ensure Bun is available if `BunDetector` returns true or if a Bun-switch is likely needed.
-- [ ] Task: Verify Bun availability within the sandbox environment.
+- [x] Task: Update Dockerfile/Container provisioning scripts to include Bun installation. [7aa2e7d]
+- [x] Task: Modify the environment setup logic to ensure Bun is available if `BunDetector` returns true or if a Bun-switch is likely needed. [7aa2e7d]
+- [x] Task: Verify Bun availability within the sandbox environment. [7aa2e7d]
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Sandbox & Container Provisioning' (Protocol in workflow.md)
 
 ## Phase 3: Adaptive Execution Strategy
