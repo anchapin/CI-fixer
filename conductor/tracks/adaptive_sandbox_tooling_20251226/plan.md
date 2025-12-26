@@ -12,12 +12,12 @@
 - [x] Task: Write tests to ensure the probe correctly identifies missing binaries based on project files. bece730
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Capability Probing' (Protocol in workflow.md)
 
-## Phase 3: Autonomous Provisioning & Path Management
+## Phase 3: Autonomous Provisioning & Path Management [checkpoint: 5b4e26d]
 - [x] Task: Implement `services/sandbox/ProvisioningService.ts` with logic to install missing tools (e.g., `npm install -g`, `pip install`). e49781d
 - [x] Task: Implement dynamic PATH refreshing to ensure newly installed tools are visible to the current execution context. 6814ffe
 - [x] Task: Add "Installation Loop Prevention" logic to cap retry attempts for tool provisioning. 8df7357
 - [x] Task: Write tests for the provisioning flow, mocking package manager success/failure. e49781d
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Autonomous Provisioning' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Autonomous Provisioning' (Protocol in workflow.md)
 
 ## Phase 4: Integration & Agent Workflow Update
 - [ ] Task: Integrate `CapabilityProbe` and `ProvisioningService` into the main sandbox execution loop in `services/sandbox/`.
