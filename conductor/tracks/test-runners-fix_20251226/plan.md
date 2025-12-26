@@ -17,13 +17,13 @@ This plan implements a hybrid solution to resolve missing test runners by updati
 
 ## Phase 2: Logic - Automated On-Demand Provisioning
 
-- [ ] Task: Enhance `ProvisioningService` for Runner Detection
+- [x] Task: Enhance `ProvisioningService` for Runner Detection (4b959c7)
   - Implement a check to verify if a runner exists in the PATH before command execution.
   - Define a mapping of common runners to their installation commands (e.g., `pytest` -> `pip install pytest`).
-- [ ] Task: Implement Silent On-Demand Installation
+- [x] Task: Implement Silent On-Demand Installation (4b959c7)
   - Update the provisioning logic to automatically execute the installation command if a runner is missing.
   - Add internal logging for these "silent" installations for auditability.
-- [ ] Task: Write Unit Tests for `ProvisioningService`
+- [x] Task: Write Unit Tests for `ProvisioningService` (4b959c7)
   - Mock the environment to simulate missing runners.
   - Verify that the service triggers the correct installation command.
 - [ ] Task: Conductor - User Manual Verification 'Logic - Automated On-Demand Provisioning' (Protocol in workflow.md)
