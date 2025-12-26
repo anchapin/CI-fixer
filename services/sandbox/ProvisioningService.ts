@@ -8,9 +8,33 @@ export type ToolRuntime = 'node' | 'python' | 'unknown';
  */
 export class ProvisioningService {
   private sandbox: SandboxEnvironment;
+  private cachedPathCommand: string | null = null;
 
   constructor(sandbox: SandboxEnvironment) {
     this.sandbox = sandbox;
+  }
+
+  /**
+   * Generates a shell command to refresh the PATH to include global binary locations.
+   * @returns A command string like "export PATH=$PATH:/usr/local/bin"
+   */
+  async getPathRefreshCommand(): Promise<string> {
+    if (this.cachedPathCommand) return this.cachedPathCommand;
+
+    try {
+      // Find npm global bin directory
+      const { stdout, exitCode } = await this.sandbox.runCommand('npm config get prefix');
+      if (exitCode === 0 && stdout.trim()) {
+        const prefix = stdout.trim();
+        // Typically <prefix>/bin on Linux
+        this.cachedPathCommand = `export PATH=$PATH:${prefix}/bin`;
+        return this.cachedPathCommand;
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    return '';
   }
 
   /**
