@@ -19,13 +19,13 @@ Integrate the validation into the tool execution flow.
 - [x] Task: Write integration tests for the pre-processor intercepting a `read_file` call. dd99a67
 - [x] Task: Conductor - User Manual Verification 'Tool Pre-processor & Discovery' (Protocol in workflow.md) dd99a67
 
-## Phase 3: Mitigation & Strategy Shift
+## Phase 3: Mitigation & Strategy Shift [checkpoint: c432764]
 Implement the logic to force the agent out of the loop.
 
-- [ ] Task: Create a "Strategy Shift" prompt injector that triggers after 2 hallucinations.
-- [ ] Task: Enhance error messages to return structured `PATH_NOT_FOUND` data.
-- [ ] Task: Write tests simulating 2+ failures and verifying the prompt injection.
-- [ ] Task: Conductor - User Manual Verification 'Mitigation & Strategy Shift' (Protocol in workflow.md)
+- [x] Task: Create a "Strategy Shift" prompt injector that triggers after 2 hallucinations. c432764
+- [x] Task: Enhance error messages to return structured `PATH_NOT_FOUND` data. dd99a67
+- [x] Task: Write tests simulating 2+ failures and verifying the prompt injection. c432764
+- [x] Task: Conductor - User Manual Verification 'Mitigation & Strategy Shift' (Protocol in workflow.md) c432764
 
 ## Phase 4: Integration & Verification
 Ensure CrimsonArchitect and CyberSentinel use the new protections.
