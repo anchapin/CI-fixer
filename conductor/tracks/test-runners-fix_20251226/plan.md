@@ -28,7 +28,7 @@ This plan implements a hybrid solution to resolve missing test runners by updati
   - Verify that the service triggers the correct installation command.
 - [x] Task: Conductor - User Manual Verification 'Logic - Automated On-Demand Provisioning' (Protocol in workflow.md)
 
-## Phase 3: Integration & Verification [checkpoint: b0dc38d]
+## Phase 3: Integration & Verification [checkpoint: 84eaf7f]
 
 - [x] Task: Update Agent Sandbox Configuration (2e5f31b)
   - Point the sandbox configuration to use the new "thicker" Docker image.
