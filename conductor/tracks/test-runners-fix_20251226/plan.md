@@ -2,7 +2,7 @@
 
 This plan implements a hybrid solution to resolve missing test runners by updating the base Docker image and enhancing the automated provisioning logic.
 
-## Phase 1: Infrastructure - Enhanced Docker Image [checkpoint: 6b5b4dd]
+## Phase 1: Infrastructure - Enhanced Docker Image [checkpoint: 0bdfe53]
 
 - [x] Task: Define New Dockerfile Requirements (49880df)
   - Identify the best base image (e.g., a Debian-based image with multi-runtime support).
