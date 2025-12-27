@@ -1,10 +1,10 @@
 # Plan: Dependency & Import Conflicts
 
-## Phase 1: Dependency Conflict Resolution
+## Phase 1: Dependency Conflict Resolution [checkpoint: 3e766bc]
 - [x] Task: Identify the file containing the `pyjwt` dependency definition (e.g., `requirements.txt`, `pyproject.toml`). [3a889e7]
 - [x] Task: Modify the identified file to change the `pyjwt` requirement to `pyjwt>=2.9.0`. [293d0dc]
 - [x] Task: Run the dependency installation command (e.g., `pip install -r requirements.txt`) to verify that the conflict is resolved. [7ce8cea]
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Dependency Conflict Resolution' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Dependency Conflict Resolution' (Protocol in workflow.md)
 
 ## Phase 2: Pytest Import Path Resolution
 - [ ] Task: Investigate the current `PYTHONPATH` and project structure to identify the source of the import path mismatch.
