@@ -1,0 +1,8 @@
+{
+  "track_id": "dependency_import_conflicts_20251226",
+  "type": "bug",
+  "status": "new",
+  "created_at": "2025-12-26T18:05:23.185Z",
+  "updated_at": "2025-12-26T18:05:23.185Z",
+  "description": "Dependency & Import Conflicts\nNeonWeaver: This agent encountered an ImportPathMismatchError when it actually managed to run pytest. This indicates a structural issue where conftest.py or test files are being imported under multiple names (e.g., tests.conftest vs backend.tests.conftest), likely due to the repository's directory structure or PYTHONPATH settings.\n\nZeroOperator: Identified a valid dependency conflict where crewai requires pyjwt>=2.9.0 but the project pinned pyjwt==2.8.0. However, it could not validate the fix due to the missing pytest command mentioned above."
+}
