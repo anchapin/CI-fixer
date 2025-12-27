@@ -13,7 +13,7 @@ This plan implements a hybrid solution to resolve missing test runners by updati
 - [x] Task: Build and Local Verification (49880df)
   - Build the image locally.
   - Run a smoke test container to verify all runtimes and runners are accessible via CLI.
-- [ ] Task: Conductor - User Manual Verification 'Infrastructure - Enhanced Docker Image' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Infrastructure - Enhanced Docker Image' (Protocol in workflow.md)
 
 ## Phase 2: Logic - Automated On-Demand Provisioning [checkpoint: 193cdff]
 
