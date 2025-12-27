@@ -18,5 +18,14 @@ This file tracks all major tracks for the project. Each track has its own detail
     - **Status**: COMPLETED
 *Link: [./conductor/archive/adaptive_sandbox_tooling_20251226/](./conductor/archive/adaptive_sandbox_tooling_20251226/)*
 
+---
+
+- [~] **Dependency & Import Conflicts** (ID: `dependency_import_conflicts_20251226`)
+    - **Description**: Dependency & Import Conflicts
+    - **Plan**: `conductor/tracks/dependency_import_conflicts_20251226/plan.md`
+    - **Status**: IN PROGRESS
+*Link: [./conductor/tracks/dependency_import_conflicts_20251226/](./conductor/tracks/dependency_import_conflicts_20251226/)*
+
+
 
 

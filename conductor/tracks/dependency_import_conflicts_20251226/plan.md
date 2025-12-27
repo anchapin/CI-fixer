@@ -12,4 +12,4 @@
 - [x] Task: Write a failing test that reproduces the `ImportPathMismatchError`. This might involve creating a temporary test file that triggers the specific import behavior. [2479063]
 - [x] Task: Apply the `PYTHONPATH` modification. [06ac9b9]
 - [x] Task: Run the test suite and verify that the `ImportPathMismatchError` is no longer raised. [06ac9b9]
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Pytest Import Path Resolution' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 2: Pytest Import Path Resolution' (Protocol in workflow.md)
