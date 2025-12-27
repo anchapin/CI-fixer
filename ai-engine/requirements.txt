@@ -1,0 +1,2 @@
+pyjwt==2.8.0
+some-other-dependency==1.0.0
