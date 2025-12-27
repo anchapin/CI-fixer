@@ -26,7 +26,7 @@ This plan implements a hybrid solution to resolve missing test runners by updati
 - [x] Task: Write Unit Tests for `ProvisioningService` (4b959c7)
   - Mock the environment to simulate missing runners.
   - Verify that the service triggers the correct installation command.
-- [ ] Task: Conductor - User Manual Verification 'Logic - Automated On-Demand Provisioning' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Logic - Automated On-Demand Provisioning' (Protocol in workflow.md)
 
 ## Phase 3: Integration & Verification [checkpoint: b0dc38d]
 
