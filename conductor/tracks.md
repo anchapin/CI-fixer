@@ -18,13 +18,7 @@ This file tracks all major tracks for the project. Each track has its own detail
     - **Status**: COMPLETED
 *Link: [./conductor/archive/adaptive_sandbox_tooling_20251226/](./conductor/archive/adaptive_sandbox_tooling_20251226/)*
 
----
 
-- [x] **Language & Tool Context Mismatch** (ID: `language_scoping_20251228`)
-    - **Description**: Implement strict language scoping using keyword detection and manifest validation.
-    - **Plan**: `conductor/tracks/language_scoping_20251228/plan.md`
-    - **Status**: COMPLETED
-*Link: [./conductor/tracks/language_scoping_20251228/](./conductor/tracks/language_scoping_20251228/)*
 
 
 
