@@ -17,10 +17,10 @@
 ## Phase 3: Agent Guidance & Tool Prioritization
 - [x] **Task: Update Agent Context (Red Phase)** 9d10eb7
   - Create an integration test in `__tests__/integration/agentScoping.test.ts` that simulates a `vitest: not found` error and asserts the agent receives scoping hints.
-- [~] **Task: Update Agent Context (Green Phase)**
+- [x] **Task: Update Agent Context (Green Phase)** 2496ec2
   - Update `agent.ts` (or the prompt generation logic) to explicitly instruct the agent to prioritize files matching the detected scope.
   - Modify tool-calling logic to include a "Soft Warning" if the agent attempts to modify a file clearly outside the detected scope (e.g., editing `.py` when scope is JS).
-- [ ] **Task: Conductor - User Manual Verification 'Phase 3: Agent Guidance & Tool Prioritization' (Protocol in workflow.md)**
+- [~] **Task: Conductor - User Manual Verification 'Phase 3: Agent Guidance & Tool Prioritization' (Protocol in workflow.md)**
 
 ## Phase 4: Verification & Refinement
 - [ ] **Task: E2E Scenario Validation**
