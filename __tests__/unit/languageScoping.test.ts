@@ -56,6 +56,8 @@ describe('LanguageScopingService', () => {
 
     it('should fallback to Generic if no keywords match', async () => {
       const logs = 'Unknown error occurred';
+      // Mock manifest check to fail
+      vi.mocked(fs.access).mockRejectedValue(new Error('ENOENT'));
       
       const scope = await service.detectScope(logs, '/app');
       expect(scope).toBe(LanguageScope.GENERIC);
