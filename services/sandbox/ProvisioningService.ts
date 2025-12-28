@@ -26,6 +26,23 @@ export class ProvisioningService {
   }
 
   /**
+   * Updates the sandbox environment with discovered binary paths.
+   */
+  private async updateSandboxPath(newPath: string): Promise<void> {
+    if (!this.sandbox.envOverrides) {
+        this.sandbox.envOverrides = {};
+    }
+
+    const currentPath = this.sandbox.envOverrides['PATH'] || '$PATH';
+    
+    // Avoid duplicates
+    if (!currentPath.includes(newPath)) {
+        this.sandbox.envOverrides['PATH'] = `${currentPath}:${newPath}`;
+        console.log(`[Provisioning] Updated sandbox PATH override: ${this.sandbox.envOverrides['PATH']}`);
+    }
+  }
+
+  /**
    * Ensures a test runner is available in the sandbox.
    * If not found, attempts to install it automatically.
    */
@@ -77,13 +94,34 @@ export class ProvisioningService {
    * Returns the global binary path for the current runtime.
    */
   async getGlobalBinPath(): Promise<string | null> {
+    return this.getNpmPrefix().then(p => p ? `${p}/bin` : null);
+  }
+
+  private async getNpmPrefix(): Promise<string | null> {
     try {
       const { stdout, exitCode } = await this.sandbox.runCommand('npm config get prefix');
       if (exitCode === 0 && stdout.trim()) {
-        return `${stdout.trim()}/bin`;
+        return stdout.trim();
       }
     } catch (e) {
       // Ignore errors when getting npm prefix
+    }
+    return null;
+  }
+
+  private async getPythonUserBase(): Promise<string | null> {
+    try {
+      const { stdout, exitCode } = await this.sandbox.runCommand('python3 -m site --user-base');
+      if (exitCode === 0 && stdout.trim()) {
+        return stdout.trim();
+      }
+      // Fallback to python if python3 fails
+      const { stdout: stdout2, exitCode: exitCode2 } = await this.sandbox.runCommand('python -m site --user-base');
+      if (exitCode2 === 0 && stdout2.trim()) {
+        return stdout2.trim();
+      }
+    } catch (e) {
+      // Ignore errors
     }
     return null;
   }
@@ -107,14 +145,26 @@ export class ProvisioningService {
     if (runtime === 'node') {
       command = `npm install -g ${tool}`;
     } else if (runtime === 'python') {
-      command = `pip install ${tool}`;
+      // Use python -m pip for robustness
+      command = `python3 -m pip install --user ${tool} || python -m pip install --user ${tool} || pip install --user ${tool}`;
     } else {
       return false;
     }
 
     try {
       const { exitCode } = await this.sandbox.runCommand(command);
-      return exitCode === 0;
+      if (exitCode === 0) {
+        // Post-installation path refresh
+        if (runtime === 'node') {
+          const prefix = await this.getNpmPrefix();
+          if (prefix) await this.updateSandboxPath(`${prefix}/bin`);
+        } else if (runtime === 'python') {
+          const userBase = await this.getPythonUserBase();
+          if (userBase) await this.updateSandboxPath(`${userBase}/bin`);
+        }
+        return true;
+      }
+      return false;
     } catch (error) {
       return false;
     }

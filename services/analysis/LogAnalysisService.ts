@@ -500,7 +500,7 @@ export async function runSandboxTest(config: AppConfig, group: RunGroup, iterati
                                 
                                 // Update command to run the new test
                                 if (expectedTestPath.endsWith('.py')) {
-                                    cmd = `pytest "${expectedTestPath}"`;
+                                    cmd = `python -m pytest "${expectedTestPath}"`;
                                 } else {
                                     // Default to npx vitest for JS/TS as it's the project standard
                                     cmd = `npx vitest run "${expectedTestPath}"`; 

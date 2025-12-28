@@ -25,12 +25,12 @@ export class TestSelector {
 
         // Priority 2: Mixed Python + Frontend/Backend TS
         if (hasPython && (hasFrontend || hasBackendTS)) {
-            return 'npm test && pytest';
+            return 'npm test && python -m pytest';
         }
 
         // Priority 3: Single Language/Scope
         if (hasPython) {
-            return 'pytest';
+            return 'python -m pytest';
         }
 
         if (hasBackendTS) {
