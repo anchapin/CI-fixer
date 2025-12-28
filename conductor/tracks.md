@@ -18,10 +18,7 @@ This file tracks all major tracks for the project. Each track has its own detail
     - **Status**: COMPLETED
 *Link: [./conductor/archive/adaptive_sandbox_tooling_20251226/](./conductor/archive/adaptive_sandbox_tooling_20251226/)*
 
----
 
-## [~] Track: File System Grounding & Hallucination Mitigation
-*Link: [./conductor/tracks/fs_grounding_20251228/](./conductor/tracks/fs_grounding_20251228/)*
 
 
 
