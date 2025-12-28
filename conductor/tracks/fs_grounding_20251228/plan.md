@@ -13,7 +13,7 @@ This plan implements a "Grounding" layer to ensure the agent's file system opera
 - [x] Task: Implement Shell Command Grounding Wrapper [25b3fe7]
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Tool & Shell Integration' (Protocol in workflow.md)
 
-## Phase 3: Loop Prevention & Observability
+## Phase 3: Loop Prevention & Observability [checkpoint: df370d8]
 - [x] Task: Enhance Loop Detector [cd8aed7]
 - [x] Task: Add Grounding Telemetry [fd0f802]
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Loop Prevention & Observability' (Protocol in workflow.md)
