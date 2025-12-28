@@ -8,6 +8,7 @@ import { retryWithBackoff, unifiedGenerate, safeJsonParse } from '../llm/LLMServ
 import { CapabilityProbe } from './CapabilityProbe.js';
 import { ProvisioningService } from './ProvisioningService.js';
 import { LoopDetector } from '../LoopDetector.js';
+import { collectPathCorrections } from '../telemetry/PathCorrectionCollector.js';
 
 // Environment Detection
 const IS_BROWSER = typeof window !== 'undefined' && typeof window.document !== 'undefined';
@@ -374,6 +375,9 @@ main();
 
     let output = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
     
+    // MIDDLEWARE: Telemetry - Collect Path Corrections
+    collectPathCorrections(output).catch(e => console.warn("Failed to collect path corrections", e));
+
     // MIDDLEWARE: Intercept Path Hallucinations
     if (loopDetector && output.includes('[PATH_NOT_FOUND]')) {
         const lines = output.split('\n');
