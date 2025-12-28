@@ -14,13 +14,13 @@
   - Ensure the detected scope is included in the diagnostic metadata passed to the agent.
 - [x] **Task: Conductor - User Manual Verification 'Phase 2: Integration with Error Classification' (Protocol in workflow.md)** 7da4820
 
-## Phase 3: Agent Guidance & Tool Prioritization
+## Phase 3: Agent Guidance & Tool Prioritization [checkpoint: fff76d6]
 - [x] **Task: Update Agent Context (Red Phase)** 9d10eb7
   - Create an integration test in `__tests__/integration/agentScoping.test.ts` that simulates a `vitest: not found` error and asserts the agent receives scoping hints.
 - [x] **Task: Update Agent Context (Green Phase)** 2496ec2
   - Update `agent.ts` (or the prompt generation logic) to explicitly instruct the agent to prioritize files matching the detected scope.
   - Modify tool-calling logic to include a "Soft Warning" if the agent attempts to modify a file clearly outside the detected scope (e.g., editing `.py` when scope is JS).
-- [~] **Task: Conductor - User Manual Verification 'Phase 3: Agent Guidance & Tool Prioritization' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Phase 3: Agent Guidance & Tool Prioritization' (Protocol in workflow.md)** fff76d6
 
 ## Phase 4: Verification & Refinement
 - [ ] **Task: E2E Scenario Validation**
