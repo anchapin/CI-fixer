@@ -372,7 +372,7 @@ main();
     const cmd = `npx -y ts-node -T -O '{"module":"commonjs"}' ${scriptPath}`;
     const result = await sandbox.runCommand(cmd);
 
-    const output = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
+    let output = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
     
     // MIDDLEWARE: Intercept Path Hallucinations
     if (loopDetector && output.includes('[PATH_NOT_FOUND]')) {
@@ -384,6 +384,13 @@ main();
                     const data = JSON.parse(jsonStr);
                     if (data.path) {
                         loopDetector.recordHallucination(data.path);
+
+                        if (loopDetector.shouldTriggerStrategyShift(data.path)) {
+                            const advice = loopDetector.triggerAutomatedRecovery();
+                            if (advice) {
+                                output += `\n\n[SYSTEM ADVICE]: ${advice}`;
+                            }
+                        }
                     }
                 } catch (e) {
                     console.warn("Failed to parse path hallucination log", e);
