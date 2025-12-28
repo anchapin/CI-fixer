@@ -23,10 +23,10 @@
 - [x] **Task: Conductor - User Manual Verification 'Phase 3: Agent Guidance & Tool Prioritization' (Protocol in workflow.md)** fff76d6
 
 ## Phase 4: Verification & Refinement
-- [ ] **Task: E2E Scenario Validation**
+- [x] **Task: E2E Scenario Validation** c0194d6
   - Run the full agent loop against the specific "NeonWeaver" failure scenario described in the track description.
   - Verify the agent correctly identifies the JS/TS scope and avoids `requirements.txt`.
-- [ ] **Task: Documentation & Cleanup**
+- [~] **Task: Documentation & Cleanup**
   - Update `README.md` or internal documentation regarding the new scoping mechanism.
   - Perform final refactoring and ensure code coverage >80%.
 - [ ] **Task: Conductor - User Manual Verification 'Phase 4: Verification & Refinement' (Protocol in workflow.md)**
