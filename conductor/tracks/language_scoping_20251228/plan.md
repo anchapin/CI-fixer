@@ -22,11 +22,11 @@
   - Modify tool-calling logic to include a "Soft Warning" if the agent attempts to modify a file clearly outside the detected scope (e.g., editing `.py` when scope is JS).
 - [x] **Task: Conductor - User Manual Verification 'Phase 3: Agent Guidance & Tool Prioritization' (Protocol in workflow.md)** fff76d6
 
-## Phase 4: Verification & Refinement
+## Phase 4: Verification & Refinement [checkpoint: 0e62782]
 - [x] **Task: E2E Scenario Validation** c0194d6
   - Run the full agent loop against the specific "NeonWeaver" failure scenario described in the track description.
   - Verify the agent correctly identifies the JS/TS scope and avoids `requirements.txt`.
 - [x] **Task: Documentation & Cleanup** 0e4eb2f
   - Update `README.md` or internal documentation regarding the new scoping mechanism.
   - Perform final refactoring and ensure code coverage >80%.
-- [~] **Task: Conductor - User Manual Verification 'Phase 4: Verification & Refinement' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Phase 4: Verification & Refinement' (Protocol in workflow.md)** 0e62782
