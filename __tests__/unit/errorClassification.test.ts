@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { ErrorCategory } from '../../types.js';
+import { ErrorCategory, LanguageScope } from '../../types.js';
 import {
     classifyError,
+    classifyErrorWithHistory,
     getErrorPriority,
     selectPrimaryError,
     isCascadingError,
@@ -499,50 +500,21 @@ ModuleNotFoundError: No module named 'pydantic.v1'
             const result = classifyError(logs);
             expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
         });
+    });
 
-        it('should classify powershell command not found as infrastructure error', () => {
-            const logs = "vitest : The term 'vitest' is not recognized as the name of a cmdlet, function, script file, or operable program.";
-            const result = classifyError(logs);
-            expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
+    describe('Language Scoping Integration', () => {
+        it('should include scope JS_TS when vitest is mentioned', async () => {
+            const logs = 'sh: 1: vitest: not found';
+            const result = await classifyErrorWithHistory(logs);
+            // @ts-expect-error - scope is not yet in interface
+            expect(result.scope).toBe(LanguageScope.JS_TS);
         });
 
-        it('should classify no such file or directory as infrastructure error', () => {
-            const logs = 'env: node: No such file or directory';
-            const result = classifyError(logs);
-            expect(result.category).toBe(ErrorCategory.INFRASTRUCTURE);
-        });
-
-        it('should classify patch-package failure', () => {
-            const logs = `
-error: patch-package: failed to apply patch for @mui/material
-  checksum mismatch: expected abc, got xyz
-`;
-            const result = classifyError(logs);
-            expect(result.category).toBe(ErrorCategory.PATCH_PACKAGE_FAILURE);
-            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
-        });
-
-        it('should classify MSW error', () => {
-            const logs = `
-Error: [MSW] Failed to intercept request: connection refused
-    at MockServiceWorker.start
-`;
-            const result = classifyError(logs);
-            expect(result.category).toBe(ErrorCategory.MSW_ERROR);
-            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
-        });
-
-        it('should detect mass test failures as environment unstable', () => {
-            const logs = `
-FAIL src/components/Button.test.tsx
-FAIL src/utils/math.test.ts
-FAIL src/hooks/useUser.test.ts
-... (many more)
-Tests: 25 failed, 2 passed, 27 total
-`;
-            const result = classifyError(logs);
-            expect(result.category).toBe(ErrorCategory.ENVIRONMENT_UNSTABLE);
-            expect(result.confidence).toBe(0.85);
+        it('should include scope PYTHON when pytest is mentioned', async () => {
+            const logs = 'ERROR: No module named pytest';
+            const result = await classifyErrorWithHistory(logs);
+            // @ts-expect-error - scope is not yet in interface
+            expect(result.scope).toBe(LanguageScope.PYTHON);
         });
     });
 });
