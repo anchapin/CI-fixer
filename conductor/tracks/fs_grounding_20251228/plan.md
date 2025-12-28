@@ -2,7 +2,7 @@
 
 This plan implements a "Grounding" layer to ensure the agent's file system operations are based on verified paths, preventing loops caused by hallucinations.
 
-## Phase 1: Core Grounding Logic
+## Phase 1: Core Grounding Logic [checkpoint: 9be8e20]
 - [x] Task: Define Grounding Types and Interfaces [ae5784b]
 - [x] Task: Implement Path-Aware Search Engine [b05ebba]
 - [x] Task: Implement Grounding Coordinator [64997af]
