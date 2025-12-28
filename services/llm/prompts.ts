@@ -127,6 +127,13 @@ ${context.errorLog}
 \`\`\`
 ${repoContextSection}${feedbackSection}
 Provide diagnosis in the same JSON format.
+
+## Scoping Guidance
+If a specific "Scope" is identified in the Error Classification above (e.g., js_ts, python, go), you MUST:
+1. Prioritize identifying the root cause in files matching that language's typical extensions.
+2. Prioritize suggesting fixes in relevant manifest files (e.g., package.json for js_ts, requirements.txt for python).
+3. If the error is an infrastructure error (e.g., "command not found"), suggest a command to install the missing tool using the appropriate package manager for that scope.
+
 CRITICAL INSTRUCTIONS FOR "suggestedCommand":
 - Must contain ONLY the actual shell command.
 - DO NOT add prefixes like "Run:", "Command:", "Action:", or "Try:".

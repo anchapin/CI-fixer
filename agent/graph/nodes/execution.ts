@@ -82,11 +82,28 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
                                              }
                                          }
                                      }
-                                     // B. EDIT FIX
-                                     else if (fileReservations.length > 0 || (diagnosis.fixAction === 'edit' && diagnosis.filePath)) {
-                                         let targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath!;
-                                         log('INFO', `[Execution] Implementing fix for ${targetPath}`);
-                                 
+                                         // B. EDIT FIX
+                                         else if (fileReservations.length > 0 || (diagnosis.fixAction === 'edit' && diagnosis.filePath)) {
+                                             let targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath!;
+                                     
+                                             // SOFT SCOPING: Warning if editing file outside detected scope
+                                             if (state.classification?.scope) {
+                                                 const scope = state.classification.scope;
+                                                 const ext = path.extname(targetPath).toLowerCase().replace('.', '');
+                                                 const scopeExtensions: Record<string, string[]> = {
+                                                     'js_ts': ['js', 'ts', 'jsx', 'tsx', 'json'],
+                                                     'python': ['py', 'yaml', 'yml', 'txt', 'toml'],
+                                                     'go': ['go', 'mod', 'sum'],
+                                                     'generic': []
+                                                 };
+                                     
+                                                 const allowed = scopeExtensions[scope] || [];
+                                                 if (scope !== 'generic' && allowed.length > 0 && !allowed.includes(ext)) {
+                                                     log('WARN', `[Scoping] CAUTION: You are editing '${targetPath}' (ext: ${ext}) which is outside the detected ${scope.toUpperCase()} scope. Proceeding, but ensure this is intentional.`);
+                                                 }
+                                             }
+                                     
+                                             log('INFO', `[Execution] Implementing fix for ${targetPath}`);                                 
                                          // PATH VERIFICATION: Auto-correct hallucinations
                                          if (sandbox) {
                                              const verification = await services.discovery.findUniqueFile(targetPath, sandbox.getWorkDir());

@@ -149,6 +149,7 @@ export const analysisNode: NodeHandler = async (state, context) => {
 
         const classificationForDiagnosis = {
             category: classified.category,
+            scope: classified.scope,
             priority: services.classification.getErrorPriority(classified.category),
             confidence: classified.confidence,
             affectedFiles: classified.affectedFiles,

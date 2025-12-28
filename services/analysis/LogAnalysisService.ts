@@ -137,6 +137,7 @@ export async function diagnoseError(
         if (previousClassification) {
             enhancedRepoContext += `\n\nError Classification:
 - Category: ${previousClassification.category || 'Unknown'}
+- Scope: ${previousClassification.scope || 'generic'}
 - Suggested Action: ${previousClassification.suggestedAction || 'None'}`;
         }
 

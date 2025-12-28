@@ -147,13 +147,14 @@ export async function runWorkerTask(
             const diagContext = (i === 0) ? repoContext + dependencyContext : repoContext;
 
             // [STAGE 3] Pass profile and previous classification for context-aware diagnosis
-            const classificationForDiagnosis = classifiedErrors.length > 0 ? {
-                category: classifiedErrors[classifiedErrors.length - 1].category,
-                priority: getErrorPriority(classifiedErrors[classifiedErrors.length - 1].category),
-                confidence: classifiedErrors[classifiedErrors.length - 1].confidence,
-                affectedFiles: classifiedErrors[classifiedErrors.length - 1].affectedFiles,
-                suggestedAction: classifiedErrors[classifiedErrors.length - 1].suggestedAction
-            } : undefined;
+            const classificationForDiagnosis = {
+                category: classified.category,
+                scope: classified.scope,
+                priority: getErrorPriority(classified.category),
+                confidence: classified.confidence,
+                affectedFiles: classified.affectedFiles,
+                suggestedAction: classified.suggestedAction
+            };
 
             diagnosis = await diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, feedbackHistory);
 
