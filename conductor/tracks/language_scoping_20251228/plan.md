@@ -6,13 +6,13 @@
 - [x] **Task: Implement LanguageScopingEngine (Green Phase)** e7cc8ba
 - [x] **Task: Conductor - User Manual Verification 'Phase 1: Core Scoping Engine' (Protocol in workflow.md)**
 
-## Phase 2: Integration with Error Classification
+## Phase 2: Integration with Error Classification [checkpoint: 7da4820]
 - [x] **Task: Enhance Error Classification (Red Phase)** 43c0f37
   - Update tests in `__tests__/unit/errorClassification.test.ts` to expect a `scope` field in the classification result.
 - [x] **Task: Enhance Error Classification (Green Phase)** 4a90770
   - Modify `errorClassification.ts` to call the `LanguageScopingService` during log analysis.
   - Ensure the detected scope is included in the diagnostic metadata passed to the agent.
-- [~] **Task: Conductor - User Manual Verification 'Phase 2: Integration with Error Classification' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Phase 2: Integration with Error Classification' (Protocol in workflow.md)** 7da4820
 
 ## Phase 3: Agent Guidance & Tool Prioritization
 - [ ] **Task: Update Agent Context (Red Phase)**
