@@ -15,6 +15,7 @@ The application architecture has evolved to separate concerns for better stabili
 -   **Execution Engine**: Pluggable sandbox environment supporting both Cloud (E2B) and Local (Docker) execution strategies.
 -   **Agent Core**: Implements a **Graph-Based** architecture where a coordinator orchestrates specialized nodes (Analysis, Decomposition, Planning, Execution, Verification) to solve complex problems.
 -   **Knowledge Base**: A self-learning memory system that fingerprints errors and retrieves successful fix patterns from historical data and runbooks to speed up resolution.
+-   **Language Scoping**: Implements strict language boundaries (JS/TS, Python, Go) using hybrid keyword/manifest detection to ensure the agent prioritizes relevant files and tools for the detected technology stack.
 -   **Context Engine**: Uses AST-based dependency graph analysis to understand code relationships and intelligently isolate relevant files.
 
 ## 🚀 Getting Started
