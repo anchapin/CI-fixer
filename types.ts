@@ -112,6 +112,20 @@ export interface AppConfig {
   dockerImage?: string; // e.g., 'node:20-bullseye'
 }
 
+export enum LanguageScope {
+  JS_TS = 'js_ts',
+  PYTHON = 'python',
+  GO = 'go',
+  GENERIC = 'generic'
+}
+
+export interface ScopeMapping {
+  keywords: string[];
+  manifests: string[];
+}
+
+export type ScopingRules = Record<LanguageScope, ScopeMapping>;
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'agent';
