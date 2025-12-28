@@ -1,4 +1,5 @@
-import { ErrorCategory } from './types.js';
+import { ErrorCategory, LanguageScope } from './types.js';
+import { LanguageScopingService } from './services/LanguageScopingService.js';
 
 /**
  * Error Classification System for CI-Fixer
@@ -25,6 +26,7 @@ export interface ClassifiedError {
     suggestedAction?: string;     // Optional hint for fixing
     relatedFiles?: string[];      // NEW: Related files to edit together (from dependency analysis)
     historicalMatches?: any[];    // NEW: Similar past fixes from knowledge base
+    scope?: LanguageScope;        // NEW: Detected language scope
 }
 
 // ============================================================================
@@ -667,10 +669,20 @@ export function isCascadingError(
  */
 export async function classifyErrorWithHistory(
     logs: string,
-    profile?: any // RepositoryProfile from validation.ts
+    profile?: any, // RepositoryProfile from validation.ts
+    workingDir: string = process.cwd()
 ): Promise<ClassifiedError> {
     // Start with basic classification
     const classified = classifyError(logs);
+
+    // Detect Language Scope
+    try {
+        const scopeService = new LanguageScopingService();
+        classified.scope = await scopeService.detectScope(logs, workingDir);
+    } catch (e) {
+        console.warn('Scope detection failed:', e);
+        classified.scope = LanguageScope.GENERIC;
+    }
 
     // If we have a profile with file relationships, find related files
     if (profile && profile.fileRelationships && classified.affectedFiles.length > 0) {
