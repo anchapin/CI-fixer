@@ -8,7 +8,7 @@ This plan implements a "Grounding" layer to ensure the agent's file system opera
 - [x] Task: Implement Grounding Coordinator [64997af]
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Grounding Logic' (Protocol in workflow.md)
 
-## Phase 2: Tool & Shell Integration
+## Phase 2: Tool & Shell Integration [checkpoint: 368b09d]
 - [x] Task: Integrate Grounding into File Access Tools [25b3fe7]
 - [x] Task: Implement Shell Command Grounding Wrapper [25b3fe7]
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Tool & Shell Integration' (Protocol in workflow.md)
