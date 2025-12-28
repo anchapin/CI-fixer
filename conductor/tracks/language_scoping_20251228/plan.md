@@ -1,7 +1,7 @@
 # Implementation Plan: Strict Language Scoping for Error Diagnosis
 
 ## Phase 1: Core Scoping Engine
-- [~] **Task: Define Scoping Data Structures**
+- [x] **Task: Define Scoping Data Structures** d9fb743
   - Define `LanguageScope` type and the keyword/manifest mapping in `types.ts`.
 - [ ] **Task: Implement LanguageScopingEngine (Red Phase)**
   - Create `__tests__/unit/languageScoping.test.ts`.
