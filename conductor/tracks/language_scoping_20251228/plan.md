@@ -3,7 +3,7 @@
 ## Phase 1: Core Scoping Engine
 - [x] **Task: Define Scoping Data Structures** d9fb743
   - Define `LanguageScope` type and the keyword/manifest mapping in `types.ts`.
-- [ ] **Task: Implement LanguageScopingEngine (Red Phase)**
+- [x] **Task: Implement LanguageScopingEngine (Red Phase)** 45b08a4
   - Create `__tests__/unit/languageScoping.test.ts`.
   - Write tests for identifying JS/TS, Python, Go, and Generic scopes based on log snippets and mock file systems.
 - [ ] **Task: Implement LanguageScopingEngine (Green Phase)**
