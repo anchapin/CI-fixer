@@ -1,12 +1,34 @@
-
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { findUniqueFile } from '../../utils/fileVerification';
 import { extractPaths, validatePath, findClosestExistingParent } from '../../utils/pathDetection';
+import { GroundingCoordinator } from '../grounding/coordinator';
+import { GroundingAction } from '../grounding/types';
+
+/**
+ * Agent Tools with Grounding Integration
+ * 
+ * This module exports file system tools (readFile, writeFile, runCmd) that are wrapped
+ * with a "Grounding" layer. This layer intercepts path arguments, verifies their existence
+ * using the GroundingCoordinator, and autonomously attempts to correct "hallucinated" paths
+ * (e.g., wrong directory, typo) before execution.
+ * 
+ * Track: fs_grounding_20251228
+ */
 
 const execPromise = promisify(exec);
+
+// Cache coordinators by rootDir to avoid re-scanning
+const coordinatorCache = new Map<string, GroundingCoordinator>();
+
+function getCoordinator(rootDir: string): GroundingCoordinator {
+    if (!coordinatorCache.has(rootDir)) {
+        coordinatorCache.set(rootDir, new GroundingCoordinator(rootDir));
+    }
+    return coordinatorCache.get(rootDir)!;
+}
 
 /**
  * Helper function to log path corrections in a parseable format.
@@ -44,73 +66,52 @@ async function verifyFileExists(
     operation: string,
     rootDir: string = process.cwd()
 ): Promise<{ verifiedPath: string; wasCorrected: boolean; relativePath?: string; error?: string }> {
-    const absPath = path.resolve(rootDir, filePath);
-    const validation = validatePath(absPath);
+    const coordinator = getCoordinator(rootDir);
 
-    // If file exists exactly where specified, return it
-    if (validation.exists) {
-        if (fs.statSync(absPath).isFile()) {
-            const relPath = path.relative(rootDir, absPath);
-            return { verifiedPath: absPath, wasCorrected: false, relativePath: relPath };
-        } else {
-            return {
-                verifiedPath: absPath,
-                wasCorrected: false,
-                error: `Error: '${filePath}' is a directory, not a file. Cannot ${operation} a directory.`
-            };
-        }
-    }
+    const result = await coordinator.ground({
+        path: filePath,
+        action: operation
+    });
 
-    // File doesn't exist - try to find it project-wide
-    try {
-        const verification = await findUniqueFile(filePath, rootDir);
 
-        if (verification.found && verification.path) {
-            // Found it - return the corrected path
-            return {
-                verifiedPath: verification.path,
-                wasCorrected: true,
-                relativePath: path.relative(rootDir, verification.path)
-            };
-        } else {
-            // No unique match found - trigger directory discovery
-            const parentRelative = path.relative(rootDir, validation.closestParent || '.') || '.';
-            
-            logPathHallucination(operation, filePath);
-
-            let errorMsg = `Error: Path NOT FOUND '${filePath}'.\n`;
-            errorMsg += `Closest existing parent directory: '${parentRelative}'\n`;
-
-            try {
-                const dirFiles = fs.readdirSync(path.resolve(rootDir, parentRelative));
-                errorMsg += `Directory listing of '${parentRelative}':\n${dirFiles.map(f => `  - ${f}`).join('\n')}\n`;
-            } catch (dirErr) {
-                // If we can't list the directory, just skip it
-            }
-
-            if (validation.suggestions && validation.suggestions.length > 0) {
-                const relativeSuggestions = validation.suggestions.map(s => path.relative(rootDir, s));
-                errorMsg += `Did you mean:\n${relativeSuggestions.map(s => `  - ${s}`).join('\n')}\n`;
-            }
-
-            if (verification.matches.length > 0) {
-                const relativeMatches = verification.matches.map(m => path.relative(rootDir, m));
-                errorMsg += `\nNote: multiple candidates were found: ${relativeMatches.join(', ')}. Please specify the correct path or ensure unique filename.`;
-            }
-
-            return {
-                verifiedPath: absPath,
-                wasCorrected: false,
-                error: errorMsg
-            };
-        }
-    } catch (e: any) {
+    if (result.success && result.groundedPath) {
+        const absPath = path.resolve(rootDir, result.groundedPath);
+        const wasCorrected = result.groundedPath.replace(/\\/g, '/') !== filePath.replace(/\\/g, '/');
+        
         return {
             verifiedPath: absPath,
-            wasCorrected: false,
-            error: `Error: Could not verify file '${filePath}': ${e.message}`
+            wasCorrected: wasCorrected,
+            relativePath: result.groundedPath
         };
     }
+
+    // If grounding failed, provide detailed error
+    logPathHallucination(operation, filePath);
+    
+    let errorMsg = result.error || `Error: Path NOT FOUND '${filePath}'.`;
+    
+    // Add some helpful context if it wasn't provided by coordinator
+    if (!result.error || !result.error.includes('Found multiple candidates')) {
+        const absFilePath = path.resolve(rootDir, filePath);
+        const validation = validatePath(absFilePath);
+        const parentRelative = path.relative(rootDir, validation.closestParent || '.') || '.';
+        errorMsg += `\nClosest existing parent directory: '${parentRelative}'`;
+        
+        try {
+            const dirFiles = fs.readdirSync(path.resolve(rootDir, parentRelative));
+            if (dirFiles.length > 0) {
+                errorMsg += `\nDirectory listing of '${parentRelative}':\n${dirFiles.map(f => `  - ${f}`).join('\n')}`;
+            }
+        } catch (dirErr) {
+            // Ignore directory read errors
+        }
+    }
+
+    return {
+        verifiedPath: path.resolve(rootDir, filePath),
+        wasCorrected: false,
+        error: errorMsg
+    };
 }
 
 /**
@@ -286,7 +287,8 @@ export async function runCmd(command: string): Promise<string> {
 /**
  * Searches for a string in files within a directory using grep.
  */
-export async function search(query: string, rootDir: string = "."): Promise<string[]> {
+export async function search(query: string, rootDir: string = "."):
+ Promise<string[]> {
     try {
         const cmd = `grep -r "${query}" ${rootDir} | head -n 20`;
         const output = await runCmd(cmd);
@@ -308,7 +310,8 @@ export async function search(query: string, rootDir: string = "."): Promise<stri
 /**
  * Lists files in a directory.
  */
-export async function listDir(dirPath: string = "."): Promise<string[]> {
+export async function listDir(dirPath: string = "."):
+ Promise<string[]> {
     try {
         const fullPath = path.resolve(process.cwd(), dirPath);
         const files = await fs.promises.readdir(fullPath);
