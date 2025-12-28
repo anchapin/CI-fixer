@@ -1,15 +1,10 @@
 # Implementation Plan: Strict Language Scoping for Error Diagnosis
 
-## Phase 1: Core Scoping Engine
+## Phase 1: Core Scoping Engine [checkpoint: a426e9f]
 - [x] **Task: Define Scoping Data Structures** d9fb743
-  - Define `LanguageScope` type and the keyword/manifest mapping in `types.ts`.
 - [x] **Task: Implement LanguageScopingEngine (Red Phase)** 45b08a4
-  - Create `__tests__/unit/languageScoping.test.ts`.
-  - Write tests for identifying JS/TS, Python, Go, and Generic scopes based on log snippets and mock file systems.
 - [x] **Task: Implement LanguageScopingEngine (Green Phase)** e7cc8ba
-  - Create `services/LanguageScopingService.ts`.
-  - Implement the `detectScope(logs: string, workingDir: string)` method using keyword matching and manifest validation.
-- [ ] **Task: Conductor - User Manual Verification 'Phase 1: Core Scoping Engine' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Phase 1: Core Scoping Engine' (Protocol in workflow.md)**
 
 ## Phase 2: Integration with Error Classification
 - [ ] **Task: Enhance Error Classification (Red Phase)**
