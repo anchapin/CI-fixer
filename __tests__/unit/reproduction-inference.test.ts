@@ -38,13 +38,13 @@ jobs:
         run: npm test -- --coverage
     `;
 
-    vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
+    vi.mocked(fs.stat).mockImplementation((p: string | any) => {
         if (p === path.join(mockRepoPath, '.github/workflows')) {
-            return Promise.resolve({ isDirectory: () => true } as fs.Stats);
+            return Promise.resolve({ isDirectory: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
-    vi.mocked(fs.readdir).mockResolvedValue(['ci.yml'] as string[]);
+    vi.mocked(fs.readdir).mockResolvedValue(['ci.yml'] as any);
     vi.mocked(fs.readFile).mockResolvedValue(workflowContent);
 
     const result = await service.inferCommand(mockRepoPath);
@@ -58,7 +58,7 @@ jobs:
   it('should infer command from Node signature (package.json)', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'package.json')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -73,7 +73,7 @@ jobs:
   it('should infer command from Python signature (pytest.ini)', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'pytest.ini')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -88,7 +88,7 @@ jobs:
   it('should infer command from Go signature (go.mod)', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'go.mod')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -103,7 +103,7 @@ jobs:
   it('should infer command from Makefile (test target)', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'Makefile')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -119,7 +119,7 @@ jobs:
   it('should infer command from build.gradle (check target)', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'build.gradle')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -136,7 +136,7 @@ jobs:
   it('should infer command from Maven (pom.xml)', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'pom.xml')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -152,7 +152,7 @@ jobs:
   it('should infer command from Rakefile', async () => {
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'Rakefile')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
@@ -169,11 +169,11 @@ jobs:
     // Both Workflow and package.json exist
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, '.github/workflows') || p === path.join(mockRepoPath, 'package.json')) {
-            return Promise.resolve({ isDirectory: () => true, isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isDirectory: () => true, isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });
-    vi.mocked(fs.readdir).mockResolvedValue(['ci.yml'] as string[]);
+    vi.mocked(fs.readdir).mockResolvedValue(['ci.yml'] as any);
     vi.mocked(fs.readFile).mockResolvedValue('jobs:\n  test:\n    steps:\n      - run: npm run test:custom');
 
     const result = await service.inferCommand(mockRepoPath);
@@ -186,7 +186,7 @@ jobs:
     // package.json and Makefile exist
     vi.mocked(fs.stat).mockImplementation((p: string | Buffer | URL) => {
         if (p === path.join(mockRepoPath, 'package.json') || p === path.join(mockRepoPath, 'Makefile')) {
-            return Promise.resolve({ isFile: () => true } as fs.Stats);
+            return Promise.resolve({ isFile: () => true } as any);
         }
         return Promise.reject(new Error('File not found'));
     });

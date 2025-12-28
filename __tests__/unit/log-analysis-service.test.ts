@@ -379,7 +379,7 @@ describe('LogAnalysisService', () => {
 
     describe('formatPlanToMarkdown', () => {
         it('should format plan with completed tasks', () => {
-            const plan = {
+            const plan: any = {
                 goal: 'Fix bugs',
                 tasks: [
                     { id: '1', description: 'Task 1', status: 'completed' },

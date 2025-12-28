@@ -54,10 +54,10 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
     return (
         <div className="w-full space-y-3 px-2">
             {/* Header Row */}
-            <div className="grid grid-cols-[80px_1fr_40px] gap-2 items-center text-[9px] font-mono text-slate-500 uppercase border-b border-slate-800 pb-1">
+            <div key="header-row" className="grid grid-cols-[80px_1fr_40px] gap-2 items-center text-[9px] font-mono text-slate-500 uppercase border-b border-slate-800 pb-1">
                 <div>Agent</div>
                 <div className="flex justify-between px-2">
-                    {steps.map(s => <span key={s.id}>{s.label}</span>)}
+                    {steps.map(s => <span key={`step-label-${s.id}`}>{s.label}</span>)}
                 </div>
                 <div className="text-center">Iter</div>
             </div>
@@ -70,8 +70,9 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                 const hasLocks = agent.fileReservations && agent.fileReservations.length > 0;
 
                 return (
-                    <React.Fragment key={agent.groupId}>
+                    <React.Fragment key={`agent-fragment-${agent.groupId}`}>
                         <div
+                            key={`agent-row-${agent.groupId}`}
                             onClick={() => onSelectAgent(agent.groupId)}
                             className={`grid grid-cols-[80px_1fr_40px] gap-2 items-center group cursor-pointer rounded p-1 transition-all ${isSelected ? 'bg-slate-800 ring-1 ring-cyan-500/50' : 'hover:bg-slate-900'
                                 }`}
@@ -103,20 +104,17 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                                 <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-slate-800 -z-0" />
 
                                 <div className="w-full flex justify-between z-10 relative">
-                                    {steps.map((step, idx) => {
+                                    {steps.map((step) => {
                                         const stepIndex = steps.findIndex(s => s.id === step.id);
                                         const currentIndex = steps.findIndex(s => s.id === agent.phase);
 
                                         let isPassed = false;
                                         if (isSuccess) isPassed = true;
                                         else if (isFailed && agent.phase === AgentPhase.FAILURE) {
-                                            // If failed globally, assume we passed up to the point of failure? 
-                                            // Actually, stick to gray.
                                             isPassed = false;
                                         }
                                         else if (currentIndex > stepIndex) isPassed = true;
 
-                                        // Visual logic for skipped steps (Plan Approval is often skipped in automated mode)
                                         if (step.id === AgentPhase.PLAN_APPROVAL && (
                                             agent.phase === AgentPhase.ACQUIRE_LOCK ||
                                             agent.phase === AgentPhase.IMPLEMENT ||
@@ -126,7 +124,7 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                                         const isCurrent = agent.phase === step.id;
 
                                         return (
-                                            <div key={step.id} className="flex flex-col items-center justify-center w-6 relative">
+                                            <div key={`agent-${agent.groupId}-step-${step.id}`} className="flex flex-col items-center justify-center w-6 relative">
                                                 <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isCurrent
                                                     ? (isFailed ? 'bg-rose-500 scale-125' : 'bg-cyan-400 scale-125 shadow-[0_0_8px_#22d3ee]')
                                                     : isPassed
@@ -170,7 +168,7 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
                         {/* Expanded Metrics Panel */}
                         {
                             expandedAgents.has(agent.groupId) && (
-                                <div className="col-span-3 mt-2 animate-[fadeIn_0.3s_ease-out]">
+                                <div key={`metrics-${agent.groupId}`} className="col-span-3 mt-2 animate-[fadeIn_0.3s_ease-out]">
                                     <MetricsDisplay
                                         metrics={{
                                             totalCost: agent.totalCost,
@@ -191,6 +189,7 @@ export const AgentStatus: React.FC<AgentStatusProps> = ({ agentStates, globalPha
             {/* Merged View Button (Only appears if we have agents) */}
             {activeAgentKeys.length > 0 && (
                 <div
+                    key="merged-view-button"
                     onClick={() => onSelectAgent('CONSOLIDATED')}
                     className={`flex items-center justify-center gap-2 p-2 mt-4 rounded border border-dashed cursor-pointer transition-all ${selectedAgentId === 'CONSOLIDATED'
                         ? 'bg-purple-900/20 border-purple-500/50 text-purple-300'

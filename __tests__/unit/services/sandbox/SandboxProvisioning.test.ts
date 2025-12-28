@@ -3,7 +3,16 @@ import { prepareSandbox } from '../../../../services/sandbox/SandboxService';
 import * as sandboxMod from '../../../../sandbox';
 
 vi.mock('../../../../sandbox', () => ({ createSandbox: vi.fn(), }));
-vi.mock('fs/promises'); // Mock fs to avoid actual file reads for agent_tools injection
+vi.mock('fs/promises', () => ({
+    readFile: vi.fn().mockResolvedValue('mock content'),
+}));
+vi.mock('path', async () => {
+    const actual = await vi.importActual('path') as any;
+    return {
+        ...actual,
+        resolve: vi.fn().mockImplementation((...args) => args[args.length - 1]),
+    };
+});
 
 describe('SandboxProvisioning', () => {
     let mockSandbox: any;

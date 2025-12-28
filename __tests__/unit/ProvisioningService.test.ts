@@ -15,7 +15,7 @@ describe('ProvisioningService', () => {
   });
 
   it('should install missing node tools using npm', async () => {
-    vi.mocked(mockSandbox.runCommand).mockResolvedValue({ output: 'success', exitCode: 0 });
+    vi.mocked(mockSandbox.runCommand).mockResolvedValue({ stdout: 'success', stderr: '', exitCode: 0 });
 
     const service = new ProvisioningService(mockSandbox);
     const result = await service.provision('vitest', 'node');
@@ -25,7 +25,7 @@ describe('ProvisioningService', () => {
   });
 
   it('should install missing python tools using pip', async () => {
-    vi.mocked(mockSandbox.runCommand).mockResolvedValue({ output: 'success', exitCode: 0 });
+    vi.mocked(mockSandbox.runCommand).mockResolvedValue({ stdout: 'success', stderr: '', exitCode: 0 });
 
     const service = new ProvisioningService(mockSandbox);
     const result = await service.provision('pytest', 'python');
@@ -35,7 +35,7 @@ describe('ProvisioningService', () => {
   });
 
   it('should return false if installation fails', async () => {
-    vi.mocked(mockSandbox.runCommand).mockResolvedValue({ output: 'error', exitCode: 1 });
+    vi.mocked(mockSandbox.runCommand).mockResolvedValue({ stdout: '', stderr: 'error', exitCode: 1 });
 
     const service = new ProvisioningService(mockSandbox);
     const result = await service.provision('vitest', 'node');

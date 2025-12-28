@@ -132,7 +132,7 @@ describe('Dockerfile Repair Regression', () => {
         vi.mocked(LogAnalysisService.runSandboxTest).mockResolvedValue({ passed: true, logs: 'Build Success' });
         vi.mocked(LogAnalysisService.judgeFix).mockResolvedValue({ passed: true, score: 10, reasoning: 'Fixed' });
 
-        const result = await runIndependentAgentLoop(config, group, 'ctx', testServices, (state) => {
+        const result = await runIndependentAgentLoop(config, group, 'ctx', testServices, (_id, state) => {
             console.log(`[Test] State update: phase=${state.phase}, currentNode=${state.currentNode}, status=${state.status}`);
         }, mockLog);
 

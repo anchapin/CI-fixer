@@ -11,7 +11,8 @@ vi.mock('child_process', () => {
             const callback = typeof opts === 'function' ? opts : cb;
             if (callback) callback(null, { stdout: 'mock success', stderr: '' });
             return {};
-        })
+        }),
+        execSync: vi.fn().mockReturnValue('')
     };
 });
 

@@ -98,7 +98,7 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({ lines, activeGro
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 border border-slate-700 rounded-lg overflow-hidden font-mono shadow-[0_0_20px_rgba(0,0,0,0.5)] relative group">
+    <div className="terminal-output flex flex-col h-full bg-slate-950 border border-slate-700 rounded-lg overflow-hidden font-mono shadow-[0_0_20px_rgba(0,0,0,0.5)] relative group">
       
       {/* Header & Tabs */}
       <div className="flex flex-col bg-slate-900 border-b border-slate-700 flex-none">

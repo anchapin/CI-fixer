@@ -18,13 +18,12 @@ This file tracks all major tracks for the project. Each track has its own detail
     - **Status**: COMPLETED
 *Link: [./conductor/archive/adaptive_sandbox_tooling_20251226/](./conductor/archive/adaptive_sandbox_tooling_20251226/)*
 
----
 
-- [~] **Missing Test Runners (Environment Issue)** (ID: `test-runners-fix_20251226`)
-    - **Description**: Hybrid solution to resolve missing test runners by updating Docker and ProvisioningService.
-    - **Plan**: `conductor/tracks/test-runners-fix_20251226/plan.md`
-    - **Status**: IN PROGRESS
-*Link: [./conductor/tracks/test-runners-fix_20251226/](./conductor/tracks/test-runners-fix_20251226/)*
+
+
+
+
+
 
 
 

@@ -62,7 +62,7 @@ import {
     getEnhancementStats
 } from '../../services/enhanced-planning.js';
 
-import { SandboxEnvironment } from '../../services/sandbox.js';
+import { SandboxEnvironment } from '../../sandbox.js';
 
 describe('Enhanced Planning Service', () => {
     beforeEach(() => {

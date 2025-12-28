@@ -1,5 +1,4 @@
 import { expect } from 'vitest';
-import type { MatcherFunction } from 'vitest';
 
 /**
  * Custom matchers for test assertions
@@ -8,7 +7,7 @@ import type { MatcherFunction } from 'vitest';
 /**
  * Assert that a GraphState has transitioned to a specific node
  */
-export const toHaveTransitionedTo: MatcherFunction = function (received: any, expectedNode: string) {
+export const toHaveTransitionedTo: any = function (received: any, expectedNode: string) {
     const pass = received?.currentNode === expectedNode;
 
     return {
@@ -24,7 +23,7 @@ export const toHaveTransitionedTo: MatcherFunction = function (received: any, ex
 /**
  * Assert that a state has a diagnosis with specific properties
  */
-export const toHaveDiagnosisMatching: MatcherFunction = function (received: any, expected: Partial<any>) {
+export const toHaveDiagnosisMatching: any = function (received: any, expected: Partial<any>) {
     const diagnosis = received?.diagnosis;
 
     if (!diagnosis) {
@@ -58,7 +57,7 @@ export const toHaveDiagnosisMatching: MatcherFunction = function (received: any,
 /**
  * Assert that a state has specific file reservations
  */
-export const toHaveReservedFiles: MatcherFunction = function (received: any, expectedFiles: string[]) {
+export const toHaveReservedFiles: any = function (received: any, expectedFiles: string[]) {
     const reservations = received?.fileReservations || [];
     const pass = expectedFiles.every(file => reservations.includes(file));
 
@@ -75,7 +74,7 @@ export const toHaveReservedFiles: MatcherFunction = function (received: any, exp
 /**
  * Assert that a state has feedback containing specific text
  */
-export const toHaveFeedbackContaining: MatcherFunction = function (received: any, expectedText: string) {
+export const toHaveFeedbackContaining: any = function (received: any, expectedText: string) {
     const feedback = received?.feedback || [];
     const pass = feedback.some((f: string) => f.includes(expectedText));
 
@@ -92,7 +91,7 @@ export const toHaveFeedbackContaining: MatcherFunction = function (received: any
 /**
  * Assert that a mock function was called with a log message containing specific text
  */
-export const toHaveLoggedMessage: MatcherFunction = function (received: any, level: string, messagePattern: string | RegExp) {
+export const toHaveLoggedMessage: any = function (received: any, level: string, messagePattern: string | RegExp) {
     if (typeof received !== 'function' || !received.mock) {
         return {
             pass: false,
@@ -122,7 +121,7 @@ export const toHaveLoggedMessage: MatcherFunction = function (received: any, lev
 /**
  * Assert that a database record was created with specific properties
  */
-export const toHaveCreatedRecord: MatcherFunction = async function (received: any, tableName: string, expectedProps: any) {
+export const toHaveCreatedRecord: any = async function (received: any, tableName: string, expectedProps: any) {
     if (!received || !received[tableName]) {
         return {
             pass: false,

@@ -19,7 +19,8 @@ function logTrace(msg: string) {
 export interface DiagnosisResult {
     summary: string;
     filePath: string;
-    fixAction: 'edit' | 'command';
+    fixAction: 'edit' | 'command' | 'create';
+    type?: string; // Error type (e.g. 'dependency_error')
     suggestedCommand?: string;
     reproductionCommand?: string;
     confidence?: number; // Diagnosis confidence (0-1)

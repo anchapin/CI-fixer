@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { AgentPhase, ErrorCategory } from '../../../../types.js';
-import { codingNode } from '../../../../agent/graph/nodes/execution.js';
+import { AgentPhase, ErrorCategory } from '../../../types.js';
+import { codingNode } from '../../../agent/graph/nodes/execution.js';
+import { GraphState, GraphContext } from '../../../agent/graph/state.js';
 import { TestDatabaseManager } from '../../helpers/test-database.js';
 import { SimulationSandbox } from '../../../sandbox.js';
 import { registerCustomMatchers } from '../../helpers/custom-assertions.js';

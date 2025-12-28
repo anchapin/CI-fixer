@@ -19,8 +19,10 @@ import { SimulationSandbox } from '../sandbox';
 // Mock Services Factory
 const createMockServices = (): ServiceContainer => {
     return {
+        ...defaultServices,
         github: {} as any,
         sandbox: {
+            ...defaultServices.sandbox,
             prepareSandbox: async () => new SimulationSandbox(),
             // Mock other methods if called
             initSandbox: async () => { },

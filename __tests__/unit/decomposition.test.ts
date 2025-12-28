@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ErrorNode, ErrorDAG } from '../../../types.js';
+import { ErrorNode, ErrorDAG } from '../../types.js';
 
 // Import the validation functions by extracting them from the decomposition node
 // Since they're not exported, we'll test them indirectly through the node

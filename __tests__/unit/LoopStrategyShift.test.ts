@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { analysisNode } from './agent/graph/nodes/analysis.js';
-import { GraphState, GraphContext } from './agent/graph/state.js';
-import { LoopDetector } from './services/LoopDetector.js';
-import { AgentPhase } from './types.js';
+import { analysisNode } from '../../agent/graph/nodes/analysis.js';
+import { GraphState, GraphContext } from '../../agent/graph/state.js';
+import { LoopDetector } from '../../services/LoopDetector.js';
+import { AgentPhase } from '../../types.js';
 
 describe('Strategy Shift Mitigation', () => {
     let mockState: any;

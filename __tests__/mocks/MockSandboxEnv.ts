@@ -16,7 +16,7 @@ export class MockSandboxEnv implements SandboxEnvironment {
         // no-op
     }
 
-    async runCommand(command: string, opts?: any): Promise<any> {
+    async runCommand(command: string, options?: { timeout?: number }): Promise<any> {
         this.commands.push(command);
         console.log(`[MockSandbox] Executing: ${command}`);
 
@@ -29,6 +29,10 @@ export class MockSandboxEnv implements SandboxEnvironment {
         }
 
         return { stdout: "Mock Success", stderr: "", exitCode: 0, outputs: [] };
+    }
+
+    async listFiles(path?: string): Promise<Map<string, string>> {
+        return this.files;
     }
 
     async writeFile(path: string, content: string): Promise<void> {
@@ -55,5 +59,5 @@ export class MockSandboxEnv implements SandboxEnvironment {
 
     async kill(): Promise<void> { }
 
-    async exec(command: string) { return this.runCommand(command); }
+    async exec(command: string, options?: { timeout?: number }) { return this.runCommand(command, options); }
 }

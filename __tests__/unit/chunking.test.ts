@@ -17,7 +17,6 @@ describe('Code Generation Chunking', () => {
         repoUrl: 'owner/repo',
         githubToken: 'token',
         llmProvider: 'google',
-        // @ts-expect-error - Testing invalid state
         devEnv: 'simulation'
     };
 

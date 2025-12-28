@@ -17,11 +17,11 @@ import { ErrorCategory } from './types.js';
 export interface ClassifiedError {
     category: ErrorCategory;
     confidence: number;           // 0.0-1.0 confidence in classification
-    rootCauseLog: string;         // The specific log line indicating root cause
-    cascadingErrors: string[];    // Related errors stemming from root cause
+    rootCauseLog?: string;         // The specific log line indicating root cause
+    cascadingErrors?: string[];    // Related errors stemming from root cause
     affectedFiles: string[];      // Files mentioned in error (for targeted fixes)
     timestamp?: string;           // When error first occurred (if extractable)
-    errorMessage: string;         // Cleaned, concise error message
+    errorMessage?: string;         // Cleaned, concise error message
     suggestedAction?: string;     // Optional hint for fixing
     relatedFiles?: string[];      // NEW: Related files to edit together (from dependency analysis)
     historicalMatches?: any[];    // NEW: Similar past fixes from knowledge base
@@ -196,7 +196,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
         ],
         confidence: 0.85,
         extractFiles: (log) => {
-            const matches = log.match(/(?:cannot find module|module not found).*?['"]([^'"]+)['"]/i);
+            const matches = log.match(/(?:cannot find module|module not found|ModuleNotFoundError: No module named).*?['"]([^'"]+)['"]/i);
             return matches ? [matches[1]] : [];
         },
         suggestedAction: "Install missing dependencies or fix package.json/requirements.txt"
@@ -261,11 +261,12 @@ const ERROR_PATTERNS: ErrorPattern[] = [
             /gradle build failed/i,
             /maven build failure/i,
             /error TS\d+/i,
-            /BUILD FAILED/
+            /BUILD FAILED/,
+            /FAILED:.*\.o/ // Ninja/C++
         ],
         confidence: 0.8,
         extractFiles: (log) => {
-            const matches = log.match(/([^\s:]+\.(?:ts|tsx|js|jsx|java|go|rs))(?:\(\d+,\d+\))?:\s*error/i);
+            const matches = log.match(/([^\s:]+\.(?:ts|tsx|js|jsx|java|go|rs|cpp|c|h|hpp))(?:\(\d+,\d+\))?:\s*error/i);
             return matches ? [matches[1]] : [];
         },
         suggestedAction: "Fix compilation errors in source code"

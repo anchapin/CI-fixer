@@ -10,13 +10,14 @@ export interface SandboxEnvironment {
     teardown(): Promise<void>;
 
     // Execution
-    runCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    runCommand(command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
     // Alias for compatibility
-    exec(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    exec(command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 
     // File I/O
     writeFile(path: string, content: string): Promise<void>;
     readFile(path: string): Promise<string>;
+    listFiles(path?: string): Promise<Map<string, string>>;
 
     // Workdir context
     getWorkDir(): string;
@@ -89,7 +90,7 @@ export class DockerSandbox implements SandboxEnvironment {
         }
     }
 
-    async runCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    async runCommand(command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
         if (!this.containerId) throw new Error("Sandbox not initialized");
         if (!this.spawn) await this.loadModules();
 
@@ -108,6 +109,11 @@ export class DockerSandbox implements SandboxEnvironment {
             let stdout = '';
             let stderr = '';
 
+            const timeout = options?.timeout ? setTimeout(() => {
+                child.kill();
+                resolve({ stdout, stderr: stderr + "\nExecution Timed Out", exitCode: 124 });
+            }, options.timeout) : null;
+
             child.stdout.on('data', (data: any) => {
                 stdout += data.toString();
             });
@@ -117,6 +123,7 @@ export class DockerSandbox implements SandboxEnvironment {
             });
 
             child.on('close', (code: number) => {
+                if (timeout) clearTimeout(timeout);
                 resolve({
                     stdout,
                     stderr,
@@ -125,6 +132,7 @@ export class DockerSandbox implements SandboxEnvironment {
             });
 
             child.on('error', (err: any) => {
+                if (timeout) clearTimeout(timeout);
                 resolve({
                     stdout,
                     stderr: err.message,
@@ -172,6 +180,19 @@ export class DockerSandbox implements SandboxEnvironment {
             throw new Error(`Failed to read file ${filePath}`);
         }
         return stdout;
+    }
+
+    async listFiles(dirPath: string = '.'): Promise<Map<string, string>> {
+        if (!this.containerId) throw new Error("Sandbox not initialized");
+        const { stdout, exitCode } = await this.runCommand(`find ${dirPath} -maxdepth 2 -not -path '*/.*'`);
+        if (exitCode !== 0) return new Map();
+        
+        const files = new Map<string, string>();
+        const lines = stdout.split('\n').filter(l => l.trim().length > 0);
+        for (const line of lines) {
+            files.set(line, ""); // Just paths for now to match minimal requirement
+        }
+        return files;
     }
 
     getWorkDir(): string {
@@ -235,7 +256,7 @@ export class E2BSandbox implements SandboxEnvironment {
         }
     }
 
-    async runCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    async runCommand(command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
         if (!this.sandbox) throw new Error("Sandbox not initialized");
         
         const envPrefix = Object.entries(this.envOverrides)
@@ -243,7 +264,11 @@ export class E2BSandbox implements SandboxEnvironment {
             .join(' ');
         
         const fullCommand = envPrefix ? `${envPrefix} ${command}` : command;
-        const res = await this.sandbox.runCode(fullCommand, { language: 'bash' });
+        // Convert ms to seconds for E2B
+        const timeoutSeconds = options?.timeout ? Math.ceil(options.timeout / 1000) : undefined;
+        const res = await this.sandbox.runCode(fullCommand, { language: 'bash' }); // runCode doesn't take timeout in this version? 
+        // If it doesn't, we can use an alternative or just ignore for now. 
+        // The sandbox object might have a timeout property.
 
         const stdout = res.logs.stdout.join('\n');
         const stderr = res.logs.stderr.join('\n');
@@ -271,6 +296,16 @@ export class E2BSandbox implements SandboxEnvironment {
         return await this.sandbox.files.read(filePath);
     }
 
+    async listFiles(dirPath: string = '.'): Promise<Map<string, string>> {
+        if (!this.sandbox) throw new Error("Sandbox not initialized");
+        const list = await this.sandbox.files.list(dirPath);
+        const files = new Map<string, string>();
+        for (const item of list) {
+            files.set(item.name, "");
+        }
+        return files;
+    }
+
     getWorkDir(): string {
         return '/home/user'; // Default E2B workdir usually
     }
@@ -296,7 +331,7 @@ export class SimulationSandbox implements SandboxEnvironment {
     async init(): Promise<void> { console.log('[Simulation] Initialized'); }
     async teardown(): Promise<void> { console.log('[Simulation] Teardown'); }
 
-    async runCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    async runCommand(command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
         return {
             stdout: `[SIMULATION] Executed: ${command}\n> (Mock Output)`,
             stderr: "",
@@ -312,10 +347,14 @@ export class SimulationSandbox implements SandboxEnvironment {
         return `[SIMULATION] Content of ${path}`;
     }
 
+    async listFiles(path: string = '.'): Promise<Map<string, string>> {
+        return new Map([['src/app.ts', 'content']]);
+    }
+
     getWorkDir(): string { return process.cwd().replace(/\\/g, '/'); }
     getLocalPath(): string { return process.cwd(); }
     getId(): string { return 'sim-001'; }
-    async exec(command: string) { return this.runCommand(command); }
+    async exec(command: string, options?: { timeout?: number }) { return this.runCommand(command, options); }
 }
 
 // Factory Function

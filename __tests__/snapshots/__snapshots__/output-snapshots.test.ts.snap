@@ -2,7 +2,9 @@
 
 exports[`Snapshot Tests > Error Classification Output > should match snapshot for dependency error classification 1`] = `
 {
-  "affectedFiles": [],
+  "affectedFiles": [
+    "lodash",
+  ],
   "category": "dependency",
   "confidence": 0.85,
   "suggestedAction": "Install missing dependencies or fix package.json/requirements.txt",

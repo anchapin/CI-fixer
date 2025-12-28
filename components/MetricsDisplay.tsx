@@ -125,7 +125,7 @@ export const MetricsDisplay: React.FC<MetricsDisplayProps> = ({ metrics, compact
                     <div className="flex flex-wrap gap-1.5">
                         {selectedTools.map((tool, idx) => (
                             <span
-                                key={idx}
+                                key={`tool-${tool}-${idx}`}
                                 className="text-xs px-2 py-0.5 bg-cyan-950/50 text-cyan-300 border border-cyan-900 rounded"
                             >
                                 {tool.replace(/_/g, ' ')}
@@ -155,7 +155,7 @@ export const MetricsDisplay: React.FC<MetricsDisplayProps> = ({ metrics, compact
                             const color = reward > 80 ? 'bg-emerald-400' : reward > 50 ? 'bg-amber-400' : 'bg-red-400';
                             return (
                                 <div
-                                    key={idx}
+                                    key={`reward-trend-${idx}`}
                                     className={`flex-1 ${color} rounded-t transition-all duration-300`}
                                     style={{ height: `${height}%` }}
                                     title={`Iteration ${idx + 1}: ${reward.toFixed(1)}`}

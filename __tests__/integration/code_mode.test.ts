@@ -9,7 +9,8 @@ import * as path from 'path';
 const config = {
     githubToken: 'test-token',
     userLogin: 'test-user',
-    repoName: 'test-repo'
+    repoName: 'test-repo',
+    repoUrl: 'https://github.com/test-user/test-repo'
 };
 
 describe('Code Mode Integration', () => {

@@ -16,9 +16,9 @@ describe('CapabilityProbe', () => {
 
   it('should detect available tools using --version', async () => {
     vi.mocked(mockSandbox.runCommand).mockImplementation(async (cmd) => {
-      if (cmd === 'node --version') return { output: 'v20.0.0', exitCode: 0 };
-      if (cmd === 'npm --version') return { output: '9.0.0', exitCode: 0 };
-      return { output: 'not found', exitCode: 127 };
+      if (cmd === 'node --version') return { stdout: 'v20.0.0', stderr: '', exitCode: 0 };
+      if (cmd === 'npm --version') return { stdout: '9.0.0', stderr: '', exitCode: 0 };
+      return { stdout: '', stderr: 'not found', exitCode: 127 };
     });
 
     const probe = new CapabilityProbe(mockSandbox);

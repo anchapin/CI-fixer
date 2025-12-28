@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { validatePatch, validatePatches, ValidationResult } from '../../../../services/repair-agent/patch-validation';
 import { AppConfig } from '../../../../types';
 import { PatchCandidate } from '../../../../services/repair-agent/patch-generation';
-import { SandboxEnvironment } from '../../../../services/sandbox';
+import { SandboxEnvironment } from '../../../../sandbox.js';
 
 describe('Patch Validation', () => {
     const mockConfig = {} as AppConfig;
@@ -11,7 +11,9 @@ describe('Patch Validation', () => {
         id: 'p1',
         code: 'console.log("foo");',
         confidence: 1.0,
-        strategy: 'single'
+        strategy: 'direct',
+        description: 'Mock patch',
+        reasoning: 'Mock reasoning'
     };
 
     const mockSandbox = {

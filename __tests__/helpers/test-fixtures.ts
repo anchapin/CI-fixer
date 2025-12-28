@@ -195,6 +195,8 @@ export const createMockServices = (overrides?: Partial<ServiceContainer>): Servi
         } as any,
         metrics: {
             recordFixAttempt: vi.fn(),
+            recordReproductionInference: vi.fn(),
+            recordAgentMetrics: vi.fn()
         } as any,
         learning: {
             getStrategyRecommendation: vi.fn().mockResolvedValue({
@@ -220,6 +222,37 @@ export const createMockServices = (overrides?: Partial<ServiceContainer>): Servi
         } as any,
         fallback: {
             generatePlaceholder: vi.fn().mockResolvedValue(undefined)
+        } as any,
+        environment: {
+            refreshDependencies: vi.fn().mockResolvedValue(true),
+            purgeEnvironment: vi.fn().mockResolvedValue(true),
+            repairPatches: vi.fn().mockResolvedValue(true),
+            killDanglingProcesses: vi.fn().mockResolvedValue(true)
+        } as any,
+        loopDetector: {
+            addState: vi.fn(),
+            detectLoop: vi.fn().mockReturnValue({ detected: false }),
+            recordHallucination: vi.fn().mockReturnValue({ shiftStrategy: false }),
+            getHallucinationCount: vi.fn().mockReturnValue(0),
+            getTotalHallucinations: vi.fn().mockReturnValue(0),
+            resetHallucinationTracking: vi.fn()
+        } as any,
+        ingestion: {
+            ingestRun: vi.fn().mockResolvedValue('run-id'),
+            ingestWorkflowLogs: vi.fn().mockResolvedValue([])
+        } as any,
+        learningMetrics: {
+            recordSuccess: vi.fn().mockResolvedValue(undefined),
+            recordFailure: vi.fn().mockResolvedValue(undefined),
+            getMetricsSummary: vi.fn().mockResolvedValue({})
+        } as any,
+        reproductionInference: {
+            inferCommand: vi.fn().mockResolvedValue({
+                command: 'npm test',
+                confidence: 0.9,
+                strategy: 'workflow',
+                reasoning: 'Mock reasoning'
+            })
         } as any
     };
 

@@ -83,6 +83,22 @@ vi.mock('../../services/llm/LLMService', () => ({
     extractCode: (text) => text
 }));
 
+vi.mock('../../validation.js', () => ({
+    analyzeRepository: vi.fn().mockResolvedValue({
+        languages: ['typescript'],
+        packageManager: 'npm',
+        buildSystem: 'vite',
+        testFramework: 'vitest',
+        availableScripts: { test: 'vitest' },
+        directoryStructure: { hasBackend: false, hasFrontend: true, testDirectories: [], sourceDirectories: [] },
+        configFiles: [],
+        repositorySize: 10
+    }),
+    formatProfileSummary: vi.fn().mockReturnValue('Mock Profile Summary'),
+    validateFileExists: vi.fn().mockResolvedValue(true),
+    validateCommand: vi.fn().mockReturnValue({ valid: true })
+}));
+
 /**
  * Agent Logic Tests (Refactored with New Patterns)
  * 
@@ -104,7 +120,6 @@ describe('Agent Logic (Refactored)', () => {
 
         // Construct service container
         services = {
-            ...services, // Use default or imported mocks
             llm: mockLLM as any,
             sandbox: mockSandbox as any,
             github: GitHubService as any,
@@ -142,8 +157,11 @@ describe('Agent Logic (Refactored)', () => {
                 getErrorPriority: vi.fn().mockReturnValue(5),
             } as any,
             dependency: {
+                recordErrorDependency: vi.fn().mockResolvedValue(undefined),
                 hasBlockingDependencies: vi.fn().mockResolvedValue(false),
                 getBlockedErrors: vi.fn().mockResolvedValue([]),
+                markErrorInProgress: vi.fn().mockResolvedValue(undefined),
+                markErrorResolved: vi.fn().mockResolvedValue(undefined),
             } as any,
             clustering: {
                 clusterError: vi.fn(),
@@ -160,12 +178,19 @@ describe('Agent Logic (Refactored)', () => {
             } as any,
             metrics: {
                 recordFixAttempt: vi.fn(),
+                recordAgentMetrics: vi.fn(),
+                recordReproductionInference: vi.fn(),
             } as any,
             ingestion: {
                 ingestRawData: vi.fn().mockResolvedValue({ id: 'mock-ingestion-id' }),
+                ingestRun: vi.fn().mockResolvedValue('run-id'),
+                ingestWorkflowLogs: vi.fn().mockResolvedValue([])
             } as any,
             learningMetrics: {
                 recordMetric: vi.fn().mockResolvedValue(undefined),
+                recordSuccess: vi.fn().mockResolvedValue(undefined),
+                recordFailure: vi.fn().mockResolvedValue(undefined),
+                getMetricsSummary: vi.fn().mockResolvedValue({})
             } as any,
             learning: {
                 getStrategyRecommendation: vi.fn().mockResolvedValue({
@@ -174,12 +199,27 @@ describe('Agent Logic (Refactored)', () => {
                 }),
                 processRunOutcome: vi.fn().mockResolvedValue({ reward: 10.0 })
             } as any,
+            loopDetector: {
+                addState: vi.fn(),
+                detectLoop: vi.fn().mockReturnValue({ detected: false }),
+                recordHallucination: vi.fn().mockReturnValue({ shiftStrategy: false }),
+                getHallucinationCount: vi.fn().mockReturnValue(0),
+                getTotalHallucinations: vi.fn().mockReturnValue(0),
+                resetHallucinationTracking: vi.fn()
+            } as any,
+            reproductionInference: {
+                inferCommand: vi.fn().mockResolvedValue({
+                    command: 'npm test',
+                    confidence: 0.9,
+                    strategy: 'workflow',
+                    reasoning: 'Mock reasoning'
+                })
+            } as any,
             discovery: {
                 findUniqueFile: vi.fn().mockImplementation(async (filename, rootDir) => ({
                     found: true,
-                    path: filename,
-                    relativePath: filename,
-                    matches: [filename]
+                    path: rootDir + '/' + filename,
+                    matches: [rootDir + '/' + filename]
                 })),
                 recursiveSearch: vi.fn().mockResolvedValue(null),
                 checkGitHistoryForRename: vi.fn().mockResolvedValue(null),
@@ -191,6 +231,11 @@ describe('Agent Logic (Refactored)', () => {
             } as any,
             fallback: {
                 generatePlaceholder: vi.fn().mockResolvedValue(undefined)
+            } as any,
+            environment: {
+                killDanglingProcesses: vi.fn().mockResolvedValue(undefined),
+                refreshDependencies: vi.fn().mockResolvedValue(undefined),
+                repairPatches: vi.fn().mockResolvedValue(undefined),
             } as any
         };
     });
@@ -266,6 +311,7 @@ describe('Agent Logic (Refactored)', () => {
         if (result.status !== 'success') {
             console.error('Agent failed:', result.message);
             console.error('LLM calls:', mockLLM.callHistory.length);
+            console.error('Agent Logs:\n', logs.join('\n'));
         }
 
         expect(result.status).toBe('success');

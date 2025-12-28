@@ -81,6 +81,13 @@ async function verifyFileExists(
             let errorMsg = `Error: Path NOT FOUND '${filePath}'.\n`;
             errorMsg += `Closest existing parent directory: '${parentRelative}'\n`;
 
+            try {
+                const dirFiles = fs.readdirSync(path.resolve(rootDir, parentRelative));
+                errorMsg += `Directory listing of '${parentRelative}':\n${dirFiles.map(f => `  - ${f}`).join('\n')}\n`;
+            } catch (dirErr) {
+                // If we can't list the directory, just skip it
+            }
+
             if (validation.suggestions && validation.suggestions.length > 0) {
                 const relativeSuggestions = validation.suggestions.map(s => path.relative(rootDir, s));
                 errorMsg += `Did you mean:\n${relativeSuggestions.map(s => `  - ${s}`).join('\n')}\n`;
@@ -144,12 +151,12 @@ export async function writeFile(filePath: string, content: string): Promise<stri
             // If it's just "Path NOT FOUND", we can proceed with creation
             // UNLESS it was a directory error.
             if (verification.error.includes('is a directory')) {
-                return verification.error;
+                return `Error writing to file ${filePath}: ${verification.error}`;
             }
             
             // If multiple candidates, return the error
             if (verification.error.includes('multiple candidates')) {
-                return verification.error;
+                return `Error writing to file ${filePath}: ${verification.error}`;
             }
         }
 

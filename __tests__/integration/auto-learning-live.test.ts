@@ -44,13 +44,14 @@ describe('Auto-Learning Live Ingestion Integration', () => {
             name: 'test-group-name',
             mainRun: {
                 id: 1,
+                name: 'test',
+                path: '.github/workflows/test.yml',
                 head_sha: 'test-sha',
                 html_url: '',
                 status: 'completed',
                 conclusion: 'failure'
             },
-            runIds: [1],
-            jobs: []
+            runIds: [1]
         };
 
         const updateStateCallback = vi.fn();

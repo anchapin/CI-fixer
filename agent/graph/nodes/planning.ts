@@ -1,4 +1,4 @@
-import { NodeHandler } from '../types.js';
+import { NodeHandler } from '../state.js';
 import { extractFileOutline } from '../../../services/analysis/CodeAnalysisService.js';
 import { getNextNode, isDAGComplete } from '../../../services/dag-executor.js';
 import { ToolOrchestrator } from '../../../services/orchestration/tool-selector.js';
@@ -268,6 +268,7 @@ const planningNodeHandler: NodeHandler = async (state, context) => {
                 state.files[targetFile.path] = {
                     path: targetFile.path,
                     original: targetFile.file,
+                    modified: targetFile.file,
                     status: 'unchanged'
                 };
             }

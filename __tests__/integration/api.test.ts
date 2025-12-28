@@ -1,21 +1,20 @@
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
-import { AgentState, AgentPhase, AppConfig, RunGroup } from '../../types';
+import { AgentState, AgentPhase, AppConfig, RunGroup } from '../../types.js';
 
 // Mock the Agent Loop
-import { runIndependentAgentLoop } from '../../agent';
-import * as services from '../../services';
+import { runIndependentAgentLoop } from '../../agent.js';
 
 // Mock Services
-vi.mock('../../agent', () => ({
-    runIndependentAgentLoop: vi.fn(async (config, group, context, updateCallback) => {
-        updateCallback(group.id, { phase: 'PLAN', status: 'working' });
+vi.mock('../../agent.js', () => ({
+    runIndependentAgentLoop: vi.fn(async (config, group, context, services, updateCallback, logCallback) => {
+        updateCallback(group.id, { phase: AgentPhase.PLAN, status: 'working' });
         await new Promise(r => setTimeout(r, 100));
-        updateCallback(group.id, { phase: 'SUCCESS', status: 'success' });
-        return { status: 'success' };
+        updateCallback(group.id, { phase: AgentPhase.SUCCESS, status: 'success' });
+        return { status: 'success' } as any;
     })
 }));
 
@@ -49,7 +48,7 @@ describe('Agent Server API', () => {
             agents.set(group.id, initialState);
 
             // Mock Async Execution
-            runIndependentAgentLoop(null as any, group, "", (id: string, partial: any) => {
+            runIndependentAgentLoop(null as any, group, "", {} as any, (id: string, partial: any) => {
                 const current = agents.get(id);
                 if (current) agents.set(id, { ...current, ...partial });
             }, () => { });
@@ -73,7 +72,12 @@ describe('Agent Server API', () => {
     });
 
     it('should start an agent and poll status', async () => {
-        const group: RunGroup = { id: 'test-group-1', name: 'Test Agent', runIds: [], sha: 'abc' };
+        const group: RunGroup = { 
+            id: 'test-group-1', 
+            name: 'Test Agent', 
+            runIds: [],
+            mainRun: { id: 123, head_sha: 'abc', name: 'Test', path: '.github/workflows/test.yml', status: 'failed', conclusion: 'failure', html_url: '' }
+        };
 
         // 1. Start Agent
         const startRes = await fetch(`${BASE_URL}/api/agent/start`, {

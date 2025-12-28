@@ -17,6 +17,7 @@ import {
     groupFailedRuns,
     generateRepoSummary,
 } from './services/analysis/BrowserServices';
+import { pushMultipleFilesToGitHub } from './services/github/GitHubService';
 
 const App: React.FC = () => {
     // Layout State
@@ -188,11 +189,6 @@ const App: React.FC = () => {
         // For now, we will use a workaround or accept that useChat manages messages.
         // Actually, preventing stale closures in useCallback requires adding 'messages' to deps.
         // But 'messages' changes frequently.
-        // We will ignore precise history manipulation// No edits to App.tsx for now, avoiding scope creep.onsole log it?
-        // No, we need it in the UI.
-        // We will try casting to any to bypass TS if it's a runtime support issue,
-        // but likely it's an API constraint.
-        // We will try using the latest messages via ref if needed, but for now:
         setMessages([...messages, msg as any]);
     }, [messages, setMessages]);
 
@@ -715,6 +711,7 @@ const App: React.FC = () => {
                 <div className="mt-4 md:mt-0 flex gap-4">
                     <button
                         onClick={() => setShowDashboard(!showDashboard)}
+                        aria-label={showDashboard ? "Operations" : "Dashboard"}
                         className={`px-4 py-2 rounded border font-mono text-sm flex items-center transition-all ${showDashboard 
                             ? 'bg-purple-900/40 border-purple-500 text-purple-300' 
                             : 'border-slate-700 hover:bg-slate-900 text-slate-400 hover:text-white'}`}
@@ -724,12 +721,14 @@ const App: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
+                        aria-label="Settings"
                         className="px-3 py-2 rounded border border-slate-700 hover:bg-slate-900 text-slate-400 hover:text-white transition-all"
                     >
                         <Settings className="w-4 h-4" />
                     </button>
                     <button
                         onClick={reset}
+                        aria-label="Reset"
                         className="px-4 py-2 rounded border border-slate-700 hover:bg-slate-900 text-slate-400 text-sm font-mono flex items-center transition-all"
                     >
                         <RotateCcw className="w-4 h-4 mr-2" />
@@ -738,6 +737,7 @@ const App: React.FC = () => {
                     <button
                         onClick={startPipeline}
                         disabled={isSimulating && !isRealMode}
+                        aria-label={isRealMode ? "Engage Swarm" : "Simulate Swarm"}
                         className={`px-6 py-2 rounded font-bold text-sm font-mono flex items-center transition-all ${isRealMode
                             ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
                             : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)]'

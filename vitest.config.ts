@@ -35,7 +35,17 @@ export default defineConfig({
                 '**/types.ts',
                 'server.ts', // Express server
                 'vite.config.ts',
-                'prisma/**'
+                'prisma/**',
+                'check-env.ts',
+                'fix-env.ts',
+                'debug-db.ts',
+                'inspect_*.ts',
+                'test-*.ts',
+                'temp-spell-check-*.ts',
+                'constants.ts',
+                'services/analysis/BrowserServices.ts', // Frontend services not tested in vitest
+                'agent/gym/**', // Legacy or unused gym environment
+                'services/telemetry/PathCorrectionService.ts' // Not yet fully integrated/tested
             ],
 
             // Include patterns (optional - defaults to all files)

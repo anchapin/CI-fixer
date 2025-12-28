@@ -75,13 +75,14 @@ export interface WorkflowRun {
   head_sha: string;
   head_branch?: string; // Added for git operations
   html_url: string;
+  reproductionCommand?: string;
 }
 
 export interface AppConfig {
   githubToken: string;
   repoUrl: string;
   prUrl?: string;
-  selectedRuns: WorkflowRun[];
+  selectedRuns?: WorkflowRun[];
   excludeWorkflowPatterns?: string[];
 
   // LLM Settings
@@ -96,10 +97,11 @@ export interface AppConfig {
   tavilyApiKey?: string;
 
   // Execution Environments (Re-Architected)
-  devEnv: 'simulation' | 'e2b';           // For Agent Loop: Linting, Exploration
-  checkEnv: 'simulation' | 'github_actions' | 'e2b'; // For Test Phase: Final Verification
+  devEnv?: 'simulation' | 'e2b';           // For Agent Loop: Linting, Exploration
+  checkEnv?: 'simulation' | 'github_actions' | 'e2b'; // For Test Phase: Final Verification
 
   e2bApiKey?: string;
+  geminiApiKey?: string;
   sandboxTimeoutMinutes?: number; // Applies to GHA
 
   // Logging
@@ -128,7 +130,7 @@ export interface FileChange {
   path: string;
   original: CodeFile;
   modified: CodeFile;
-  status: 'modified' | 'added' | 'deleted';
+  status: 'modified' | 'added' | 'deleted' | 'unchanged';
   agentReasoning?: string;
 }
 
@@ -136,6 +138,7 @@ export interface PlanTask {
   id: string;
   description: string;
   status: 'pending' | 'active' | 'completed' | 'failed';
+  dependencies?: string[];
 }
 
 export interface AgentPlan {
@@ -143,6 +146,8 @@ export interface AgentPlan {
   tasks: PlanTask[];
   approved: boolean;
   judgeFeedback?: string;
+  rejectionReason?: string;
+  estimatedComplexity?: string;
 }
 
 // AoT Phase 2: DAG Decomposition
@@ -168,6 +173,7 @@ export interface AgentState {
   phase: AgentPhase;
   iteration: number;
   status: 'idle' | 'working' | 'waiting' | 'success' | 'failed';
+  currentNode?: string; // New: Current node in the execution graph
   message?: string;
   recommendation?: string;
   files: Record<string, FileChange>;
@@ -208,4 +214,16 @@ export interface ReproductionInferenceResult {
   confidence: number; // 0-1
   strategy: 'workflow' | 'signature' | 'build_tool' | 'agent_retry' | 'safe_scan';
   reasoning: string;
+}
+
+export interface GenerateContentResult {
+  text: string;
+  toolCalls?: any[];
+  metrics?: {
+    tokensInput: number;
+    tokensOutput: number;
+    cost: number;
+    latency: number;
+    model: string;
+  };
 }

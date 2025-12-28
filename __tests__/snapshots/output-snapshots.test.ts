@@ -113,9 +113,7 @@ describe('Snapshot Tests', () => {
     describe('Error Classification Output', () => {
         it('should match snapshot for runtime error classification', async () => {
             const result = await classifyErrorWithHistory(
-                'TypeError: Cannot read property "foo" of undefined',
-                'app.ts',
-                []
+                'TypeError: Cannot read property "foo" of undefined'
             );
 
             // Snapshot the structure (excluding dynamic fields like timestamps)
@@ -142,9 +140,7 @@ describe('Snapshot Tests', () => {
                 });
 
             const result = await classifyErrorWithHistory(
-                'ModuleNotFoundError: No module named "lodash"',
-                'utils.ts',
-                []
+                'ModuleNotFoundError: No module named "lodash"'
             );
 
             const snapshot = {

@@ -206,32 +206,45 @@ export async function prepareSandbox(
     // Inject Agent Tools (Code Mode API)
     try {
         console.log('[Sandbox] Injecting Agent Tools (agent_tools.ts)...');
-        const fs = await import('fs/promises');
+        const { fileURLToPath } = await import('url');
         const path = await import('path');
+        const fs = await import('fs/promises');
+        
+        const currentFilename = fileURLToPath(import.meta.url);
+        const currentDirname = path.dirname(currentFilename);
+
         const toolsPath = path.resolve(process.cwd(), 'services/sandbox/agent_tools.ts');
 
-        let toolsContent = "";
+        let toolsContent: string = "";
         try {
-            toolsContent = await fs.readFile(toolsPath, 'utf-8');
+            toolsContent = await fs.readFile(toolsPath, 'utf-8') || "";
         } catch (readErr) {
             console.warn(`[Sandbox] Could not read agent_tools.ts from ${toolsPath}, trying fallback...`);
-            toolsContent = await fs.readFile('c:\\Users\\ancha\\Documents\\projects\\CI-fixer\\services\\sandbox\\agent_tools.ts', 'utf-8');
+            // Try a more portable fallback if process.cwd() is different
+            const fallbackPath = path.resolve(currentDirname, 'agent_tools.ts');
+            toolsContent = await fs.readFile(fallbackPath, 'utf-8') || "";
         }
 
         // [Integration] Inject dependencies
         try {
             const verificationPath = path.resolve(process.cwd(), 'utils/fileVerification.ts');
-            const verificationContent = await fs.readFile(verificationPath, 'utf-8');
+            const verificationContent = await fs.readFile(verificationPath, 'utf-8') || "";
             await sandbox.writeFile('utils/fileVerification.ts', verificationContent);
             
             // Rewrite import for sandbox environment
-            toolsContent = toolsContent.replace('../../utils/fileVerification', './utils/fileVerification');
+            if (toolsContent) {
+                toolsContent = toolsContent.replace('../../utils/fileVerification', './utils/fileVerification');
+            }
         } catch (depErr) {
             console.warn(`[Sandbox] Failed to inject dependencies for agent_tools: ${depErr}`);
         }
 
-        await sandbox.writeFile('agent_tools.ts', toolsContent);
-        console.log('[Sandbox] agent_tools.ts injected successfully.');
+        if (toolsContent) {
+            await sandbox.writeFile('agent_tools.ts', toolsContent);
+            console.log('[Sandbox] agent_tools.ts injected successfully.');
+        } else {
+            console.warn('[Sandbox] agent_tools.ts content is empty, skipping injection.');
+        }
 
     } catch (e: any) {
         console.error(`[Sandbox] Failed to inject agent_tools.ts: ${e.message}`);

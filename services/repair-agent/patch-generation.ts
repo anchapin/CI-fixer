@@ -12,10 +12,10 @@ import { postProcessPatch, checkSpelling, calculateSpellingPenalty } from './pos
 export interface PatchCandidate {
     id: string;
     code: string;
-    description: string;
+    description?: string;
     confidence: number;
     strategy: 'direct' | 'conservative' | 'aggressive' | 'alternative';
-    reasoning: string;
+    reasoning?: string;
     spellingErrors?: string[];
 }
 

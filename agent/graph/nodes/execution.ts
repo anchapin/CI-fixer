@@ -2,6 +2,7 @@ import { GraphState, GraphContext, NodeHandler } from '../state.js';
 import { db as globalDb } from '../../../db/client.js';
 import { FileChange } from '../../../types.js';
 import { withNodeTracing } from './tracing-wrapper.js';
+import { markNodeSolved } from '../../../services/dag-executor.js';
 import * as path from 'node:path';
 
 const codingNodeHandler: NodeHandler = async (state, context) => {
@@ -53,61 +54,59 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
                                     implementationSuccess = true;
                                     // Success path, implicitly continues.
                                 }
- else {
-                                    log('WARN', `Retry failed: ${retryRes.stderr}`);
-                                    return {
-                                        feedback: [...state.feedback, `Command Failed (Exit Code ${retryRes.exitCode}) after installing missing tool:\nStdout: ${retryRes.stdout}\nStderr: ${retryRes.stderr}`],
-                                        iteration: iteration + 1,
-                                        currentNode: 'analysis'
-                                    };
-                                }
-                            } else {
-                                log('WARN', `Self-healing installation failed: ${installRes.stderr}`);
-                            }
-                        }
-                    }
-                }
-
-                if (!implementationSuccess) {
-                    log('WARN', `Command failed: ${res.stderr}`);
-                    return {
-                        feedback: [...state.feedback, `Command Failed (Exit Code ${res.exitCode}):\nStdout: ${res.stdout}\nStderr: ${res.stderr}`],
-                        iteration: iteration + 1,
-                        currentNode: 'analysis'
-                    };
-                }
-            } else {
-                implementationSuccess = true;
-            }
-        }
-    }
-    // B. EDIT FIX
-    else if (fileReservations.length > 0 || (diagnosis.fixAction === 'edit' && diagnosis.filePath)) {
-        let targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath!;
-        log('INFO', `[Execution] Implementing fix for ${targetPath}`);
-
-        // PATH VERIFICATION: Auto-correct hallucinations
-        if (sandbox) {
-            const verification = await services.discovery.findUniqueFile(targetPath, sandbox.getWorkDir());
-            if (verification.found && verification.path) {
-                const relativePath = path.relative(sandbox.getWorkDir(), verification.path).replace(/\\/g, '/');
-                if (relativePath !== targetPath) {
-                    log('SUCCESS', `[Execution] Auto-corrected path from ${targetPath} to ${relativePath}`);
-                    targetPath = relativePath;
-                }
-            } else if (verification.matches && verification.matches.length > 1) {
-                const relativeMatches = verification.matches.map(m => path.relative(sandbox.getWorkDir(), m));
-                const matchlist = relativeMatches.join(', ');
-                log('WARN', `[Execution] Multiple matches found for ${targetPath}: ${matchlist}. Aborting to avoid wrong file edit.`);
-                return {
-                    feedback: [...state.feedback, `Path Hallucination: Multiple files named '${path.basename(targetPath)}' found:\n${relativeMatches.map(m => `  - ${m}`).join('\n')}\nPlease specify the exact path.`],
-                    iteration: iteration + 1,
-                    currentNode: 'analysis'
-                };
-            }
-        }
-
-        // Read current content
+                                                                 else {
+                                                                     log('WARN', `Retry failed: ${retryRes.stderr}`);
+                                                                     return {
+                                                                         feedback: [...state.feedback, `Command Failed (Exit Code ${retryRes.exitCode}) after installing missing tool:\nStdout: ${retryRes.stdout}\nStderr: ${retryRes.stderr}`],
+                                                                         iteration: iteration + 1,
+                                                                         currentNode: 'analysis'
+                                                                     };
+                                                                 }
+                                                             } else {
+                                                                 log('WARN', `Self-healing installation failed: ${installRes.stderr}`);
+                                                             }
+                                                         }
+                                                     }
+                                                 }
+                                 
+                                                 if (!implementationSuccess) {
+                                                     log('WARN', `Command failed: ${res.stderr}`);
+                                                     return {
+                                                         feedback: [...state.feedback, `Command Failed (Exit Code ${res.exitCode}):\nStdout: ${res.stdout}\nStderr: ${res.stderr}`],
+                                                         iteration: iteration + 1,
+                                                         currentNode: 'analysis'
+                                                     };
+                                                 }
+                                             } else {
+                                                 implementationSuccess = true;
+                                             }
+                                         }
+                                     }
+                                     // B. EDIT FIX
+                                     else if (fileReservations.length > 0 || (diagnosis.fixAction === 'edit' && diagnosis.filePath)) {
+                                         let targetPath = fileReservations.length > 0 ? fileReservations[0] : diagnosis.filePath!;
+                                         log('INFO', `[Execution] Implementing fix for ${targetPath}`);
+                                 
+                                         // PATH VERIFICATION: Auto-correct hallucinations
+                                         if (sandbox) {
+                                             const verification = await services.discovery.findUniqueFile(targetPath, sandbox.getWorkDir());
+                                             if (verification.found && verification.path) {
+                                                 const relativePath = path.relative(sandbox.getWorkDir(), verification.path).replace(/\\/g, '/');
+                                                 if (relativePath !== targetPath) {
+                                                     log('SUCCESS', `[Execution] Auto-corrected path from ${targetPath} to ${relativePath}`);
+                                                     targetPath = relativePath;
+                                                 }
+                                             } else if (verification.matches && verification.matches.length > 1) {
+                                                 const relativeMatches = verification.matches.map(m => path.relative(sandbox.getWorkDir(), m));
+                                                 const matchlist = relativeMatches.join(', ');
+                                                 log('WARN', `[Execution] Multiple matches found for ${targetPath}: ${matchlist}. Aborting to avoid wrong file edit.`);
+                                                 return {
+                                                     feedback: [...state.feedback, `Path Hallucination: Multiple files named '${path.basename(targetPath)}' found:\n${relativeMatches.map(m => `  - ${m}`).join('\n')}\nPlease specify the exact path.`],
+                                                     iteration: iteration + 1,
+                                                     currentNode: 'analysis'
+                                                 };
+                                             }
+                                         }        // Read current content
         // Try to get from State first (populated by Planning)
         let currentContent = "";
 
@@ -198,7 +197,7 @@ const codingNodeHandler: NodeHandler = async (state, context) => {
 
     // AoT Phase 3: Mark DAG node as solved
     if (currentNodeId && errorDAG && implementationSuccess) {
-        const dagUpdate = services.context.markNodeSolved(state as any, currentNodeId);
+        const dagUpdate = markNodeSolved(state as any, currentNodeId);
         log('INFO', `[Execution] Solved DAG node: ${currentNodeId}`);
         log('VERBOSE', `[Execution] Progress: ${dagUpdate.solvedNodes?.length}/${errorDAG.nodes.length} nodes solved`);
 

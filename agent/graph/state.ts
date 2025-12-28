@@ -30,6 +30,7 @@ export interface GraphState {
     classification?: ClassifiedError;
     diagnosis?: DiagnosisResult;
     plan?: string;
+    activeFileChange?: FileChange;
 
     // Execution State
     files: Record<string, FileChange>;

@@ -4,6 +4,7 @@ import { codingNode } from '../../../../agent/graph/nodes/execution';
 import * as LogAnalysisService from '../../../../services/analysis/LogAnalysisService';
 import { AgentPhase } from '../../../../types';
 import * as path from 'node:path';
+import { markNodeSolved } from '../../../../services/dag-executor';
 
 // Mock dependencies
 vi.mock('../../../../services/analysis/LogAnalysisService', () => ({
@@ -14,6 +15,10 @@ vi.mock('../../../../services/analysis/LogAnalysisService', () => ({
 vi.mock('../../../../services/sandbox/SandboxService', () => ({
     toolLintCheck: vi.fn().mockResolvedValue({ valid: true }),
     toolWebSearch: vi.fn(),
+}));
+
+vi.mock('../../../../services/dag-executor', () => ({
+    markNodeSolved: vi.fn((state: any, id: string) => ({ solvedNodes: [id], currentNodeId: undefined }))
 }));
 
 describe('Execution Node', () => {
@@ -50,9 +55,6 @@ describe('Execution Node', () => {
                 sandbox: {
                     toolLintCheck: vi.fn(async () => ({ valid: true }))
                 },
-                context: {
-                    markNodeSolved: vi.fn((state, id) => ({ solvedNodes: [id] }))
-                },
                 discovery: {
                     findUniqueFile: vi.fn(async (p) => ({ found: true, path: p, matches: [p] }))
                 }
@@ -72,7 +74,8 @@ describe('Execution Node', () => {
             fileReservations: ['file.ts'],
             iteration: 0,
             files: {},
-            feedback: []
+            feedback: [],
+            solvedNodes: []
         };
     });
 
@@ -129,16 +132,64 @@ describe('Execution Node', () => {
         const result = await codingNode(mockState, mockContext);
 
         expect(result.feedback).toContain('Lint Error: Lint fail');
-        // Does NOT proceed to Verification if lint fails?
-        // NodeHandler returns partial state. 
-        // Logic in agent loop determines next node if 'currentNode' is missing?
-        // Wait, typical NodeHandler returns 'currentNode'.
-        // If missing, it might default?
-        // Let's check code: `return { feedback: ..., fileReservations };`
-        // It does NOT set currentNode.
-        // It relies on Agent Loop default behavior or maybe it stays in execution?
-        // Actually, if currentNode is generic, maybe it defaults to 'analysis' if fields missing?
-        // But let's just check what it returns.
         expect(result.currentNode).toBeUndefined();
+    });
+
+    it('should handle self-healing failure (install failed)', async () => {
+        mockState.diagnosis.fixAction = 'command';
+        mockState.diagnosis.suggestedCommand = 'npm install';
+
+        mockSandbox.runCommand
+            .mockResolvedValueOnce({ stdout: '', stderr: ': npm: not found', exitCode: 127 })
+            .mockResolvedValueOnce({ stdout: '', stderr: 'apt failed', exitCode: 1 });
+
+        const result = await codingNode(mockState, mockContext);
+        expect(result.currentNode).toBe('analysis');
+        expect(result.feedback[0]).toContain('Command Failed');
+    });
+
+    it('should handle self-healing failure (retry failed)', async () => {
+        mockState.diagnosis.fixAction = 'command';
+        mockState.diagnosis.suggestedCommand = 'npm install';
+
+        mockSandbox.runCommand
+            .mockResolvedValueOnce({ stdout: '', stderr: ': npm: not found', exitCode: 127 })
+            .mockResolvedValueOnce({ stdout: 'installed', stderr: '', exitCode: 0 })
+            .mockResolvedValueOnce({ stdout: '', stderr: 'still fails', exitCode: 1 });
+
+        const result = await codingNode(mockState, mockContext);
+        expect(result.currentNode).toBe('analysis');
+        expect(result.feedback[0]).toContain('after installing missing tool');
+    });
+
+    it('should handle path hallucination (multiple matches)', async () => {
+        mockContext.services.discovery.findUniqueFile.mockResolvedValueOnce({
+            found: false,
+            matches: ['/work/src/file.ts', '/work/tests/file.ts']
+        });
+
+        const result = await codingNode(mockState, mockContext);
+        expect(result.currentNode).toBe('analysis');
+        expect(result.feedback[0]).toContain('Multiple files named');
+    });
+
+    it('should handle auto-correction of path', async () => {
+        mockContext.services.discovery.findUniqueFile.mockResolvedValueOnce({
+            found: true,
+            path: '/mock/workdir/src/file.ts'
+        });
+        mockState.fileReservations = ['wrong/file.ts'];
+
+        await codingNode(mockState, mockContext);
+        expect(mockContext.logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Auto-corrected path'));
+    });
+
+    it('should mark DAG node as solved', async () => {
+        mockState.currentNodeId = 'task-1';
+        mockState.errorDAG = { nodes: [{ id: 'task-1' }], edges: [] };
+        
+        const result = await codingNode(mockState, mockContext);
+        expect(result.currentNode).toBe('planning');
+        expect(markNodeSolved).toHaveBeenCalled();
     });
 });

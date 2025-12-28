@@ -27,7 +27,9 @@ describe('Feedback Loop', () => {
         id: 'patch-1',
         code: 'original code',
         confidence: 0.8,
-        strategy: 'single'
+        strategy: 'direct',
+        description: 'Mock patch',
+        reasoning: 'Mock reasoning'
     };
 
     beforeEach(() => {

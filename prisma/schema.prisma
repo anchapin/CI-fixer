@@ -40,6 +40,7 @@ model ErrorFact {
   summary      String
   filePath     String
   fixAction    String   // "edit" or "command"
+  suggestedCommand String? // The specific command recommended (if fixAction is "command")
   runId        String
   agentRun     AgentRun @relation(fields: [runId], references: [id])
   createdAt    DateTime @default(now())

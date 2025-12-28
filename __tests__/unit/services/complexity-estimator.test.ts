@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { estimateComplexity, detectConvergence, isAtomic, explainComplexity } from '../../../services/complexity-estimator.js';
 import { GraphState } from '../../../agent/graph/state.js';
-import { AppConfig, RunGroup } from '../../../types.js';
+import { AppConfig, RunGroup, ErrorCategory } from '../../../types.js';
 
 // Helper to create minimal GraphState for testing
 function createTestState(overrides: Partial<GraphState> = {}): GraphState {
@@ -44,6 +44,7 @@ function createTestState(overrides: Partial<GraphState> = {}): GraphState {
         history: [],
         feedback: [],
         complexityHistory: [],
+        solvedNodes: [],
         ...overrides
     };
 }
@@ -53,7 +54,7 @@ describe('complexity-estimator', () => {
         it('should return low complexity for simple syntax errors', () => {
             const state = createTestState({
                 classification: {
-                    category: 'SYNTAX',
+                    category: ErrorCategory.SYNTAX,
                     errorMessage: 'Syntax error',
                     affectedFiles: ['test.ts'],
                     confidence: 0.9,
@@ -80,7 +81,7 @@ describe('complexity-estimator', () => {
         it('should return high complexity for dependency errors with low confidence', () => {
             const state = createTestState({
                 classification: {
-                    category: 'DEPENDENCY',
+                    category: ErrorCategory.DEPENDENCY,
                     errorMessage: 'Module not found',
                     affectedFiles: ['file1.ts', 'file2.ts', 'file3.ts'],
                     confidence: 0.5,
@@ -106,7 +107,7 @@ describe('complexity-estimator', () => {
         it('should return very high complexity for unknown errors', () => {
             const state = createTestState({
                 classification: {
-                    category: 'UNKNOWN',
+                    category: ErrorCategory.UNKNOWN,
                     errorMessage: 'Unknown error',
                     affectedFiles: [],
                     confidence: 0.3,
@@ -130,7 +131,7 @@ describe('complexity-estimator', () => {
         it('should increase complexity with iteration count', () => {
             const baseState = createTestState({
                 classification: {
-                    category: 'SYNTAX',
+                    category: ErrorCategory.SYNTAX,
                     errorMessage: 'Error',
                     affectedFiles: ['test.ts'],
                     confidence: 0.8,
@@ -220,7 +221,7 @@ describe('complexity-estimator', () => {
         it('should provide human-readable explanation', () => {
             const state = createTestState({
                 classification: {
-                    category: 'DEPENDENCY',
+                    category: ErrorCategory.DEPENDENCY,
                     errorMessage: 'Error',
                     affectedFiles: ['file1.ts', 'file2.ts'],
                     confidence: 0.8,
@@ -240,7 +241,7 @@ describe('complexity-estimator', () => {
             const explanation = explainComplexity(state, complexity);
 
             expect(explanation).toContain('complexity');
-            expect(explanation).toContain('DEPENDENCY');
+            expect(explanation).toContain('dependency');
             expect(explanation).toContain('2 file(s)');
             expect(explanation).toContain('1 previous attempt');
         });
@@ -248,7 +249,7 @@ describe('complexity-estimator', () => {
         it('should classify complexity levels correctly', () => {
             const lowState = createTestState({
                 classification: {
-                    category: 'SYNTAX',
+                    category: ErrorCategory.SYNTAX,
                     errorMessage: 'Error',
                     affectedFiles: ['test.ts'],
                     confidence: 0.9,
@@ -258,7 +259,7 @@ describe('complexity-estimator', () => {
 
             const highState = createTestState({
                 classification: {
-                    category: 'UNKNOWN',
+                    category: ErrorCategory.UNKNOWN,
                     errorMessage: 'Error',
                     affectedFiles: ['f1', 'f2', 'f3'],
                     confidence: 0.3,

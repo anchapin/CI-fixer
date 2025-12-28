@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ErrorCategory } from '../../types.js';
 import { 
     findSimilarFixes, 
-    getRelevantRunbooks, 
     generateErrorFingerprint,
     extractFixPattern,
     updateFixPatternStats,

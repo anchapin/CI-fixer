@@ -1,6 +1,7 @@
 import { GraphState, GraphContext, NodeHandler } from '../state.js';
 import { ErrorDAG, ErrorNode } from '../../../types.js';
 import { estimateComplexity } from '../../../services/complexity-estimator.js';
+import { ServiceContainer } from '../../../services/container.js';
 
 /**
  * Decomposition Node - AoT Phase 2

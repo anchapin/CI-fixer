@@ -97,43 +97,34 @@ export async function runGraphAgent(
             }
 
             try {
-                // Update UI Phase
+                // ...switch phase...
                 let phase = AgentPhase.IDLE;
                 switch (state.currentNode) {
                     case 'analysis': phase = AgentPhase.UNDERSTAND; break;
-                    case 'decomposition': phase = AgentPhase.PLAN; break; // Decomposition is part of planning
+                    case 'decomposition': phase = AgentPhase.PLAN; break;
                     case 'planning': phase = AgentPhase.PLAN; break;
                     case 'execution': phase = AgentPhase.IMPLEMENT; break;
                     case 'verification': phase = AgentPhase.TESTING; break;
                 }
                 updateStateCallback(group.id, { phase, iteration: state.iteration });
 
-                // LOGGING FOR DEBUG
-                log('VERBOSE', `[Coordinator] Executing ${state.currentNode}. FileReservations: ${JSON.stringify(state.fileReservations)}`);
-
-                // EXECUTE NODE WITH TRACING
+                // ...execution...
                 const updates = await withSpan(`node-${state.currentNode}`, async (nodeSpan) => {
-                    setAttributes(nodeSpan, {
-                        'node.name': state.currentNode,
-                        'node.iteration': state.iteration,
-                        'node.file_count': Object.keys(state.files).length
-                    });
-
-                    const result = await handler(state, context);
-
-                    addEvent(nodeSpan, 'node-completed', {
-                        next_node: result.currentNode || state.currentNode
-                    });
-
-                    return result;
+                    // ...
+                    return await handler(state, context);
                 });
 
                 // Merge Updates
                 state = { ...state, ...updates };
+                
+                // If node explicitly set status to anything other than working, break early
+                if (state.status !== 'working') {
+                    break;
+                }
 
                 // Record History
                 state.history.push({
-                    node: state.currentNode, // Note: this is the node we JUST ran (or the next one? technically previous)
+                    node: state.currentNode,
                     action: 'transition',
                     result: 'completed',
                     timestamp: Date.now()
@@ -163,27 +154,27 @@ export async function runGraphAgent(
         }
 
         // AoT: Complexity-aware termination
-        if (state.status === 'working') {
-            if (state.iteration >= state.maxIterations) {
-                state.status = 'failed';
-                state.failureReason = 'Max iterations reached.';
-            } else if (state.complexityHistory.length > 2) {
-                const convergence = services.complexity.detectConvergence(state.complexityHistory);
+        if (state.status === 'working' && state.iteration >= state.maxIterations) {
+            state.status = 'failed';
+            state.failureReason = 'Max iterations reached.';
+        }
 
-                // Early success if problem is atomic and stable
-                if (state.isAtomic && convergence.isStable) {
-                    log('INFO', '[AoT] Problem has converged to atomic state. Ready for final solution.');
-                }
+        if (state.complexityHistory.length > 2) {
+            const convergence = services.complexity.detectConvergence(state.complexityHistory);
 
-                // Warn if diverging (complexity increasing)
-                if (convergence.isDiverging) {
-                    log('WARN', '[AoT] Complexity is increasing - problem may be getting harder. Consider alternative approach.');
-                }
+            // Early success if problem is atomic and stable
+            if (state.isAtomic && convergence.isStable) {
+                log('INFO', '[AoT] Problem has converged to atomic state. Ready for final solution.');
+            }
 
-                // Log complexity trend
-                if (state.problemComplexity !== undefined) {
-                    log('VERBOSE', `[AoT] Final ${services.complexity.explainComplexity(state as any, state.problemComplexity)}`);
-                }
+            // Warn if diverging (complexity increasing)
+            if (convergence.isDiverging) {
+                log('WARN', '[AoT] Complexity is increasing - problem may be getting harder. Consider alternative approach.');
+            }
+
+            // Log complexity trend
+            if (state.problemComplexity !== undefined) {
+                log('VERBOSE', `[AoT] Final ${services.complexity.explainComplexity(state as any, state.problemComplexity)}`);
             }
         }
 
@@ -265,16 +256,23 @@ export async function runGraphAgent(
         // Return Final AgentState
         // Map GraphState status to AgentState status
         let agentStatus: 'idle' | 'working' | 'waiting' | 'success' | 'failed';
+        let agentPhase: AgentPhase;
+
         if (state.status === 'stopped') {
             agentStatus = 'failed';
+            agentPhase = AgentPhase.FAILURE;
+        } else if (state.status === 'success') {
+            agentStatus = 'success';
+            agentPhase = AgentPhase.SUCCESS;
         } else {
-            agentStatus = state.status as 'working' | 'success' | 'failed';
+            agentStatus = 'failed';
+            agentPhase = AgentPhase.FAILURE;
         }
 
         return {
             groupId: group.id,
             name: group.name,
-            phase: state.status === 'success' ? AgentPhase.SUCCESS : AgentPhase.FAILURE,
+            phase: agentPhase,
             iteration: state.iteration,
             status: agentStatus,
             files: state.files,

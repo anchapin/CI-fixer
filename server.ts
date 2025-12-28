@@ -385,9 +385,8 @@ console.log(files);
 
         // Pipe body
         if (response.body) {
-            // @ts-expect-error - Readable.fromWeb matches Response.body but Types might be old
             const nodeStream = (response.body as any).pipe ? response.body : (await import('stream')).Readable.fromWeb(response.body as any);
-            nodeStream.pipe(res);
+            (nodeStream as any).pipe(res);
         } else {
             res.end();
         }

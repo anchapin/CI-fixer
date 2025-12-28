@@ -22,6 +22,18 @@ vi.mock('../../../../services/llm/LLMService.js', () => ({
     })
 }));
 
+// Mock post-processor
+vi.mock('../../../../services/repair-agent/post-processor.js', async (importOriginal) => {
+    const actual: any = await importOriginal();
+    return {
+        ...actual,
+        checkSpelling: vi.fn((filename, code) => {
+            if (code.includes('msispelled')) return ['msispelled'];
+            return [];
+        })
+    };
+});
+
 describe('Dockerfile Patch Generation Constraints', () => {
     const mockConfig = {
         githubToken: 'test-token'

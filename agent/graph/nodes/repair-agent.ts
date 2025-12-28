@@ -27,7 +27,7 @@ const repairAgentNodeHandler: NodeHandler = async (state, context) => {
 
     // Determine test command
     const testCommand = diagnosis.reproductionCommand ||
-        group.mainRun.reproduction_command ||
+        group.mainRun.reproductionCommand ||
         'npm test';
 
     // Run RepairAgent
@@ -68,8 +68,7 @@ const repairAgentNodeHandler: NodeHandler = async (state, context) => {
 
         return {
             files: newFiles,
-            currentNode: 'verification',
-            iteration: iteration + 1
+            currentNode: 'verification'
         };
     } else {
         // RepairAgent failed, fall back to standard execution

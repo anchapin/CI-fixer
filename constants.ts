@@ -95,7 +95,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 };
 
 export const SCENARIO_FAILURE_LOOP: SimulationStep[] = [
-  { phase: AgentPhase.UNDERSTAND, message: "Analyzing traceback...", delay: 800, iteration: 0 },
+  { phase: AgentPhase.UNDERSTAND, message: "Analyzing traceback...", delay: 2000, iteration: 0 },
   { phase: AgentPhase.UNDERSTAND, message: "Identified `ObjectDeletedError` in `create_user`.", delay: 1000, iteration: 0 },
   { phase: AgentPhase.EXPLORE, message: "Locating source file `main.py`...", delay: 800, iteration: 0 },
   { phase: AgentPhase.PLAN, message: "Hypothesis 1: Session is expiring prematurely.", delay: 1200, iteration: 0 },

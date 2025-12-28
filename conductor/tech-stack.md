@@ -1,8 +1,8 @@
 # Technology Stack
 
 ## Core Technologies
-- **Programming Languages:** TypeScript, Python
-- **Runtime Environments:** Node.js, Bun (for context-sensitive execution), Python 3.x
+- **Programming Languages:** TypeScript, Python, Go
+- **Runtime Environments:** Node.js, Bun (for context-sensitive execution), Python 3.x, Go
 
 ## Frontend
 - **Framework:** React
@@ -22,7 +22,8 @@
 
 ## Testing & Quality Assurance
 - **Unit & Integration Testing:** Vitest
-- **Python Testing:** pytest
+- **Python Testing:** pytest, tox
+- **JS/TS Testing:** Vitest, Jest, Mocha
 - **End-to-End Testing:** Playwright
 - **Fuzzy Search:** Fuse.js
 - **Workflow Parsing:** js-yaml

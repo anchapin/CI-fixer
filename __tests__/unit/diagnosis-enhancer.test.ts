@@ -19,10 +19,10 @@ describe('Diagnosis Enhancer', () => {
     const mockConfig = {} as AppConfig;
     const mockDiagnosis: DiagnosisResult = {
         type: 'dependency_error',
-        message: 'Error message',
+        summary: 'Error message',
         confidence: 0.9,
-        context: {},
-        actions: []
+        filePath: 'test.ts',
+        fixAction: 'edit'
     };
 
     const originalEnv = process.env;
@@ -83,6 +83,7 @@ describe('Diagnosis Enhancer', () => {
     });
 
     it('should not override filePath if confidence is low', async () => {
+        const diagnosisWithoutPath = { ...mockDiagnosis, filePath: undefined as any };
         process.env.ENABLE_FAULT_LOCALIZATION = 'true';
         mocks.parseStackTrace.mockReturnValue(['at file.ts:10']);
 
@@ -95,10 +96,10 @@ describe('Diagnosis Enhancer', () => {
         };
         mocks.localizeFault.mockResolvedValue(mockLocalization);
 
-        const result = await enhanceDiagnosisWithFaultLocalization(mockConfig, mockDiagnosis, 'error logs');
+        const result = await enhanceDiagnosisWithFaultLocalization(mockConfig, diagnosisWithoutPath, 'error logs');
 
         expect(result.faultLocalization).toBe(mockLocalization);
-        expect(result.filePath).toBeUndefined(); // Assuming mockDiagnosis didn't have it
+        expect(result.filePath).toBeUndefined(); // Assuming diagnosisWithoutPath didn't have it
     });
 
     it('should handle errors gracefully and return original diagnosis', async () => {

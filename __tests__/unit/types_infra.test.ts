@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { AgentPhase, ErrorCategory } from '../../types';
 
 describe('Infrastructure Types', () => {

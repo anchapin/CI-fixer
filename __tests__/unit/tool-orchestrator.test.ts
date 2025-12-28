@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ToolOrchestrator } from '../../services/orchestration/tool-selector.js';
 import { TOOL_COSTS } from '../../services/orchestration/tool-types.js';
 
@@ -122,11 +122,11 @@ describe('getExecutionOrder', () => {
     let orchestrator: ToolOrchestrator;
 
     beforeEach(() => {
-        orchestrator = new ToolOrchestrator(1000);
+        orchestrator = new ToolOrchestrator();
     });
 
     it('should order tools by priority', () => {
-        const tools = ['llm_code_generator', 'syntax_validator', 'semantic_code_search'];
+        const tools = ['llm_code_generator', 'syntax_validator', 'semantic_code_search'] as any;
         const ordered = orchestrator.getExecutionOrder(tools);
 
         expect(ordered[0]).toBe('syntax_validator'); // Should run first
