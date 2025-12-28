@@ -9,10 +9,10 @@
 ## Phase 2: Integration with Error Classification
 - [x] **Task: Enhance Error Classification (Red Phase)** 43c0f37
   - Update tests in `__tests__/unit/errorClassification.test.ts` to expect a `scope` field in the classification result.
-- [~] **Task: Enhance Error Classification (Green Phase)**
+- [x] **Task: Enhance Error Classification (Green Phase)** 4a90770
   - Modify `errorClassification.ts` to call the `LanguageScopingService` during log analysis.
   - Ensure the detected scope is included in the diagnostic metadata passed to the agent.
-- [ ] **Task: Conductor - User Manual Verification 'Phase 2: Integration with Error Classification' (Protocol in workflow.md)**
+- [~] **Task: Conductor - User Manual Verification 'Phase 2: Integration with Error Classification' (Protocol in workflow.md)**
 
 ## Phase 3: Agent Guidance & Tool Prioritization
 - [ ] **Task: Update Agent Context (Red Phase)**
