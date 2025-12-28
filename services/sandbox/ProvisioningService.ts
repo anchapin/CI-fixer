@@ -127,6 +127,44 @@ export class ProvisioningService {
   }
 
   /**
+   * Executes `pip install --dry-run --report` with provided requirements content
+   * and returns the generated report.
+   * @param requirementsContent The content of the requirements.txt file.
+   * @returns The content of the pip dry run report (JSON string) or null if an error occurred.
+   */
+  async runPipDryRunReport(requirementsContent: string): Promise<string | null> {
+    const tempRequirementsFile = `requirements-${Date.now()}.txt`;
+    const reportFile = `pip_report-${Date.now()}.json`;
+
+    try {
+      // 1. Write requirements content to a temporary file
+      await this.sandbox.writeFile(tempRequirementsFile, requirementsContent);
+
+      // 2. Execute pip install --dry-run --report
+      const pipCommand = `python3 -m pip install -r ${tempRequirementsFile} --dry-run --report ${reportFile} || python -m pip install -r ${tempRequirementsFile} --dry-run --report ${reportFile}`;
+      const { exitCode, stderr } = await this.sandbox.runCommand(pipCommand);
+
+      // If pip command itself failed, we log stderr and return null
+      if (exitCode !== 0) {
+        console.error(`[ProvisioningService] pip dry run failed: ${stderr}`);
+        return null;
+      }
+
+      // 3. Read the generated report file
+      const reportContent = await this.sandbox.readFile(reportFile);
+
+      return reportContent;
+    } catch (error) {
+      console.error(`[ProvisioningService] Error during pip dry run report: ${error}`);
+      return null;
+    } finally {
+      // 4. Clean up temporary files
+      await this.sandbox.deleteFile(tempRequirementsFile);
+      await this.sandbox.deleteFile(reportFile);
+    }
+  }
+
+  /**
    * Attempts to install a missing tool in the sandbox.
    * @param tool The name of the tool to install (e.g., 'vitest', 'pytest')
    * @param runtime The runtime associated with the tool

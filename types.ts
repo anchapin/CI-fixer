@@ -230,6 +230,11 @@ export interface ReproductionInferenceResult {
   reasoning: string;
 }
 
+export interface ReproductionFailureContext {
+    workflowPath?: string;
+    logText?: string;
+}
+
 export interface GenerateContentResult {
   text: string;
   toolCalls?: any[];
@@ -240,4 +245,53 @@ export interface GenerateContentResult {
     latency: number;
     model: string;
   };
+}
+
+export interface PipInstallReport {
+  version: string;
+  pip_version: string;
+  install: InstallationReportItem[];
+  environment: PipEnvironmentInfo;
+}
+
+export interface InstallationReportItem {
+  metadata: PackageMetadata;
+  is_direct: boolean;
+  is_yanked: boolean;
+  download_info: DownloadInfo;
+  requested: boolean;
+  requested_extras: string[];
+}
+
+export interface PackageMetadata {
+  name: string;
+  version: string;
+  summary: string;
+  home_page: string;
+  author: string;
+  license: string;
+  requires_dist: string[]; // e.g., "charset-normalizer (<4,>=2)", "idna (<4,>=2.5)"
+  project_url: string[];
+}
+
+export interface DownloadInfo {
+  url: string;
+  archive_info: ArchiveInfo;
+}
+
+export interface ArchiveInfo {
+  hash: string;
+}
+
+export interface PipEnvironmentInfo {
+  implementation_name: string;
+  implementation_version: string;
+  os_name: string;
+  platform_machine: string;
+  platform_release: string;
+  platform_system: string;
+  platform_version: string;
+  python_full_version: string;
+  python_version: string;
+  sys_platform: string;
 }
