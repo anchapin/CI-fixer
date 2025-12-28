@@ -6,7 +6,7 @@
 - [x] **Task: Implement LanguageScopingEngine (Red Phase)** 45b08a4
   - Create `__tests__/unit/languageScoping.test.ts`.
   - Write tests for identifying JS/TS, Python, Go, and Generic scopes based on log snippets and mock file systems.
-- [ ] **Task: Implement LanguageScopingEngine (Green Phase)**
+- [x] **Task: Implement LanguageScopingEngine (Green Phase)** e7cc8ba
   - Create `services/LanguageScopingService.ts`.
   - Implement the `detectScope(logs: string, workingDir: string)` method using keyword matching and manifest validation.
 - [ ] **Task: Conductor - User Manual Verification 'Phase 1: Core Scoping Engine' (Protocol in workflow.md)**
