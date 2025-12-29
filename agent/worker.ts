@@ -35,6 +35,7 @@ import { clusterError } from '../services/error-clustering.js';
 
 import { ServiceContainer } from '../services/container.js';
 import { ProvisioningService } from '../services/sandbox/ProvisioningService.js';
+import { DependencySolverService } from '../services/DependencySolverService.js';
 
 export async function runWorkerTask(
     config: AppConfig,
@@ -99,6 +100,10 @@ export async function runWorkerTask(
 
             const iterationStartTime = Date.now();
 
+            // [ENHANCED] Error Classification with Knowledge Base
+            const currentClassification = await classifyErrorWithHistory(currentLogText, profile);
+            classifiedErrors.push(currentClassification);
+
             // 0. LOG DISCOVERY FALLBACKS
             if (currentLogText.includes("No failed job found")) {
                 let strategy: 'standard' | 'extended' | 'any_error' | 'force_latest' = 'standard';
@@ -125,15 +130,51 @@ export async function runWorkerTask(
             const isDependencyIssue = currentLogText.includes("ModuleNotFoundError") ||
                 currentLogText.includes("ImportError") ||
                 currentLogText.includes("No module named") ||
-                currentLogText.includes("Missing dependency");
+                currentLogText.includes("Missing dependency") ||
+                currentLogText.includes("ContextualVersionConflict");
 
             if (isDependencyIssue && i === 0) {
                 currentState.phase = AgentPhase.TOOL_USE;
                 updateStateCallback(group.id, { ...currentState });
-                log('TOOL', 'Invoking Dependency Inspector...');
-                const depReport = await toolScanDependencies(config, headSha);
-                dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
-                log('VERBOSE', `Dependency Report generated.`);
+                
+                // [Phase 5] Enhanced Python Dependency Solving
+                if (sandbox) {
+                    const requirementsFile = await findClosestFile(config, 'requirements.txt');
+                    if (requirementsFile) {
+                        log('INFO', 'Detected Python dependency issue and found requirements.txt. Starting autonomous solver...');
+                        const provisioning = new ProvisioningService(sandbox);
+                        const solver = new DependencySolverService(sandbox, { provisioning, fixPattern: services.fixPattern });
+                        
+                        const result = await solver.solvePythonConflicts(config, requirementsFile.file.content, (level, msg) => log(level, msg));
+                        
+                        if (result.success && result.modifiedRequirements) {
+                            log('SUCCESS', 'Autonomous dependency solver succeeded in resolving conflicts.');
+                            
+                            // Update state with modified file
+                            const activeChange: FileChange = {
+                                path: requirementsFile.path,
+                                original: requirementsFile.file,
+                                modified: { ...requirementsFile.file, content: result.modifiedRequirements },
+                                status: 'modified'
+                            };
+                            currentState.files[requirementsFile.path] = activeChange;
+                            
+                            dependencyContext = `\nDEPENDENCY RESOLUTION SUCCESSFUL. Modified requirements.txt applied.\n`;
+                        } else if (result.error) {
+                            log('WARN', `Autonomous dependency solver failed: ${result.error}`);
+                            dependencyContext = `\nDEPENDENCY RESOLUTION ATTEMPTED BUT FAILED: ${result.error}\n`;
+                        }
+                    } else {
+                        log('TOOL', 'Invoking legacy Dependency Inspector (requirements.txt not found)...');
+                        const depReport = await toolScanDependencies(config, headSha);
+                        dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
+                    }
+                } else {
+                    log('TOOL', 'Invoking legacy Dependency Inspector (Sandbox not available)...');
+                    const depReport = await toolScanDependencies(config, headSha);
+                    dependencyContext = `\nDEPENDENCY REPORT:\n${depReport}\n`;
+                }
+                log('VERBOSE', `Dependency handling complete.`);
             }
 
             // 1. DIAGNOSIS
@@ -148,12 +189,12 @@ export async function runWorkerTask(
 
             // [STAGE 3] Pass profile and previous classification for context-aware diagnosis
             const classificationForDiagnosis = {
-                category: classified.category,
-                scope: classified.scope,
-                priority: getErrorPriority(classified.category),
-                confidence: classified.confidence,
-                affectedFiles: classified.affectedFiles,
-                suggestedAction: classified.suggestedAction
+                category: currentClassification.category,
+                scope: currentClassification.scope,
+                priority: getErrorPriority(currentClassification.category),
+                confidence: currentClassification.confidence,
+                affectedFiles: currentClassification.affectedFiles,
+                suggestedAction: currentClassification.suggestedAction
             };
 
             diagnosis = await diagnoseError(config, currentLogText, diagContext, profile, classificationForDiagnosis, feedbackHistory);
@@ -164,7 +205,15 @@ export async function runWorkerTask(
             if (!diagnosis.reproductionCommand && sandbox) {
                 log('INFO', '[Inference] Reproduction command missing. Attempting inference...');
                 const repoPath = typeof sandbox.getLocalPath === 'function' ? sandbox.getLocalPath() : '.';
-                const inferred = await inferenceService.inferCommand(repoPath, config, sandbox);
+                const inferred = await inferenceService.inferCommand(
+                    repoPath, 
+                    config, 
+                    sandbox,
+                    {
+                        workflowPath: group.mainRun.path,
+                        logText: currentLogText
+                    }
+                );
                 
                 if (inferred) {
                     log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);
@@ -226,18 +275,14 @@ export async function runWorkerTask(
                 log('INFO', `Reproduction Command identified: ${diagnosis.reproductionCommand}`);
             }
 
-            // [ENHANCED] Error Classification with Knowledge Base
-            const classified = await classifyErrorWithHistory(currentLogText, profile);
-            classifiedErrors.push(classified);
-
             // Cluster error for cross-run pattern detection
             if (currentErrorFactId && i === 0) {
                 try {
                     await clusterError(
                         currentErrorFactId,
-                        classified.category,
-                        classified.errorMessage,
-                        classified.affectedFiles
+                        currentClassification.category,
+                        currentClassification.errorMessage,
+                        currentClassification.affectedFiles
                     );
                 } catch (e) {
                     log('WARN', `[Clustering] Failed to cluster error: ${e}`);
@@ -245,8 +290,8 @@ export async function runWorkerTask(
             }
 
             // Check for historical matches
-            if (classified.historicalMatches && classified.historicalMatches.length > 0) {
-                const topMatch = classified.historicalMatches[0];
+            if (currentClassification.historicalMatches && currentClassification.historicalMatches.length > 0) {
+                const topMatch = currentClassification.historicalMatches[0];
                 if (topMatch.similarity > 0.85) {
                     log('INFO', `[Knowledge Base] Found similar historical fix (similarity: ${(topMatch.similarity * 100).toFixed(0)}%)`);
                     log('VERBOSE', `[Knowledge Base] Historical solution: ${JSON.stringify(topMatch.pattern.fixTemplate).substring(0, 100)}...`);
@@ -256,7 +301,7 @@ export async function runWorkerTask(
 
             // Get suggested actions from action library
             if (diagnosis.filePath) {
-                const suggestions = await getSuggestedActions(classified, diagnosis.filePath, 3);
+                const suggestions = await getSuggestedActions(currentClassification, diagnosis.filePath, 3);
                 if (suggestions.length > 0) {
                     log('INFO', `[Action Library] Top suggestions:`);
                     suggestions.forEach((s, idx) => {
@@ -265,27 +310,27 @@ export async function runWorkerTask(
                 }
             }
 
-            const priority = getErrorPriority(classified.category);
-            log('INFO', `[Classification] Category: ${classified.category}, Priority: ${priority}/4, Confidence: ${(classified.confidence * 100).toFixed(0)}%`);
+            const priority = getErrorPriority(currentClassification.category);
+            log('INFO', `[Classification] Category: ${currentClassification.category}, Priority: ${priority}/4, Confidence: ${(currentClassification.confidence * 100).toFixed(0)}%`);
 
-            if (classified.affectedFiles.length > 0) {
-                log('VERBOSE', `[Classification] Affected files: ${classified.affectedFiles.join(', ')}`);
+            if (currentClassification.affectedFiles.length > 0) {
+                log('VERBOSE', `[Classification] Affected files: ${currentClassification.affectedFiles.join(', ')}`);
 
-                // [STAGE 2 ACTIVE] Use classified files as hints if diagnosis missed them
-                if (!diagnosis.filePath && classified.affectedFiles.length > 0) {
-                    diagnosis.filePath = classified.affectedFiles[0];
+                // [STAGE 2 ACTIVE] Use currentClassification files as hints if diagnosis missed them
+                if (!diagnosis.filePath && currentClassification.affectedFiles.length > 0) {
+                    diagnosis.filePath = currentClassification.affectedFiles[0];
                     log('INFO', `[Classification] Using affected file from classification: ${diagnosis.filePath}`);
                 }
             }
 
-            if (classified.suggestedAction) {
-                log('INFO', `[Classification] Suggestion: ${classified.suggestedAction}`);
+            if (currentClassification.suggestedAction) {
+                log('INFO', `[Classification] Suggestion: ${currentClassification.suggestedAction}`);
             }
 
             // [STAGE 2 ACTIVE] Skip cascading errors - focus on root cause
             if (classifiedErrors.length > 1) {
                 const previous = classifiedErrors[classifiedErrors.length - 2];
-                if (isCascadingError(classified, previous)) {
+                if (isCascadingError(currentClassification, previous)) {
                     log('WARN', `[Classification] Skipping cascading error. Root cause: ${previous.category}`);
                     currentLogText = previous.rootCauseLog;
                     continue;
@@ -498,7 +543,7 @@ export async function runWorkerTask(
 
                         // Detect secondary issues revealed by command failure
                         const secondaryError = await classifyErrorWithHistory(cmdResult.output, profile);
-                        if (secondaryError.category !== classified.category && currentErrorFactId) {
+                        if (secondaryError.category !== currentClassification.category && currentErrorFactId) {
                             log('INFO', `[Discovery] Found secondary issue: ${secondaryError.category}`);
 
                             try {

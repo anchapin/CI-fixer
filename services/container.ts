@@ -20,6 +20,8 @@ import { EnvironmentService } from './sandbox/EnvironmentService.js';
 import { db } from '../db/client.js';
 import { LoopDetector } from './LoopDetector.js';
 import { ReproductionInferenceService } from './reproduction-inference.js';
+import { FixPatternService } from './FixPatternService.js';
+import { DependencySolverService } from './DependencySolverService.js';
 
 export interface ServiceContainer {
     github: typeof GitHub;
@@ -42,6 +44,7 @@ export interface ServiceContainer {
     learning: LearningLoopService;
     learningMetrics: LearningMetricService;
     reproductionInference: ReproductionInferenceService;
+    fixPattern: FixPatternService;
 }
 
 export const defaultServices: ServiceContainer = {
@@ -64,6 +67,7 @@ export const defaultServices: ServiceContainer = {
     ingestion: new DataIngestionService(db),
     learning: new LearningLoopService(db),
     learningMetrics: new LearningMetricService(db),
-    reproductionInference: new ReproductionInferenceService()
+    reproductionInference: new ReproductionInferenceService(),
+    fixPattern: new FixPatternService(db as any)
 };
 
