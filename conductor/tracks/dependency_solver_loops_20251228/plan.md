@@ -10,7 +10,7 @@
     - [ ] Sub-task: Reproduce the `crewai`, `pyjwt`, `pydantic-settings` conflict locally.
 - [ ] Task: Conductor - User Manual Verification 'Research and Setup' (Protocol in workflow.md)
 
-## Phase 2: Implement Enhanced Dependency Analysis
+## Phase 2: Implement Enhanced Dependency Analysis [checkpoint: a3a8ec3]
 
 - [x] Task: Integrate `pip install --dry-run --report` (or equivalent) into the agent's tooling.
     - [x] Sub-task: Develop a function to execute the dry-run command and capture its output.
