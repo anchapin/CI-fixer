@@ -48,7 +48,7 @@
     - [x] Sub-task: Create integration tests to cover the full dependency resolution workflow, including known conflict scenarios.
 - [x] Task: Conductor - User Manual Verification 'Implement Verification and Testing' (Protocol in workflow.md)
 
-## Phase 5: Agent Integration and Refinement
+## Phase 5: Agent Integration and Refinement [checkpoint: 1337b92]
 
 - [x] Task: Integrate the new dependency resolution capabilities into the main agent workflow. eff9712
     - [x] Sub-task: Define the trigger points for activating the dependency solver.
