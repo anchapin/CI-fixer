@@ -35,18 +35,18 @@
 
 ## Phase 4: Implement Verification and Testing
 
-- [ ] Task: Integrate a dedicated dependency health check tool.
-    - [ ] Sub-task: Choose and integrate a tool like `safety` or `pipdeptree`.
-    - [ ] Sub-task: Develop functions to run the tool and parse its output for success/failure.
-- [ ] Task: Implement post-fix `pip install` verification.
-    - [ ] Sub-task: Develop a function to execute `pip install -r requirements.txt` and check for successful installation.
-- [ ] Task: Integrate project test suite execution.
-    - [ ] Sub-task: Develop a mechanism to run the project's existing tests (`npm test` in this project).
-    - [ ] Sub-task: Capture and interpret test results to detect regressions.
-- [ ] Task: Develop a comprehensive test suite for the dependency solver.
-    - [ ] Sub-task: Create unit tests for each implemented function (parsing, relaxation, verification).
-    - [ ] Sub-task: Create integration tests to cover the full dependency resolution workflow, including known conflict scenarios.
-- [ ] Task: Conductor - User Manual Verification 'Implement Verification and Testing' (Protocol in workflow.md)
+- [x] Task: Integrate a dedicated dependency health check tool.
+    - [x] Sub-task: Choose and integrate a tool like `safety` or `pipdeptree`.
+    - [x] Sub-task: Develop functions to run the tool and parse its output for success/failure.
+- [x] Task: Implement post-fix `pip install` verification.
+    - [x] Sub-task: Develop a function to execute `pip install -r requirements.txt` and check for successful installation.
+- [x] Task: Integrate project test suite execution.
+    - [x] Sub-task: Develop a mechanism to run the project's existing tests (`npm test` in this project).
+    - [x] Sub-task: Capture and interpret test results to detect regressions.
+- [x] Task: Develop a comprehensive test suite for the dependency solver.
+    - [x] Sub-task: Create unit tests for each implemented function (parsing, relaxation, verification).
+    - [x] Sub-task: Create integration tests to cover the full dependency resolution workflow, including known conflict scenarios.
+- [~] Task: Conductor - User Manual Verification 'Implement Verification and Testing' (Protocol in workflow.md)
 
 ## Phase 5: Agent Integration and Refinement
 

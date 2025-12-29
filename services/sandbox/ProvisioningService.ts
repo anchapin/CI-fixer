@@ -166,6 +166,64 @@ export class ProvisioningService {
   }
 
   /**
+   * Executes `pip check` in the sandbox to verify dependency compatibility.
+   * @returns An object containing success status and any detected conflict messages.
+   */
+  async runPipCheck(): Promise<{ success: boolean; output: string }> {
+      try {
+          const checkCommand = `python3 -m pip check || python -m pip check`;
+          const { exitCode, stdout, stderr } = await this.sandbox.runCommand(checkCommand);
+
+          return {
+              success: exitCode === 0,
+              output: exitCode === 0 ? stdout : stderr || stdout
+          };
+      } catch (error) {
+          log('ERROR', `[ProvisioningService] Error during pip check: ${error}`);
+          return { success: false, output: `Error during pip check: ${error}` };
+      }
+  }
+
+  /**
+   * Executes `pip install -r requirements.txt` in the sandbox.
+   * @param requirementsPath The path to the requirements file. Defaults to 'requirements.txt'.
+   * @returns An object containing success status and output.
+   */
+  async runPipInstall(requirementsPath: string = 'requirements.txt'): Promise<{ success: boolean; output: string }> {
+      try {
+          const installCommand = `python3 -m pip install -r ${requirementsPath} || python -m pip install -r ${requirementsPath}`;
+          const { exitCode, stdout, stderr } = await this.sandbox.runCommand(installCommand);
+
+          return {
+              success: exitCode === 0,
+              output: exitCode === 0 ? stdout : stderr || stdout
+          };
+      } catch (error) {
+          log('ERROR', `[ProvisioningService] Error during pip install: ${error}`);
+          return { success: false, output: `Error during pip install: ${error}` };
+      }
+  }
+
+  /**
+   * Executes the project's test suite in the sandbox.
+   * @param testCommand The command to run the tests. Defaults to 'npm test'.
+   * @returns An object containing success status and output.
+   */
+  async runProjectTests(testCommand: string = 'npm test'): Promise<{ success: boolean; output: string }> {
+      try {
+          const { exitCode, stdout, stderr } = await this.sandbox.runCommand(testCommand);
+
+          return {
+              success: exitCode === 0,
+              output: exitCode === 0 ? stdout : stderr || stdout
+          };
+      } catch (error) {
+          log('ERROR', `[ProvisioningService] Error during project tests: ${error}`);
+          return { success: false, output: `Error during project tests: ${error}` };
+      }
+  }
+
+  /**
    * Executes `pip-compile` with provided requirements.in content
    * and returns the generated requirements.txt content.
    * Automatically attempts to install pip-tools if not found.
