@@ -10,6 +10,9 @@ import {
     getWorkflowLogs, findClosestFile
 } from '../services/github/GitHubService.js';
 import {
+    toAbsolutePath, findClosestFileAbsolute
+} from '../services/path-resolution.js';
+import {
     diagnoseError, generateDetailedPlan, generateFix, judgeFix,
     generateRepoSummary, DiagnosisResult, runSandboxTest
 } from '../services/analysis/LogAnalysisService.js';
