@@ -10,15 +10,15 @@ This plan implements three synergistic improvements to address critical producti
   - Create function `toAbsolutePath(path, workingDir)` that converts relative paths to absolute
   - Integrate with existing `findClosestFile` to get absolute paths
   - Add validation step before file operations
-- [~] Task: Modify file operation calls in worker to use absolute paths
+- [x] Task: Modify file operation calls in worker to use absolute paths ddedc78
   - Update all `findClosestFile` calls to store absolute paths
   - Update `validateFileExists` to accept absolute paths
   - Add path verification before `writeFile` and sandbox file operations
-- [ ] Task: Write unit tests for path resolution logic
+- [x] Task: Write unit tests for path resolution logic e6a7c86
   - Test absolute path conversion from relative paths
   - Test path validation with existing/missing files
   - Test integration with `findClosestFile` and `validateFileExists`
-- [ ] Task: Write integration test for "agent lost" scenario
+- [x] Task: Write integration test for "agent lost" scenario decac03
   - Simulate scenario where agent attempts operation on non-absolute path
   - Verify path resolution catches the issue and provides clear error
 - [ ] Task: Verify coverage >80% for path resolution code
