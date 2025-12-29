@@ -6,7 +6,7 @@ This plan implements three synergistic improvements to address critical producti
 **Total Estimated Effort:** 5-8 hours
 
 ## Phase 1: Path Resolution Enhancement (2-3 hours)
-- [~] Task: Add absolute path conversion utility in `agent/worker.ts`
+- [x] Task: Add absolute path conversion utility in `agent/worker.ts` e6a7c86
   - Create function `toAbsolutePath(path, workingDir)` that converts relative paths to absolute
   - Integrate with existing `findClosestFile` to get absolute paths
   - Add validation step before file operations
