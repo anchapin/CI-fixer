@@ -1,0 +1,8 @@
+{
+  "track_id": "dependency_solver_loops_20251228",
+  "type": "bug_fix",
+  "status": "new",
+  "created_at": "2025-12-28T18:44:00Z",
+  "updated_at": "2025-12-28T18:44:00Z",
+  "description": "Dependency Solver Loops: The ZeroOperator group got stuck trying to resolve version conflicts manually. The Error: Conflict between crewai, pyjwt, and pydantic-settings. The Bad Fix: The agent tried to edit requirements.txt manually multiple times, incrementing versions blindly, but kept hitting the same conflict or making syntax errors. Recommendation: Use Specialized Dependency Tools. Instead of letting the LLM guess version numbers, provide a tool that runs pip install --dry-run --report (or equivalent) to get the exact conflict explanation from the package manager. Allow the agent to 'relax' constraints (e.g., changing == to >=) rather than just guessing new specific version numbers."
+}

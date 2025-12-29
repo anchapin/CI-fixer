@@ -34,5 +34,11 @@
 ## Observability & Telemetry
 - **Metrics & Tracing:** OpenTelemetry SDK
 
+## Agent Services
+- **Grounding & Verification:** `FileDiscoveryService`, `FileVerificationService`, `FileFallbackService`
+- **Dependency Resolution:** `DependencySolverService`, `ProvisioningService`, `FixPatternService`
+- **Diagnostic Engine:** `LoopDetector` (Hash-based), `ReproductionInferenceService`
+- **Learning Infrastructure:** `LearningLoopService`, `LearningMetricService`, `RewardEngine`
+
 ## Execution Environment
-- **Sandboxing:** E2B Code Interpreter, Docker
+- **Sandboxing:** E2B Code Interpreter, Docker (with persistent environment state)
