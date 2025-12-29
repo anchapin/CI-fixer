@@ -2,7 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { AppConfig } from '../../types.js';
 import { withSpan, setAttributes, addEvent } from '../../telemetry/tracing.js';
-import { recordLLMCall } from '../../telemetry/metrics.js';
+// NOTE: recordLLMCall removed from telemetry/metrics to prevent database import in frontend
+// Metrics service imports db/client.js which requires Node.js environment
 
 // Constants
 const MODEL_FAST = "gemini-2.5-flash";

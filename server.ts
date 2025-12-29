@@ -19,7 +19,7 @@ app.use(express.json());
 import { chat, toStreamResponse } from '@tanstack/ai';
 import { CIMultiAdapter } from './services/CIMultiAdapter.js';
 import { createTools } from './services/sandbox/SandboxService.js';
-import { defaultServices } from './services/container.js';
+import { serverServices } from './services/server-container.js'; // Use server-side container with database access
 
 const PORT = 3001;
 
@@ -120,7 +120,7 @@ app.post('/api/agent/start', async (req, res) => {
             config,
             group,
             initialRepoContext,
-            defaultServices,
+            serverServices,
             updateCallback,
             logCallback
         ).then(async finalState => {
@@ -411,7 +411,7 @@ app.get('/api/prediction/strategy', async (req, res) => {
             return res.status(400).json({ error: 'Missing errorCategory' });
         }
 
-        const recommendation = await defaultServices.learning.getStrategyRecommendation(
+        const recommendation = await serverServices.learning.getStrategyRecommendation(
             errorCategory as string,
             parseInt(complexity as string) || 5
         );
@@ -464,7 +464,7 @@ app.post('/api/prediction/fix', async (req, res) => {
 
 app.get('/api/learning/summary', async (req, res) => {
     try {
-        const fixRate = await defaultServices.learningMetrics.getAverageMetricValue('Fix Rate', 50);
+        const fixRate = await serverServices.learningMetrics.getAverageMetricValue('Fix Rate', 50);
         const patterns = await prisma.fixPattern.count();
         
         // Mock optimization gain for now

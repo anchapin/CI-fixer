@@ -1,26 +1,34 @@
 
+/**
+ * Client-Safe Service Container
+ *
+ * This container contains only services that are safe to use in the browser.
+ * It MUST NOT import any server-only modules (db/client.js with dotenv, etc.)
+ * to prevent Node.js code from being bundled into the frontend.
+ *
+ * Database-dependent services are available in server-container.ts for server-side use only.
+ *
+ * Services excluded from client container (require database):
+ * - dependency-tracker.ts (imports db)
+ * - error-clustering.ts (imports db)
+ * - metrics.ts (imports db)
+ * - ingestion, learning, learningMetrics, fixPattern
+ */
+
 import * as GitHub from './github/GitHubService.js';
 import * as Sandbox from './sandbox/SandboxService.js';
 import * as LLM from './llm/LLMService.js';
 import * as Analysis from './analysis/LogAnalysisService.js';
 import * as Context from './context-manager.js';
 import * as Classification from '../errorClassification.js';
-import * as Dependency from './dependency-tracker.js';
-import * as Clustering from './error-clustering.js';
 import * as Complexity from './complexity-estimator.js';
 import * as RepairAgent from './repair-agent/orchestrator.js';
-import * as Metrics from '../telemetry/metrics.js';
-import { DataIngestionService } from './DataIngestionService.js';
-import { LearningLoopService } from './LearningLoopService.js';
-import { LearningMetricService } from './LearningMetricService.js';
 import { FileDiscoveryService } from './sandbox/FileDiscoveryService.js';
 import { FileVerificationService } from './sandbox/FileVerificationService.js';
 import { FileFallbackService } from './sandbox/FileFallbackService.js';
 import { EnvironmentService } from './sandbox/EnvironmentService.js';
-import { db } from '../db/client.js';
 import { LoopDetector } from './LoopDetector.js';
 import { ReproductionInferenceService } from './reproduction-inference.js';
-import { FixPatternService } from './FixPatternService.js';
 import { DependencySolverService } from './DependencySolverService.js';
 
 export interface ServiceContainer {
@@ -35,16 +43,11 @@ export interface ServiceContainer {
     analysis: typeof Analysis;
     context: typeof Context;
     classification: typeof Classification;
-    dependency: typeof Dependency;
-    clustering: typeof Clustering;
     complexity: typeof Complexity;
     repairAgent: typeof RepairAgent;
-    metrics: typeof Metrics;
-    ingestion: DataIngestionService;
-    learning: LearningLoopService;
-    learningMetrics: LearningMetricService;
     reproductionInference: ReproductionInferenceService;
-    fixPattern: FixPatternService;
+    // Note: Database-dependent services (dependency, clustering, metrics, ingestion, learning, learningMetrics, fixPattern)
+    // are only available in server-container.ts for server-side use
 }
 
 export const defaultServices: ServiceContainer = {
@@ -59,15 +62,10 @@ export const defaultServices: ServiceContainer = {
     analysis: Analysis,
     context: Context,
     classification: Classification,
-    dependency: Dependency,
-    clustering: Clustering,
     complexity: Complexity,
     repairAgent: RepairAgent,
-    metrics: Metrics,
-    ingestion: new DataIngestionService(db),
-    learning: new LearningLoopService(db),
-    learningMetrics: new LearningMetricService(db),
-    reproductionInference: new ReproductionInferenceService(),
-    fixPattern: new FixPatternService(db as any)
+    reproductionInference: new ReproductionInferenceService()
+    // Note: Database-dependent services removed to prevent Node.js modules
+    // from being bundled into frontend. Use server-container.ts on server-side.
 };
 

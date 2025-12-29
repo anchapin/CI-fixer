@@ -1,5 +1,7 @@
 import { LoopStateSnapshot, LoopDetectionResult } from '../types';
-import { recordLoopDetected } from '../telemetry/metrics';
+// NOTE: recordLoopDetected removed from telemetry/metrics to prevent database import in frontend
+// Metrics service imports db/client.js which requires Node.js environment
+// TODO: Re-enable metrics tracking in server-side context only
 
 export class LoopDetector {
   private history: LoopStateSnapshot[] = [];
@@ -62,7 +64,7 @@ export class LoopDetector {
       const previousIteration = this.stateMap.get(hash);
       
       if (previousIteration !== undefined) {
-        recordLoopDetected(previousIteration, hash);
+        // recordLoopDetected(previousIteration, hash); // Disabled for frontend compatibility
       }
 
       return {

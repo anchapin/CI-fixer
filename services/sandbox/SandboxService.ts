@@ -8,7 +8,9 @@ import { retryWithBackoff, unifiedGenerate, safeJsonParse } from '../llm/LLMServ
 import { CapabilityProbe } from './CapabilityProbe.js';
 import { ProvisioningService } from './ProvisioningService.js';
 import { LoopDetector } from '../LoopDetector.js';
-import { collectPathCorrections } from '../telemetry/PathCorrectionCollector.js';
+// NOTE: collectPathCorrections removed from telemetry/PathCorrectionCollector to prevent database import in frontend
+// PathCorrectionService imports db/client.js which requires Node.js environment
+// TODO: Re-enable path correction collection in server-side context only
 
 // Environment Detection
 const IS_BROWSER = typeof window !== 'undefined' && typeof window.document !== 'undefined';
@@ -374,9 +376,9 @@ main();
     const result = await sandbox.runCommand(cmd);
 
     let output = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
-    
-    // MIDDLEWARE: Telemetry - Collect Path Corrections
-    collectPathCorrections(output).catch(e => console.warn("Failed to collect path corrections", e));
+
+    // MIDDLEWARE: Telemetry - Collect Path Corrections (DISABLED for frontend compatibility)
+    // collectPathCorrections(output).catch(e => console.warn("Failed to collect path corrections", e));
 
     // MIDDLEWARE: Intercept Path Hallucinations
     if (loopDetector && output.includes('[PATH_NOT_FOUND]')) {

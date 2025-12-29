@@ -2,7 +2,8 @@
 
 **Project:** CI-Fixer (recursive-devops-agent)
 **Domain:** Autonomous CI/CD Failure Diagnosis and Repair
-**Date:** 2025-12-22
+**Date:** 2025-12-29
+**Last Commit:** 7776be0 - conductor(cleanup): Archive 'Dependency Solver Loops' and sync docs (2025-12-28 21:19:56)
 
 ## Vocabulary
 
@@ -17,6 +18,9 @@
 | **Service Container** | Dependency injection pattern in `/services/container.ts` that manages all business logic services. |
 | **Trace** | OpenTelemetry execution trace for debugging and observability. |
 | **TDD (Test-Driven Development)** | Red-Green-Refactor workflow: write failing tests first (Red), implement to pass (Green), then improve code (Refactor). |
+| **Language Scoping** | Hybrid keyword/manifest detection that enforces strict boundaries between JS/TS, Python, and Go contexts to ensure relevant file/tool selection. |
+| **Path Verification** | Automatic correction of hallucinated file paths to prevent directory traversal attacks. |
+| **Dependency Solver** | Autonomous package manager integration that resolves and installs dependencies when reproduction fails due to missing packages. |
 
 ## Invariants
 
@@ -48,6 +52,12 @@
 - **Provider Selection**: `VITE_LLM_PROVIDER` environment variable determines the active LLM provider.
 - **Cost Tracking**: All LLM calls MUST be tracked in `FixAttempt` table with token counts and cost metrics.
 
+### Agent Workflow Invariants
+- **Language Scoping**: The agent MUST detect project language and enforce boundaries in file discovery and tool selection.
+- **Path Verification**: All file paths MUST be verified before execution to prevent hallucinated path errors.
+- **Dependency Resolution**: When reproduction fails due to missing dependencies, the agent MUST attempt autonomous dependency resolution before requesting human intervention.
+- **Graph Execution**: The agent coordinator MUST execute nodes in dependency order, enabling parallel execution when possible.
+
 ### Git Workflow Invariants
 - **Conventional Commits**: All commits MUST follow `<type>(<scope>): <description>` format.
 - **Git Notes**: Every completed task MUST have a git note attached with detailed summary.
@@ -61,9 +71,12 @@
 - **Sandbox Options**: E2B (cloud, requires API key) or Docker (local, requires Docker Desktop)
 
 ### Current Phase Context
-- **Active Track**: `path_verification_20251222`
-- **Current Phase**: Phase 3 - Telemetry & Refinement (in progress as of 2025-12-22)
+- **Active Tracks**: None currently active (archived tracks include env_persistence, fs_grounding, dependency_solver_loops)
+- **Recent Work**: Dependency solver integration (Phase 5 complete), agent workflow refinement, test reliability improvements
+- **Uncommitted Changes**: Multiple test file updates, agent tool enhancements, path verification improvements
 - **Tech Stack**: React 19.2.1 + Vite, Express, Prisma, Vitest, Playwright
+- **Latest Phase**: Agent Integration and Refinement (completed 2025-12-28)
+- **Current Session**: 2025-12-29 - User reliability and test improvements in progress
 
 ### Security Constraints
 - **Path Validation**: All user-provided paths MUST be validated against project root
@@ -80,5 +93,9 @@
 
 ### Internal Services
 - **LogAnalysisService** (`/services/analysis/`): Parses logs, generates error fingerprints
-- **FileDiscoveryService** (`/services/sandbox/`): File search and discovery in sandboxes
+- **FileDiscoveryService** (`/services/sandbox/`): File search and discovery in sandboxes with language scoping
+- **PathVerificationService** (`/services/`): Validates and corrects hallucinated file paths
+- **DependencySolverService** (`/services/`): Autonomous package manager integration for dependency resolution
 - **Agent Tools** (`/services/sandbox/agent_tools.ts`): Tool execution interface for agents
+- **Graph Coordinator** (`/agent/graph/coordinator.ts`): Orchestrates specialized nodes in DAG execution
+- **Worker Loop** (`/agent/worker.ts`): Main execution loop that runs the graph-based agent
