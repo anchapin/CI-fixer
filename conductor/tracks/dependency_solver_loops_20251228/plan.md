@@ -18,20 +18,20 @@
 - [x] Task: Implement conflict identification logic.
     - [x] Sub-task: Develop a module to interpret parsed conflict reports.
     - [x] Sub-task: Pinpoint the exact conflicting packages and their versions.
-- [~] Task: Conductor - User Manual Verification 'Implement Enhanced Dependency Analysis' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Implement Enhanced Dependency Analysis' (Protocol in workflow.md)
 
 ## Phase 3: Implement Constraint Relaxation Strategy
 
-- [ ] Task: Develop logic for broad constraint relaxation.
-    - [ ] Sub-task: Implement a function to modify `requirements.txt` by changing `==x.y.z` to `>=x.y.z`.
-    - [ ] Sub-task: Implement a function to remove version pins if broader relaxation is needed.
-- [ ] Task: Integrate automated dependency management tool (if applicable).
-    - [ ] Sub-task: Develop an interface to interact with the chosen tool (e.g., `pip-compile`).
-    - [ ] Sub-task: Test the tool's ability to resolve conflicts with relaxed constraints.
-- [ ] Task: Implement LLM-driven constraint adjustment.
-    - [ ] Sub-task: Define prompts for the LLM to suggest constraint modifications based on conflict reports.
-    - [ ] Sub-task: Develop a mechanism to apply LLM-suggested changes to `requirements.txt`.
-- [ ] Task: Conductor - User Manual Verification 'Implement Constraint Relaxation Strategy' (Protocol in workflow.md)
+- [x] Task: Develop logic for broad constraint relaxation.
+    - [x] Sub-task: Implement a function to modify `requirements.txt` by changing `==x.y.z` to `>=x.y.z`.
+    - [x] Sub-task: Implement a function to remove version pins if broader relaxation is needed.
+- [x] Task: Integrate automated dependency management tool (if applicable).
+    - [x] Sub-task: Develop an interface to interact with the chosen tool (e.g., `pip-compile`).
+    - [x] Sub-task: Test the tool's ability to resolve conflicts with relaxed constraints.
+- [x] Task: Implement LLM-driven constraint adjustment.
+    - [x] Sub-task: Define prompts for the LLM to suggest constraint modifications based on conflict reports.
+    - [x] Sub-task: Develop a mechanism to apply LLM-suggested changes to `requirements.txt`.
+- [x] Task: Conductor - User Manual Verification 'Implement Constraint Relaxation Strategy' (Protocol in workflow.md)
 
 ## Phase 4: Implement Verification and Testing
 

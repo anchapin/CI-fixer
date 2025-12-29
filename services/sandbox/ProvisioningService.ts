@@ -1,4 +1,5 @@
 import { SandboxEnvironment } from '../../sandbox.js';
+import { log } from '../../utils/logger.js';
 
 export type ToolRuntime = 'node' | 'python' | 'unknown';
 
@@ -38,7 +39,7 @@ export class ProvisioningService {
     // Avoid duplicates
     if (!currentPath.includes(newPath)) {
         this.sandbox.envOverrides['PATH'] = `${currentPath}:${newPath}`;
-        console.log(`[Provisioning] Updated sandbox PATH override: ${this.sandbox.envOverrides['PATH']}`);
+        log('INFO', `[Provisioning] Updated sandbox PATH override: ${this.sandbox.envOverrides['PATH']}`);
     }
   }
 
@@ -63,7 +64,7 @@ export class ProvisioningService {
       return false;
     }
 
-    console.log(`[Provisioning] Test runner '${runner}' missing. Attempting installation...`);
+    log('INFO', `[Provisioning] Test runner '${runner}' missing. Attempting installation...`);
     return this.provision(runner, runtime);
   }
 
@@ -146,7 +147,7 @@ export class ProvisioningService {
 
       // If pip command itself failed, we log stderr and return null
       if (exitCode !== 0) {
-        console.error(`[ProvisioningService] pip dry run failed: ${stderr}`);
+        log('ERROR', `[ProvisioningService] pip dry run failed: ${stderr}`);
         return null;
       }
 
@@ -155,13 +156,60 @@ export class ProvisioningService {
 
       return reportContent;
     } catch (error) {
-      console.error(`[ProvisioningService] Error during pip dry run report: ${error}`);
+      log('ERROR', `[ProvisioningService] Error during pip dry run report: ${error}`);
       return null;
     } finally {
       // 4. Clean up temporary files
       await this.sandbox.deleteFile(tempRequirementsFile);
       await this.sandbox.deleteFile(reportFile);
     }
+  }
+
+  /**
+   * Executes `pip-compile` with provided requirements.in content
+   * and returns the generated requirements.txt content.
+   * Automatically attempts to install pip-tools if not found.
+   * @param requirementsInContent The content of the requirements.in file.
+   * @returns The content of the generated requirements.txt file, or null if an error occurred.
+   */
+  async runPipCompile(requirementsInContent: string): Promise<string | null> {
+      const tempRequirementsInFile = `requirements-${Date.now()}.in`;
+      const tempRequirementsTxtFile = `requirements-${Date.now()}.txt`;
+
+      try {
+          // 1. Ensure pip-tools is installed
+          // pip-compile is part of pip-tools package
+          const installed = await this.provision('piptools', 'python'); 
+          if (!installed) {
+              log('ERROR', "[ProvisioningService] pip-tools is not installed and could not be provisioned.");
+              return null;
+          }
+
+          // 2. Write requirements.in content to a temporary file
+          await this.sandbox.writeFile(tempRequirementsInFile, requirementsInContent);
+
+          // 3. Execute pip-compile
+          // Use python -m piptools compile for robustness, as pip-compile might not be directly in PATH
+          const compileCommand = `python3 -m piptools compile ${tempRequirementsInFile} -o ${tempRequirementsTxtFile} || python -m piptools compile ${tempRequirementsInFile} -o ${tempRequirementsTxtFile}`;
+          const { exitCode, stderr } = await this.sandbox.runCommand(compileCommand);
+
+          if (exitCode !== 0) {
+              log('ERROR', `[ProvisioningService] pip-compile failed: ${stderr}`);
+              return null;
+          }
+
+          // 4. Read the generated requirements.txt file
+          const requirementsTxtContent = await this.sandbox.readFile(tempRequirementsTxtFile);
+
+          return requirementsTxtContent;
+      } catch (error) {
+          log('ERROR', `[ProvisioningService] Error during pip-compile: ${error}`);
+          return null;
+      } finally {
+          // 5. Clean up temporary files
+          await this.sandbox.deleteFile(tempRequirementsInFile);
+          await this.sandbox.deleteFile(tempRequirementsTxtFile);
+      }
   }
 
   /**

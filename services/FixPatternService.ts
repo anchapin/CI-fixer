@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { createPatch } from 'diff';
-import { PipInstallReport, PackageMetadata } from '../types';
+import { PipInstallReport, PackageMetadata, AppConfig } from '../types';
+import { unifiedGenerate } from './llm/LLMService.js';
+import { loadPrompt, renderPrompt, getPromptConfig } from './llm/prompt-loader.js';
+import { log } from '../utils/logger.js';
 
 export class FixPatternService {
     constructor(private prisma: PrismaClient) {}
@@ -66,7 +69,7 @@ export class FixPatternService {
             /@validator/,
             /@root_validator/,
             /from pydantic import.*BaseSettings/, // BaseSettings moved to pydantic-settings in V2
-            /orm_mode\s*=\s*True/
+            /orm_mode\s*=\*True/
         ];
 
         // Count matches
@@ -102,7 +105,7 @@ export class FixPatternService {
         try {
             report = JSON.parse(pipReportJson);
         } catch (e) {
-            console.error("Failed to parse pip report JSON:", e);
+            log('ERROR', "Failed to parse pip report JSON: " + e);
             return ["Error: Failed to parse pip dry-run report."];
         }
 
@@ -119,6 +122,7 @@ export class FixPatternService {
                     requestedPackages.set(trimmedLine, '');
                 }
             }
+            // For packages without a specified version, assume no specific request
         });
 
         // Analyze installed packages from the report
@@ -199,7 +203,7 @@ export class FixPatternService {
                 default: return true; // Unknown operator, assume compatible
             }
         } catch (e) {
-            console.warn(`Failed to parse versions for compatibility check: ${installedVersion} vs ${requiredSpec}`, e);
+            log('WARN', `Failed to parse versions for compatibility check: ${installedVersion} vs ${requiredSpec} ` + e);
             return false; // Cannot reliably compare
         }
     }
@@ -210,6 +214,99 @@ export class FixPatternService {
         // e.g., 1.2.3 -> 1002003
         const parts = version.split('.').map(Number);
         return parts[0] * 1_000_000 + (parts[1] || 0) * 1_000 + (parts[2] || 0);
+    }
+
+    /**
+     * Relaxes version constraints in a requirements.txt file for specified packages.
+     * @param requirementsContent The original content of the requirements.txt file.
+     * @param packagesToRelax An array of package names whose constraints should be relaxed.
+     * @param relaxationType The type of relaxation to apply ('to_greater_than_or_equal' or 'remove_pin').
+     * @returns The modified requirements.txt content, or null if no changes were made or an error occurred.
+     */
+    public relaxConstraints(
+        requirementsContent: string,
+        packagesToRelax: string[],
+        relaxationType: 'to_greater_than_or_equal' | 'remove_pin'
+    ): string | null {
+        const lines = requirementsContent.split('\n');
+        let changed = false;
+
+        const newLines = lines.map(line => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.startsWith('#')) {
+                return line; // Skip empty lines or comments
+            }
+
+            const match = trimmedLine.match(/^([a-zA-Z0-9_-]+)(.*)$/);
+            if (!match) {
+                return line; // Not a valid package line
+            }
+
+            const packageName = match[1];
+            const currentSpec = match[2].trim();
+
+            if (packagesToRelax.includes(packageName)) {
+                if (relaxationType === 'to_greater_than_or_equal') {
+                    const versionMatch = currentSpec.match(/==([0-9.]+)$/);
+                    if (versionMatch) {
+                        changed = true;
+                        return `${packageName}>=${versionMatch[1]}`;
+                    }
+                } else if (relaxationType === 'remove_pin') {
+                    if (currentSpec.includes('==') || currentSpec.includes('>=') || currentSpec.includes('<=') || currentSpec.includes('~=')) {
+                        changed = true;
+                        return packageName; // Remove any version specifier
+                    }
+                }
+            }
+            return line;
+        });
+
+        return changed ? newLines.join('\n') : null;
+    }
+
+    /**
+     * Generates an LLM-driven suggestion for relaxing dependency constraints.
+     * @param conflictReports An array of strings describing the detected conflicts.
+     * @param requirementsContent The original content of the requirements.txt file.
+     * @param relaxationStrategy The strategy to use for relaxation ('to_greater_than_or_equal' or 'remove_pin').
+     * @param appConfig The application configuration, needed for LLM calls.
+     * @returns A string containing the LLM's suggested modified requirements.txt content, or null if generation fails.
+     */
+    public async generateRelaxationSuggestion(
+        conflictReports: string[],
+        requirementsContent: string,
+        relaxationStrategy: 'to_greater_than_or_equal' | 'remove_pin',
+        appConfig: AppConfig
+    ): Promise<string | null> {
+        try {
+            const promptTemplate = await loadPrompt('execution/python-dependency-relaxation', 'v1');
+            const promptVariables = {
+                conflictReports: conflictReports.join('\n'),
+                requirementsContent: requirementsContent,
+                relaxationStrategy: relaxationStrategy
+            };
+            const renderedPrompt = renderPrompt(promptTemplate, promptVariables);
+            const llmConfig = getPromptConfig(promptTemplate);
+
+            const llmResponse = await unifiedGenerate(appConfig, {
+                contents: renderedPrompt,
+                config: llmConfig,
+                responseFormat: promptTemplate.metadata.response_format as 'text'
+            });
+
+            const match = llmResponse.text.match(/```(?:\w+)?\n([\s\S]*?)\n```/);
+            if (match && match[1]) {
+                return match[1].trim();
+            } else {
+                log('ERROR', "Failed to extract requirements.txt content from LLM response: " + llmResponse.text);
+                return null;
+            }
+
+        } catch (error) {
+            log('ERROR', "Error generating LLM-driven relaxation suggestion: " + error);
+            return null;
+        }
     }
 
     /**
