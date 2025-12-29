@@ -142,7 +142,9 @@ export async function runWorkerTask(
                 
                 // [Phase 5] Enhanced Python Dependency Solving
                 if (sandbox) {
-                    const requirementsFile = await findClosestFile(config, 'requirements.txt');
+                    // Use findClosestFileAbsolute to ensure we get absolute paths
+                    const workingDir = sandbox.getWorkDir() || process.cwd();
+                    const requirementsFile = await findClosestFileAbsolute(config, 'requirements.txt', workingDir, sandbox);
                     if (requirementsFile) {
                         log('INFO', 'Detected Python dependency issue and found requirements.txt. Starting autonomous solver...');
                         const provisioning = new ProvisioningService(sandbox);
@@ -444,7 +446,9 @@ export async function runWorkerTask(
                 }
 
                 // Resolve Target File
-                targetFile = await findClosestFile(config, diagnosis.filePath);
+                // Use findClosestFileAbsolute to ensure we get absolute paths
+                const workingDir = sandbox ? sandbox.getWorkDir() || process.cwd() : process.cwd();
+                targetFile = await findClosestFileAbsolute(config, diagnosis.filePath, workingDir, sandbox);
                 if (!targetFile) {
                     log('WARN', `File '${diagnosis.filePath}' not found. Searching repo...`);
                     // [STAGE 3] Improved Search Strategy: Use basename first
@@ -465,7 +469,8 @@ export async function runWorkerTask(
                         log('INFO', `Search found potential match: ${searchResults[0]}`);
                         // Update diagnosis to reflect the actual file found
                         diagnosis.filePath = searchResults[0];
-                        targetFile = await findClosestFile(config, searchResults[0]);
+                        // Use findClosestFileAbsolute to ensure we get absolute paths
+                        targetFile = await findClosestFileAbsolute(config, searchResults[0], workingDir, sandbox);
                     }
                 }
 
@@ -480,7 +485,8 @@ export async function runWorkerTask(
                         const searchRes = await toolCodeSearch(config, diagnosis.filePath || diagnosis.summary.substring(0, 50), sandbox);
                         if (searchRes.length > 0) {
                             log('INFO', `Found similar file: ${searchRes[0]}. Using that.`);
-                            targetFile = await findClosestFile(config, searchRes[0]);
+                            // Use findClosestFileAbsolute to ensure we get absolute paths
+                            targetFile = await findClosestFileAbsolute(config, searchRes[0], workingDir, sandbox);
                         } else {
                             // Only trigger create mode if explicitly requested or very confident
                             if (diagnosis.fixAction === 'edit' && !diagnosis.summary.toLowerCase().includes("create")) {
@@ -631,9 +637,12 @@ export async function runWorkerTask(
                         log('INFO', `Found ${deps.length} dependencies. Fetching context...`);
                         let depContext = "\n\n=== AUTOMATIC CONTEXT: DEPENDENCIES ===\n";
                         let addedCount = 0;
+                        // Get working directory for absolute paths
+                        const depWorkingDir = sandbox ? sandbox.getWorkDir() || process.cwd() : process.cwd();
                         for (const dep of deps) {
                             if (addedCount >= 3) break; // Limit to top 3 to avoid token explosion
-                            const depFile = await findClosestFile(config, dep);
+                            // Use findClosestFileAbsolute to ensure we get absolute paths
+                            const depFile = await findClosestFileAbsolute(config, dep, depWorkingDir, sandbox);
                             if (depFile) {
                                 // Trim content
                                 const content = thinLog(depFile.file.content, 50); // Keep it brief
