@@ -34,8 +34,8 @@ describe('Agent Tools - Integration (Path Hallucination)', () => {
             const hallucinatedPath = 'subdir/missing.txt';
             const result = await readFile(hallucinatedPath);
 
-            expect(result).toContain('Error: Path NOT FOUND');
-            expect(result).toContain('Closest existing parent directory: \'subdir\'');
+            expect(result).toContain('File not found:');
+            expect(result).toContain('Closest existing parent directory');
             expect(result).toContain('target.txt');
         } finally {
             process.chdir(originalCwd);

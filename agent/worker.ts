@@ -1,7 +1,7 @@
 import { db } from '../db/client.js';
 import { SandboxEnvironment } from '../sandbox.js';
 import { getCachedRepoContext } from '../services/context-compiler.js';
-import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange } from '../types.js';
+import { AppConfig, RunGroup, AgentPhase, AgentState, LogLine, FileChange, LanguageScope } from '../types.js';
 import {
     toolScanDependencies, toolCodeSearch, toolWebSearch, toolLintCheck,
     prepareSandbox
@@ -589,6 +589,25 @@ export async function runWorkerTask(
                 }
 
             } else if (targetFile) {
+                // [Context Barrier] Enforce language scope
+                if (currentClassification.scope && currentClassification.scope !== LanguageScope.GENERIC) {
+                    const fileExt = targetFile.path.split('.').pop()?.toLowerCase();
+                    const isPythonScope = currentClassification.scope === LanguageScope.PYTHON;
+                    const isNodeScope = currentClassification.scope === LanguageScope.JS_TS;
+
+                    if (isPythonScope && (fileExt === 'ts' || fileExt === 'js' || fileExt === 'tsx' || fileExt === 'jsx')) {
+                         log('WARN', `[Barrier] Blocked attempt to modify ${targetFile.path} (Node.js) in a Python context.`);
+                         feedbackHistory.push(`Context Barrier: You are detected to be in a Python environment. Do not modify Node.js files (${targetFile.path}).`);
+                         continue;
+                    }
+
+                    if (isNodeScope && (fileExt === 'py')) {
+                        log('WARN', `[Barrier] Blocked attempt to modify ${targetFile.path} (Python) in a Node.js context.`);
+                        feedbackHistory.push(`Context Barrier: You are detected to be in a Node.js environment. Do not modify Python files (${targetFile.path}).`);
+                        continue;
+                    }
+                }
+
                 let extraContext = "";
                 if (iterationSummaries.length > 0) {
                     extraContext += formatHistorySummary(iterationSummaries) + "\n";

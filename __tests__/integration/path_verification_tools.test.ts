@@ -56,13 +56,13 @@ describe('Path Verification Integration in agent_tools', () => {
 
         it('should fail if multiple matches found', async () => {
             const content = await readFile('wrong/path/duplicate.txt');
-            expect(content).toContain('Error: Path NOT FOUND');
-            expect(content).toContain('multiple candidates were found');
+            expect(content).toContain('Ambiguous path');
+            expect(content).toContain('Found multiple candidates');
         });
 
         it('should fail if no matches found', async () => {
             const content = await readFile('wrong/path/nonexistent.txt');
-            expect(content).toContain('Error: Path NOT FOUND');
+            expect(content).toContain('File not found');
         });
     });
 
@@ -84,8 +84,8 @@ describe('Path Verification Integration in agent_tools', () => {
 
         it('should fail if multiple matches found', async () => {
             const result = await writeFile('wrong/path/duplicate.txt', 'AMBIGUOUS_WRITE');
-            expect(result).toContain('Error writing to file');
-            expect(result).toContain('multiple candidates');
+            expect(result).toContain('Ambiguous path');
+            expect(result).toContain('Found multiple candidates');
         });
     });
 
@@ -126,7 +126,7 @@ describe('Path Verification Integration in agent_tools', () => {
         it('should NOT correct if multiple matches (mv)', async () => {
             const result = await runCmd('mv wrong/path/duplicate.txt dest.txt');
              expect(vi.mocked(exec)).not.toHaveBeenCalled();
-             expect(result).toContain('multiple candidates');
+             expect(result).toContain('Found multiple candidates');
         });
     });
 });

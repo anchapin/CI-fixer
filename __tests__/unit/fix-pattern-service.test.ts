@@ -127,4 +127,80 @@ class User(BaseModel):
             expect(fix.newContent).toContain('pydantic = ">=2.0.0"');
         });
     });
+
+    describe('Pip Report Conflict Analysis', () => {
+        it('should return no conflicts for compatible requirements', () => {
+            const pipReportJson = JSON.stringify({
+                version: "1",
+                pip_version: "23.3.1",
+                install: [
+                    { metadata: { name: "requests", version: "2.31.0", requires_dist: [] } },
+                    { metadata: { name: "urllib3", version: "1.26.16", requires_dist: [] } }
+                ],
+                environment: {}
+            });
+            const originalRequirementsContent = "requests==2.31.0\nurllib3>=1.26.0";
+            const conflicts = service.analyzePipReportForConflicts(pipReportJson, originalRequirementsContent);
+            expect(conflicts).toEqual([]);
+        });
+
+        it('should detect direct version conflict', () => {
+            const pipReportJson = JSON.stringify({
+                version: "1",
+                pip_version: "23.3.1",
+                install: [
+                    { metadata: { name: "requests", version: "2.31.0", requires_dist: [] } }
+                ],
+                environment: {}
+            });
+            const originalRequirementsContent = "requests==2.30.0"; // Requested 2.30.0, but resolved to 2.31.0
+            const conflicts = service.analyzePipReportForConflicts(pipReportJson, originalRequirementsContent);
+            expect(conflicts).toContain("Conflict: Requested requests==2.30.0 but resolved to requests==2.31.0.");
+        });
+
+        it('should detect transitive conflict with pydantic/crewai/pydantic-settings', () => {
+            const pipReportJson = JSON.stringify({
+                version: "1",
+                pip_version: "23.3.1",
+                install: [
+                    { metadata: { name: "crewai", version: "0.1.0", requires_dist: ["pydantic>=2.0.0"] } },
+                    { metadata: { name: "pyjwt", version: "2.9.0", requires_dist: [] } },
+                    { metadata: { name: "pydantic", version: "1.10.0", requires_dist: [] } } // Resolved pydantic V1
+                ],
+                environment: {}
+            });
+            const originalRequirementsContent = "crewai==0.1.0\npyjwt>=2.9.0\npydantic==1.10.0"; // Explicitly request pydantic V1
+            const conflicts = service.analyzePipReportForConflicts(pipReportJson, originalRequirementsContent);
+            expect(conflicts).toContain("Transitive Conflict: Package crewai requires pydantic>=2.0.0, but pydantic==1.10.0 was resolved, which is incompatible.");
+        });
+
+        it('should warn if a requested package is not found in report', () => {
+            const pipReportJson = JSON.stringify({
+                version: "1",
+                pip_version: "23.3.1",
+                install: [
+                    { metadata: { name: "requests", version: "2.31.0", requires_dist: [] } }
+                ],
+                environment: {}
+            });
+            const originalRequirementsContent = "requests==2.31.0\nnonexistent-package==1.0.0";
+            const conflicts = service.analyzePipReportForConflicts(pipReportJson, originalRequirementsContent);
+            expect(conflicts).toContain("Warning: Requested package \"nonexistent-package\" not found in pip dry-run report results. This might indicate a deeper conflict or that the package is simply not installable.");
+        });
+
+        it('should handle complex version specifiers for requested packages', () => {
+            const pipReportJson = JSON.stringify({
+                version: "1",
+                pip_version: "23.3.1",
+                install: [
+                    { metadata: { name: "flask", version: "2.2.5", requires_dist: ["Werkzeug>=2.2.2"] } },
+                    { metadata: { name: "Werkzeug", version: "2.3.0", requires_dist: [] } }
+                ],
+                environment: {}
+            });
+            const originalRequirementsContent = "flask<2.3.0\nWerkzeug>=2.2.0,<2.4.0"; // Flask < 2.3.0, Werkzeug >= 2.2.0, < 2.4.0
+            const conflicts = service.analyzePipReportForConflicts(pipReportJson, originalRequirementsContent);
+            expect(conflicts).toEqual([]); // No direct conflict between requested and resolved
+        });
+    });
 });

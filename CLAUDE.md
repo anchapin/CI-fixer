@@ -28,8 +28,12 @@ npm run dev          # Start both frontend (5173) and backend (3001)
 npm test                    # Run all tests
 npm run test:unit           # Unit tests only
 npm run test:integration    # Integration tests only
-npm run test:coverage       # Coverage report (target: >80%)
+npm run test:coverage       # Coverage report (thresholds: 85% lines, 80% branches)
 npm run test:e2e            # End-to-end tests (Playwright)
+npm run test:ci             # Run coverage + e2e tests (CI pipeline)
+
+# Run single test file
+vitest run path/to/test.test.ts
 
 # Build
 npm run build              # Production build
@@ -59,6 +63,8 @@ npm run view-traces        # Debug trace visualization
 - **Service Container Pattern**: Centralized dependency injection in `/services/container.ts`
 - **Multi-Adapter LLM**: Supports Gemini and Z.ai via environment variables
 - **Pluggable Sandbox**: Switch between E2B (cloud) and Docker (local) execution
+- **Graph-Based Execution**: DAG coordinator orchestrates specialized nodes that can execute in parallel when dependencies allow
+- **Language Scoping**: Hybrid keyword/manifest detection enforces strict boundaries between JS/TS, Python, and Go contexts
 
 ## Directory Structure
 
@@ -124,6 +130,7 @@ See `conductor/workflow.md` for full protocol.
 
 - **Unit tests**: <100ms each, >80% coverage
 - **Integration tests**: <5s each
+- **Coverage thresholds**: 85% lines, 80% functions/branches (enforced in vitest.config.ts)
 - **TDD**: Write tests before implementation
 - **Non-interactive**: Use `CI=true` for watch-mode tools
 
@@ -147,8 +154,8 @@ Configurable via UI Settings:
 
 ## Current Work
 
-Check `conductor/tracks/path_verification_20251222/plan.md` for active tasks.
-**Phase 3 (Telemetry & Refinement)** is in progress as of 2025-12-22.
+Check `conductor/tracks/*/plan.md` for active development tracks.
+As of 2025-12-28, recent work includes dependency solver integration and agent workflow refinement.
 
 ## Key Files to Reference
 
@@ -156,8 +163,35 @@ Check `conductor/tracks/path_verification_20251222/plan.md` for active tasks.
 - `/App.tsx`: Frontend entry point
 - `/services/container.ts`: Service initialization
 - `/agent/graph/coordinator.ts`: Graph orchestration
+- `/agent/worker.ts`: Main worker loop executing the graph
 - `/types.ts`: TypeScript definitions
 - `conductor/workflow.md`: Development guidelines
+
+## Important Architectural Concepts
+
+### Graph-Based Agent Execution
+The agent (`/agent/graph/coordinator.ts`) executes a Directed Acyclic Graph (DAG) of specialized nodes. Each node has dependencies and can produce outputs used by subsequent nodes. This enables:
+- Parallel execution of independent nodes
+- Complex multi-step reasoning chains
+- Transparent decision flow
+
+### Service Injection Pattern
+All services are initialized through `/services/container.ts`. When adding new services:
+1. Create the service in `/services/`
+2. Add initialization logic in `container.ts`
+3. Inject via constructor parameters for testability
+4. Mock services in tests using Vitest's vi.mock()
+
+### Language Scoping System
+The agent detects project language using hybrid keyword/manifest analysis (`/services/analysis/`). This ensures:
+- File discovery respects language boundaries
+- Tool selection matches detected tech stack
+- Context remains relevant to the detected languages (JS/TS, Python, Go)
+
+### File System Intelligence
+- **Path Verification**: Automatically corrects hallucinated file paths via `/services/PathVerificationService.ts`
+- **File Discovery**: Smart file location respecting `.gitignore`
+- **Fallback Service**: Provides similar file suggestions when exact matches fail
 
 ## Security Considerations
 

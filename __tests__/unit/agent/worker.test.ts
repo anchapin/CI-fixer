@@ -103,6 +103,11 @@ import { classifyErrorWithHistory } from '../../../errorClassification.js';
 import { hasBlockingDependencies, getBlockedErrors } from '../../../services/dependency-tracker.js';
 import { toolCodeSearch } from '../../../services/sandbox/SandboxService.js';
 import { db } from '../../../db/client.js';
+import { unifiedGenerate } from '../../../services/llm/LLMService.js';
+
+vi.mock('../../../services/llm/LLMService.js', () => ({
+    unifiedGenerate: vi.fn(),
+}));
 
 describe('runWorkerTask', () => {
     let mockConfig: AppConfig;
@@ -135,9 +140,16 @@ describe('runWorkerTask', () => {
         mockSandbox = {
             runCommand: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
             writeFile: vi.fn().mockResolvedValue(undefined),
+            readFile: vi.fn().mockResolvedValue(''),
+            deleteFile: vi.fn().mockResolvedValue(undefined),
         } as unknown as SandboxEnvironment;
 
-        mockServices = {} as ServiceContainer;
+        mockServices = {
+            fixPattern: {
+                analyzePipReportForConflicts: vi.fn().mockReturnValue([]),
+                generateRelaxationSuggestion: vi.fn().mockResolvedValue('pydantic>=2.0.0\ncrewai==0.1.0'),
+            }
+        } as unknown as ServiceContainer;
         updateStateCallback = vi.fn();
         logCallback = vi.fn();
 
@@ -148,9 +160,12 @@ describe('runWorkerTask', () => {
             filePath: 'src/main.ts',
             fixAction: 'edit',
         });
-        (findClosestFile as Mock).mockResolvedValue({
-            path: 'src/main.ts',
-            file: { name: 'main.ts', content: 'const a = null;', language: 'typescript' },
+        (findClosestFile as Mock).mockImplementation(async (config, filename) => {
+            if (filename === 'requirements.txt') return null;
+            return {
+                path: 'src/main.ts',
+                file: { name: 'main.ts', content: 'const a = null;', language: 'typescript' },
+            };
         });
         (validateFileExists as Mock).mockResolvedValue(true);
         (generateDetailedPlan as Mock).mockResolvedValue({ steps: ['fix code'] });
@@ -164,6 +179,7 @@ describe('runWorkerTask', () => {
             affectedFiles: ['src/main.ts'],
             historicalMatches: [],
         });
+        (hasBlockingDependencies as Mock).mockResolvedValue(false);
     });
 
     it('should successfully diagnose, fix, and verify an error', async () => {
@@ -273,7 +289,7 @@ describe('runWorkerTask', () => {
         );
 
         // Tool use phase should be entered
-        expect(logCallback).toHaveBeenCalledWith('TOOL', 'Invoking Dependency Inspector...', 'group-1', 'Test Group');
+        expect(logCallback).toHaveBeenCalledWith('TOOL', expect.stringContaining('Invoking legacy Dependency Inspector'), 'group-1', 'Test Group');
         // It consumes a tool call, so we check if dependency scan was called
         const { toolScanDependencies } = await import('../../../services/sandbox/SandboxService.js');
         expect(toolScanDependencies).toHaveBeenCalled();
@@ -396,12 +412,6 @@ describe('runWorkerTask', () => {
     it('should retry log retrieval with different strategies if logs are missing', async () => {
         (getWorkflowLogs as any)
             .mockResolvedValueOnce({ logText: 'No failed job found', jobName: 'test', headSha: 'sha1' }) // Iteration 0 (Standard) -> Fail
-            // Code retries in same iteration?
-            // "If (currentLogText... No failed job found) ... if (i==0) strategy='extended' ... retry"
-            // Wait, loop structure:
-            // "if (currentLogText.includes...)"
-            // "if (i === 0) strategy = 'extended'"
-            // "retryResult = await getWorkflowLogs(..., strategy)"
             .mockResolvedValueOnce({ logText: 'Actual Log Content', jobName: 'test', headSha: 'sha1' }); // Retry success
 
         (diagnoseError as any).mockResolvedValue({ summary: 'Diag', fixAction: 'edit' });
@@ -422,11 +432,6 @@ describe('runWorkerTask', () => {
 
         expect(result.status).toBe('failed');
         expect(result.message).toContain('No failed job found');
-        // It tries strategies for i=0..3? 
-        // i=0 standard -> extended -> fail -> continue
-        // i=1 standard -> any_error -> fail -> continue
-        // i=2 standard -> force_latest -> fail -> continue
-        // i=3 standard -> abort
     });
 
     it('should handle worker crash gracefully', async () => {
@@ -438,5 +443,75 @@ describe('runWorkerTask', () => {
         expect(result.phase).toBe(AgentPhase.FAILURE);
         expect(result.message).toContain('Critical Infrastructure Failure');
         expect(logCallback).toHaveBeenCalledWith('ERROR', expect.stringContaining('Worker crashed'), 'group-1', 'Test Group');
+    });
+
+    it('should use autonomous dependency solver when requirements.txt is found', async () => {
+        (getWorkflowLogs as Mock).mockResolvedValue({
+            logText: "ContextualVersionConflict: (pydantic 1.10.13, Requirement.parse('pydantic>=2.0.0'), {'crewai'})",
+            jobName: 'test',
+            headSha: 'sha123'
+        });
+
+        // Mock findClosestFile to return requirements.txt
+        (findClosestFile as Mock).mockImplementation(async (config, filename) => {
+            if (filename === 'requirements.txt') {
+                return {
+                    path: 'requirements.txt',
+                    file: { name: 'requirements.txt', content: 'pydantic==1.10.13\ncrewai==0.1.0', language: 'text' },
+                };
+            }
+            return {
+                path: 'src/main.ts',
+                file: { name: 'main.ts', content: 'const a = null;', language: 'typescript' },
+            };
+        });
+
+        // Mock report content
+        const mockReport = JSON.stringify({
+            install: [{ metadata: { name: 'pydantic', version: '1.10.13', requires_dist: [] } }]
+        });
+        (mockSandbox.readFile as Mock).mockResolvedValue(mockReport);
+
+        // Mock LLM response for relaxation
+        (unifiedGenerate as Mock).mockResolvedValue({
+            text: '```\npydantic>=2.0.0\ncrewai==0.1.0\n```',
+            metrics: { tokensInput: 100, tokensOutput: 50, cost: 0.01, latency: 500, model: 'test-model' }
+        });
+
+        // Mock pip check and install to succeed
+        (mockSandbox.runCommand as Mock).mockResolvedValue({ stdout: 'Success', stderr: '', exitCode: 0 });
+
+        // Mock classification to avoid crash
+        (classifyErrorWithHistory as Mock).mockResolvedValue({
+            category: 'dependency_conflict',
+            errorMessage: 'Conflict',
+            confidence: 0.9,
+            affectedFiles: ['requirements.txt'],
+            historicalMatches: [],
+        });
+
+        // Mock conflict analysis to return a conflict
+        (mockServices.fixPattern.analyzePipReportForConflicts as Mock).mockReturnValue([{
+            package: 'pydantic',
+            version: '1.10.13',
+            conflict: 'Requirement pydantic>=2.0.0'
+        }]);
+
+        await runWorkerTask(
+            mockConfig,
+            mockGroup,
+            mockSandbox,
+            undefined,
+            'Initial Context',
+            mockServices,
+            updateStateCallback,
+            logCallback
+        );
+
+        expect(logCallback).toHaveBeenCalledWith('INFO', expect.stringContaining('Starting autonomous solver'), 'group-1', 'Test Group');
+        expect(logCallback).toHaveBeenCalledWith('SUCCESS', expect.stringContaining('Autonomous dependency solver succeeded'), 'group-1', 'Test Group');
+        
+        // Should have attempted to resolve
+        expect(mockServices.fixPattern.generateRelaxationSuggestion).toHaveBeenCalled();
     });
 });

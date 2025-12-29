@@ -78,4 +78,6 @@ debug_assertion.txt
 benchmark_log*.txt
 benchmark_results.json
 
+# AI provider cache
+.gemini/
 

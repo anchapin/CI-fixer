@@ -224,13 +224,20 @@ export async function runCmd(command: string): Promise<string> {
                 const verification = await verifyFileExists(filePath, 'access');
                 
                 if (verification.error) {
+                    // Safety Check for Destructive Commands
+                    const cmdLower = command.trim().toLowerCase();
+                    const isRm = cmdLower.startsWith('rm ');
+                    const isMv = cmdLower.startsWith('mv ');
+
+                    // For 'rm', strictly require the target to exist to avoid hallucinated deletions
+                    if (isRm && !verification.error.includes('multiple candidates')) {
+                         return `Safety Error: Cannot run '${command}'. Path '${filePath}' does not exist. The agent must verify files (ls/find) before deletion.`;
+                    }
+                    
                     // If multiple candidates found, block and report
-                    if (verification.error.includes('multiple candidates were found')) {
+                    if (verification.error.includes('multiple candidates')) {
                         return verification.error;
                     }
-                    // For other errors (like file not found), we don't necessarily block 
-                    // unless it's a known file-reading command. 
-                    // But for this track, we want to be proactive.
                 }
 
                 if (verification.wasCorrected && verification.verifiedPath) {
@@ -249,14 +256,48 @@ export async function runCmd(command: string): Promise<string> {
             }
         }
 
+        // Safety Check for 'mv': At least one path must be valid (the source)
+        // If we found NO valid paths for a 'mv' command (and there were detected paths), it's likely a hallucination
+        if (command.trim().toLowerCase().startsWith('mv ') && detectedPaths.length > 0) {
+             // Check if we have at least one verified existence (either implicitly correct or corrected)
+             // We can check if any verification passed (i.e., we didn't return early)
+             // But we need to know if any path *actually exists*.
+             // detectedPaths contains strings. verifyFileExists was called.
+             // We can re-verify or trust the flow.
+             // Simpler: If pathCorrections has entries, we found existing files.
+             // If NOT, we need to check if any original path exists.
+             // BUT verification.error would have triggered for 'rm'. 
+             // For 'mv', verification.error happens but we didn't block.
+             // We need to verify that at least ONE path exists.
+             
+             let sourceExists = false;
+             for (const p of detectedPaths) {
+                 const v = await verifyFileExists(p, 'check');
+                 if (!v.error) {
+                     sourceExists = true;
+                     break;
+                 }
+             }
+             
+             if (!sourceExists) {
+                 return `Safety Error: Cannot run '${command}'. No specified paths were found. Source file must exist.`;
+             }
+        }
+
         // 4. Reconstruct command with corrected paths
         if (pathCorrections.size > 0) {
-            // Split by whitespace but keep the delimiters
-            const tokens = finalCommand.split(/(\s+)/);
+            // Use regex to split by whitespace OR match quoted strings as single tokens
+            const regex = /([^\s"']+|"[^"]*"|'[^']*')|(\s+)/g;
+            const tokens: string[] = [];
+            let match;
             
+            while ((match = regex.exec(finalCommand)) !== null) {
+                tokens.push(match[0]);
+            }
+
             for (let i = 0; i < tokens.length; i++) {
                 const token = tokens[i];
-                if (token.trim() === '') continue;
+                if (!token.trim()) continue; // Skip whitespace tokens for replacement logic
 
                 // Check for whole token match (with or without quotes)
                 const quoteMatch = token.match(/^(['"])(.*)\1$/);

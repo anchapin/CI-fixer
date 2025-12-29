@@ -28,12 +28,16 @@ describe('ProvisioningService - Runner Support', () => {
     mockSandbox.runCommand.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 1 });
     // pip install succeeds
     mockSandbox.runCommand.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 });
+    // getPythonUserBase (which python3 -m site --user-base) succeeds
+    mockSandbox.runCommand.mockResolvedValueOnce({ stdout: '/usr/local', stderr: '', exitCode: 0 });
+
 
     const result = await (service as any).ensureRunner('pytest');
 
     expect(result).toBe(true);
     expect(mockSandbox.runCommand).toHaveBeenCalledWith('which pytest');
-    expect(mockSandbox.runCommand).toHaveBeenCalledWith('pip install pytest');
+    // Expect the robust pip install command
+    expect(vi.mocked(mockSandbox.runCommand).mock.calls[1][0]).toContain('python3 -m pip install --user pytest || python -m pip install --user pytest || pip install --user pytest');
   });
 
   it('should attempt to install a missing node runner', async () => {
@@ -41,6 +45,9 @@ describe('ProvisioningService - Runner Support', () => {
     mockSandbox.runCommand.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 1 });
     // npm install succeeds
     mockSandbox.runCommand.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 });
+    // getNpmPrefix (npm config get prefix) succeeds
+    mockSandbox.runCommand.mockResolvedValueOnce({ stdout: '/usr/local', stderr: '', exitCode: 0 });
+
 
     const result = await (service as any).ensureRunner('vitest');
 

@@ -209,7 +209,15 @@ export const analysisNode: NodeHandler = async (state, context) => {
         if (!diagnosis.reproductionCommand && sandbox && services.reproductionInference) {
             log('INFO', '[Inference] Reproduction command missing. Attempting inference...');
             const repoPath = typeof sandbox.getLocalPath === 'function' ? sandbox.getLocalPath() : '.';
-            const inferred = await services.reproductionInference.inferCommand(repoPath, config, sandbox);
+            const inferred = await services.reproductionInference.inferCommand(
+                repoPath, 
+                config, 
+                sandbox,
+                { 
+                    workflowPath: group.mainRun.path,
+                    logText: currentLogText
+                }
+            );
             
             if (inferred) {
                 log('SUCCESS', `[Inference] Inferred command: ${inferred.command} (Strategy: ${inferred.strategy})`);

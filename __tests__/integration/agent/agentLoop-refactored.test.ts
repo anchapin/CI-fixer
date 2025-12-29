@@ -73,6 +73,29 @@ vi.mock('../../../services/analysis/LogAnalysisService', () => ({
     formatPlanToMarkdown: vi.fn().mockReturnValue('# Plan')
 }));
 
+// Mock validation module
+vi.mock('../../../validation.js', () => ({
+    analyzeRepository: vi.fn().mockResolvedValue({
+        languages: ['typescript'],
+        packageManager: 'npm',
+        buildSystem: 'vite',
+        testFramework: 'vitest',
+        availableScripts: {},
+        directoryStructure: {
+            hasBackend: false,
+            hasFrontend: true,
+            testDirectories: [],
+            sourceDirectories: []
+        },
+        configFiles: [],
+        repositorySize: 100
+    }),
+    formatProfileSummary: vi.fn().mockReturnValue('Mock Repository Profile'),
+    validateFilesExist: vi.fn().mockResolvedValue({ valid: [], invalid: [] }),
+    validateFileExists: vi.fn().mockResolvedValue(true),
+    validateCommand: vi.fn().mockReturnValue({ valid: true })
+}));
+
 /**
  * Agent Loop Integration Tests (Refactored)
  * 

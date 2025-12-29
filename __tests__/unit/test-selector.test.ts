@@ -8,13 +8,13 @@ describe('TestSelector', () => {
     it('should select pytest for Python files', () => {
         const files = ['backend/main.py', 'backend/utils.py'];
         const command = selector.selectTestCommand(files);
-        expect(command).toBe('pytest');
+        expect(command).toBe('python -m pytest');
     });
 
     it('should select pytest for requirements.txt', () => {
         const files = ['requirements.txt'];
         const command = selector.selectTestCommand(files);
-        expect(command).toBe('pytest');
+        expect(command).toBe('python -m pytest');
     });
 
     it('should select npm run test:frontend for frontend files', () => {
@@ -42,7 +42,7 @@ describe('TestSelector', () => {
         // For now, let's assume we want to be safe and run everything if it's a mix that implies full stack changes
         // OR return a combined command
         const command = selector.selectTestCommand(files);
-        expect(command).toBe('npm test && pytest'); 
+        expect(command).toBe('npm test && python -m pytest'); 
     });
     
     it('should return default command if no mapping found', () => {

@@ -1,0 +1,8 @@
+{
+  "hypothesis_id": "update-mocks-76603086",
+  "r_eff": 0.7,
+  "audited_at": "2025-12-28T22:25:26.837964",
+  "risks": "Weakest Link: 0.70 (Missing validation evidence). No empirical test data to support the hypothesis. Bias: Low - one of multiple options.",
+  "weakest_link": 0.7,
+  "bias_check": "Low"
+}

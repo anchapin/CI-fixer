@@ -37,6 +37,6 @@ describe('LogAnalysisService - Test Selection', () => {
         );
 
         // Verify that TestSelector logic was used (backend/test.py -> pytest)
-        expect(mockSandbox.runCommand).toHaveBeenCalledWith('pytest');
+        expect(mockSandbox.runCommand).toHaveBeenCalledWith(expect.stringContaining('python -m pytest'));
     });
 });

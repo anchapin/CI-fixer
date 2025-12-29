@@ -60,7 +60,7 @@ describe('runCmd (Enhanced Integration)', () => {
 
         const output = await runCmd(cmd);
 
-        expect(output).toContain('multiple candidates were found');
+        expect(output).toContain('multiple candidates');
         expect(child_process.exec).not.toHaveBeenCalled();
     });
 });

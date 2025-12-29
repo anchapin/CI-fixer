@@ -4,9 +4,10 @@ import * as fs from 'fs';
 import { readFile, writeFile, runCmd, search, listDir } from '../../../../services/sandbox/agent_tools.js';
 
 // Mock child_process exec and fs.existsSync using vi.hoisted
-const { mockExecPromise, mockExistsSync } = vi.hoisted(() => ({
+const { mockExecPromise, mockExistsSync, mockAccess } = vi.hoisted(() => ({
     mockExecPromise: vi.fn(),
-    mockExistsSync: vi.fn()
+    mockExistsSync: vi.fn(),
+    mockAccess: vi.fn()
 }));
 
 vi.mock('fs', () => ({
@@ -15,9 +16,25 @@ vi.mock('fs', () => ({
         writeFile: vi.fn(),
         mkdir: vi.fn(),
         readdir: vi.fn(),
+        access: mockAccess,
     },
     existsSync: mockExistsSync,
     statSync: vi.fn()
+}));
+
+vi.mock('fs/promises', () => ({
+    default: {
+        access: mockAccess,
+        readFile: vi.fn(),
+        writeFile: vi.fn(),
+        mkdir: vi.fn(),
+        readdir: vi.fn(),
+    },
+    access: mockAccess
+}));
+
+vi.mock('tinyglobby', () => ({
+    glob: vi.fn(() => Promise.resolve([]))
 }));
 
 vi.mock('child_process', () => ({
@@ -35,6 +52,7 @@ describe('Agent Tools', () => {
         vi.clearAllMocks();
         // Set up default mock behaviors
         mockExistsSync.mockReturnValue(true);
+        mockAccess.mockResolvedValue(undefined); // Default to success (file exists)
         (fs.statSync as any).mockReturnValue({ isFile: () => true });
     });
 
@@ -59,6 +77,7 @@ describe('Agent Tools', () => {
     describe('writeFile', () => {
         it('should write file content successfully', async () => {
             mockExistsSync.mockReturnValue(false); // File doesn't exist yet
+            mockAccess.mockRejectedValue(new Error('ENOENT')); // File not found
             (fs.promises.mkdir as any).mockResolvedValue(undefined);
             (fs.promises.writeFile as any).mockResolvedValue(undefined);
 

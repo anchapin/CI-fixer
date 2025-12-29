@@ -1,4 +1,4 @@
-import { ReproductionInferenceResult, AppConfig } from '../types';
+import { ReproductionInferenceResult, AppConfig, ReproductionFailureContext } from '../types';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -17,11 +17,18 @@ export class ReproductionInferenceService {
    * @param repoPath The absolute path to the repository root
    * @param config Optional application configuration for LLM-based inference
    * @param sandbox Optional sandbox environment to perform validation dry-runs
+   * @param failureContext Optional context about the CI failure to narrow down inference
    * @returns The inferred reproduction command and details, or null if inference failed
    */
-  async inferCommand(repoPath: string, config?: AppConfig, sandbox?: SandboxEnvironment): Promise<ReproductionInferenceResult | null> {
+  async inferCommand(
+    repoPath: string, 
+    config?: AppConfig, 
+    sandbox?: SandboxEnvironment,
+    failureContext?: ReproductionFailureContext
+  ): Promise<ReproductionInferenceResult | null> {
     const strategies = [
-      () => this.inferFromWorkflows(repoPath),
+      () => this.inferFromWorkflowLLM(repoPath, config, failureContext),
+      () => this.inferFromWorkflows(repoPath, failureContext),
       () => this.inferFromSignatures(repoPath),
       () => this.inferFromBuildTools(repoPath),
       () => this.inferFromAgentRetry(repoPath, config),
@@ -42,6 +49,62 @@ export class ReproductionInferenceService {
         }
         return result;
       }
+    }
+
+    return null;
+  }
+
+  private async inferFromWorkflowLLM(repoPath: string, config?: AppConfig, context?: ReproductionFailureContext): Promise<ReproductionInferenceResult | null> {
+    if (!config || !context?.workflowPath || !context?.logText) return null;
+
+    try {
+      const fullPath = path.isAbsolute(context.workflowPath) 
+        ? context.workflowPath 
+        : path.join(repoPath, context.workflowPath);
+      
+      const workflowContent = await fs.readFile(fullPath, 'utf8');
+
+      const prompt = `
+You are an expert developer assistant. I need to reproduce a CI failure.
+I have the GitHub Workflow file that failed and a snippet of the CI log.
+
+WORKFLOW FILE:
+\`\`\`yaml
+${workflowContent}
+\`\`\`
+
+CI LOG SNIPPET:
+\`\`\`
+${context.logText.slice(-3000)}
+\`\`\`
+
+Based on the workflow and the log, identify the EXACT shell command that failed. 
+Focus on the command in the 'run' field of the failing step.
+Ignore setup commands (install, setup-node, etc.) unless they are the cause of the failure.
+
+Return your answer in JSON format:
+{
+  "command": "the failing shell command",
+  "reasoning": "brief explanation of why this command was chosen based on the log"
+}
+`;
+
+      const response = await unifiedGenerate(config, {
+        contents: prompt,
+        responseFormat: 'json'
+      });
+
+      const parsed = safeJsonParse(response.text, null as any);
+      if (parsed && parsed.command) {
+        return {
+          command: parsed.command,
+          confidence: 0.95,
+          strategy: 'workflow',
+          reasoning: parsed.reasoning || `Pinpointed by LLM from workflow: ${path.basename(context.workflowPath)}`
+        };
+      }
+    } catch (error) {
+      console.error('[ReproductionInferenceService] LLM Workflow Pinpointing failed:', error);
     }
 
     return null;
@@ -276,10 +339,27 @@ Return your answer in JSON format:
     return null;
   }
 
-  private async inferFromWorkflows(repoPath: string): Promise<ReproductionInferenceResult | null> {
+  private async inferFromWorkflows(repoPath: string, context?: ReproductionFailureContext): Promise<ReproductionInferenceResult | null> {
     const workflowsDir = path.join(repoPath, '.github/workflows');
     
     try {
+      // 1. If we have a specific workflow path, try that FIRST
+      if (context?.workflowPath) {
+        const fullPath = path.isAbsolute(context.workflowPath) 
+          ? context.workflowPath 
+          : path.join(repoPath, context.workflowPath);
+        
+        try {
+          const content = await fs.readFile(fullPath, 'utf8');
+          const result = this.parseWorkflowContent(content, path.basename(context.workflowPath));
+          if (result) return result;
+        } catch (e) {
+          console.warn(`[ReproductionInferenceService] Could not read targeted workflow: ${context.workflowPath}`);
+          // Fall through to generic scan if targeted workflow can't be read
+        }
+      }
+
+      // 2. Fallback to generic scan of all workflows if no specific one was provided or it failed
       const stats = await fs.stat(workflowsDir);
       if (!stats.isDirectory()) return null;
 
@@ -287,32 +367,14 @@ Return your answer in JSON format:
       const yamlFiles = files.filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
 
       for (const file of yamlFiles) {
+        // Skip the one we already tried if we have context AND successfully processed it
+        // Or if we specifically only want to target the given workflow (future enhancement)
+        if (context?.workflowPath && path.basename(context.workflowPath) === file) continue;
+
         const filePath = path.join(workflowsDir, file);
         const content = await fs.readFile(filePath, 'utf8');
-        const doc = yaml.load(content) as any;
-
-        if (!doc || !doc.jobs) continue;
-
-        for (const jobKey in doc.jobs) {
-          const job = doc.jobs[jobKey];
-          if (!job.steps || !Array.isArray(job.steps)) continue;
-
-          for (const step of job.steps) {
-            if (step.run && typeof step.run === 'string') {
-              const command = step.run.trim();
-              
-              // Filter out common setup commands
-              if (this.isTestLikeCommand(command)) {
-                return {
-                  command,
-                  confidence: 0.9,
-                  strategy: 'workflow',
-                  reasoning: `Extracted from GitHub Workflow: ${file}, job: ${jobKey}`
-                };
-              }
-            }
-          }
-        }
+        const result = this.parseWorkflowContent(content, file);
+        if (result) return result;
       }
     } catch {
       // Workflows directory might not exist or other FS issues
@@ -322,16 +384,51 @@ Return your answer in JSON format:
     return null;
   }
 
+  private parseWorkflowContent(content: string, fileName: string): ReproductionInferenceResult | null {
+    try {
+      const doc = yaml.load(content) as any;
+      if (!doc || !doc.jobs) return null;
+
+      for (const jobKey in doc.jobs) {
+        const job = doc.jobs[jobKey];
+        if (!job.steps || !Array.isArray(job.steps)) continue;
+
+        for (const step of job.steps) {
+          if (step.run && typeof step.run === 'string') {
+            const command = step.run.trim();
+            
+            // Filter out common setup commands
+            if (this.isTestLikeCommand(command)) {
+              return {
+                command,
+                confidence: 0.9,
+                strategy: 'workflow',
+                reasoning: `Extracted from GitHub Workflow: ${fileName}, job: ${jobKey}${step.name ? `, step: ${step.name}` : ''}`
+              };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[ReproductionInferenceService] Failed to parse YAML for ${fileName}`);
+    }
+    return null;
+  }
+
   private isTestLikeCommand(command: string): boolean {
     const cmd = command.toLowerCase();
     
-    // Ignore common setup steps
-    if (cmd.includes('npm install') || cmd.includes('npm ci') || cmd.includes('yarn install') || cmd.includes('pnpm install')) return false;
-    if (cmd.includes('actions/checkout') || cmd.includes('actions/setup')) return false;
-    if (cmd.startsWith('pip install') || cmd.startsWith('python -m pip install')) return false;
-    
     // Look for test keywords
-    const testKeywords = ['test', 'pytest', 'vitest', 'jest', 'mocha', 'cypress', 'playwright', 'check', 'verify'];
-    return testKeywords.some(k => cmd.includes(k));
+    const testKeywords = ['test', 'pytest', 'vitest', 'jest', 'mocha', 'cypress', 'playwright', 'check', 'verify', 'tox', 'nosetests', 'unittest', 'go test', 'cargo test'];
+    const hasTestKeyword = testKeywords.some(k => cmd.includes(k));
+
+    if (!hasTestKeyword) return false;
+
+    // Ignore if it's ONLY a setup command (rare if it has a test keyword, but for safety)
+    const setupKeywords = ['actions/checkout', 'actions/setup'];
+    const isPureSetup = setupKeywords.some(k => cmd === k);
+    if (isPureSetup) return false;
+    
+    return true;
   }
 }

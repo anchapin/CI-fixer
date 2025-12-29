@@ -1,0 +1,8 @@
+{
+  "hypothesis_id": "user-reliability-1ae03aad",
+  "r_eff": 0.95,
+  "audited_at": "2025-12-28T22:25:26.839322",
+  "risks": "Weakest Link: 0.95 (Strong internal validation). Empirical evidence from 1346 tests shows 99.7% pass rate. Bias: Low - user-proposed but rigorously validated.",
+  "weakest_link": 0.95,
+  "bias_check": "Low"
+}

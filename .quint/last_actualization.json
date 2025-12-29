@@ -1,0 +1,23 @@
+{
+  "baseline_commit": "7776be02e18db677e7dba03ce8948fb42ac76c05",
+  "previous_baseline": null,
+  "actualization_date": "2025-12-28T22:36:19.862065",
+  "changed_files_count": 15,
+  "changed_files": [
+    "A\t__tests__/unit/DependencySolverService.test.ts",
+    "M\t__tests__/unit/ProvisioningService.test.ts",
+    "M\tagent/worker.ts",
+    "A\tconductor/archive/dependency_solver_loops_20251228/metadata.json",
+    "A\tconductor/archive/dependency_solver_loops_20251228/plan.md",
+    "A\tconductor/archive/dependency_solver_loops_20251228/spec.md",
+    "M\tconductor/product.md",
+    "M\tconductor/tech-stack.md",
+    "M\tconductor/tracks.md",
+    "M\tconductor/tracks/dependency_solver_loops_20251228/plan.md",
+    "A\tprompts/execution/python-dependency-relaxation-v1.md",
+    "A\tservices/DependencySolverService.ts",
+    "M\tservices/FixPatternService.ts",
+    "M\tservices/container.ts",
+    "M\tservices/sandbox/ProvisioningService.ts"
+  ]
+}
