@@ -46,14 +46,14 @@
 - [x] Task: Develop a comprehensive test suite for the dependency solver.
     - [x] Sub-task: Create unit tests for each implemented function (parsing, relaxation, verification).
     - [x] Sub-task: Create integration tests to cover the full dependency resolution workflow, including known conflict scenarios.
-- [~] Task: Conductor - User Manual Verification 'Implement Verification and Testing' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Implement Verification and Testing' (Protocol in workflow.md)
 
 ## Phase 5: Agent Integration and Refinement
 
-- [ ] Task: Integrate the new dependency resolution capabilities into the main agent workflow.
-    - [ ] Sub-task: Define the trigger points for activating the dependency solver.
-    - [ ] Sub-task: Ensure seamless data flow between the solver and other agent components.
-- [ ] Task: Refine error handling and logging for the dependency solver.
-    - [ ] Sub-task: Implement robust error reporting for failed resolution attempts.
-    - [ ] Sub-task: Log key decisions and actions taken by the solver for debugging and analysis.
-- [ ] Task: Conductor - User Manual Verification 'Agent Integration and Refinement' (Protocol in workflow.md)
+- [x] Task: Integrate the new dependency resolution capabilities into the main agent workflow. eff9712
+    - [x] Sub-task: Define the trigger points for activating the dependency solver.
+    - [x] Sub-task: Ensure seamless data flow between the solver and other agent components.
+- [x] Task: Refine error handling and logging for the dependency solver. eff9712
+    - [x] Sub-task: Implement robust error reporting for failed resolution attempts.
+    - [x] Sub-task: Log key decisions and actions taken by the solver for debugging and analysis.
+- [x] Task: Conductor - User Manual Verification 'Agent Integration and Refinement' (Protocol in workflow.md) eff9712
