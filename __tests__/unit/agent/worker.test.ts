@@ -109,6 +109,15 @@ vi.mock('../../../services/llm/LLMService.js', () => ({
     unifiedGenerate: vi.fn(),
 }));
 
+// Mock fs/promises for ReproductionInferenceService
+vi.mock('fs/promises', () => ({
+    readdir: vi.fn(),
+    stat: vi.fn(),
+    readFile: vi.fn(),
+}));
+
+import * as fs from 'fs/promises';
+
 describe('runWorkerTask', () => {
     let mockConfig: AppConfig;
     let mockGroup: RunGroup;
@@ -142,6 +151,9 @@ describe('runWorkerTask', () => {
             writeFile: vi.fn().mockResolvedValue(undefined),
             readFile: vi.fn().mockResolvedValue(''),
             deleteFile: vi.fn().mockResolvedValue(undefined),
+            getWorkDir: vi.fn().mockReturnValue('/workspace'),
+            getLocalPath: vi.fn().mockReturnValue('/workspace'),
+            getId: vi.fn().mockReturnValue('test-sandbox'),
         } as unknown as SandboxEnvironment;
 
         mockServices = {
@@ -343,17 +355,37 @@ describe('runWorkerTask', () => {
     });
 
     it('should detect and report secondary errors during command execution', async () => {
+        // Mock fs for ReproductionInferenceService - return package.json to trigger 'npm test' inference
+        (fs.readdir as Mock).mockResolvedValue(['package.json', 'src'] as any);
+        (fs.stat as Mock)
+            .mockImplementation(async (p: any) => {
+                if (p.includes('package.json')) {
+                    return { isDirectory: () => false } as any;
+                }
+                throw new Error('Not found');
+            });
+
         // Ensure DB returns an ID for the current error fact
         const { db } = await import('../../../db/client.js');
         (db.errorFact.create as Mock).mockResolvedValue({ id: 'active-fact-id' });
 
         // Diagnosis says run command
-        (diagnoseError as Mock).mockResolvedValue({
-            summary: 'Run setup',
-            fixAction: 'command',
-            suggestedCommand: 'npm install',
-            filePath: '',
-        });
+        // First call: no reproductionCommand to trigger inference
+        // Subsequent calls: include reproductionCommand for reproduction step
+        (diagnoseError as Mock)
+            .mockResolvedValueOnce({
+                summary: 'Run setup',
+                fixAction: 'command',
+                suggestedCommand: 'npm install',
+                filePath: '',
+            })
+            .mockResolvedValue({
+                summary: 'Run setup',
+                fixAction: 'command',
+                suggestedCommand: 'npm install',
+                reproductionCommand: 'npm test',
+                filePath: '',
+            });
 
         // Command sequence:
         // 1. inferCommand -> validateCommand -> runCommand (Success)

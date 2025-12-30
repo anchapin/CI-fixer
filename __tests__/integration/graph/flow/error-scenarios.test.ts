@@ -57,14 +57,14 @@ describe('Error Scenario Tests', () => {
         testDbManager = new TestDatabaseManager();
         testDb = await testDbManager.setup();
         context = await createMockGraphContext({ dbClient: testDb });
-    });
+    }, 60000); // 60 second timeout for database setup
 
     afterEach(async () => {
         if (testDbManager) {
             await testDbManager.teardown();
         }
         await cleanupMockContext(context);
-    });
+    }, 60000); // 60 second timeout for database teardown
 
     describe('Network Timeout Simulation', () => {
         it('should retry LLM calls on timeout', async () => {

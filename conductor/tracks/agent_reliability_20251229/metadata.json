@@ -1,0 +1,26 @@
+{
+  "track_id": "agent_reliability_20251229",
+  "title": "Multi-Layer Agent Reliability Enhancement",
+  "status": "active",
+  "created_at": "2025-12-29T17:30:00Z",
+  "decision_id": "dec-cc3a5d60",
+  "drr_location": ".quint/decisions/dec-cc3a5d60-multi-layer-agent-reliability.md",
+  "estimated_effort_hours": 8,
+  "phases": 4,
+  "dependencies": [
+    "services/complexity-estimator.ts",
+    "services/reproduction-inference.ts",
+    "agent/graph/coordinator.ts",
+    "agent/worker.ts",
+    "agent/graph/nodes/verification.ts"
+  ],
+  "success_metrics": {
+    "reduce_agent_lost_failures": ">90%",
+    "reduce_loop_iterations": ">70%",
+    "increase_fix_success_rate": ">30%",
+    "maintain_test_coverage": ">80%",
+    "regressions": "zero"
+  },
+  "risk_level": "LOW",
+  "risk_mitigation": "Changes are additive, can be rolled back incrementally layer by layer"
+}

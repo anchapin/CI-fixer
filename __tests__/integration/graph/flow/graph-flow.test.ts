@@ -113,7 +113,7 @@ describe('Graph State Machine Flow Tests', () => {
         testDbManager = new TestDatabaseManager();
         testDb = await testDbManager.setup();
         context = await createMockGraphContext({ dbClient: testDb });
-    });
+    }, 60000); // 60 second timeout for database setup
 
     afterEach(async () => {
         if (testDb) {
@@ -124,7 +124,7 @@ describe('Graph State Machine Flow Tests', () => {
             await testDbManager.teardown();
         }
         await cleanupMockContext(context);
-    });
+    }, 60000); // 60 second timeout for database teardown
 
     describe('Success Path: Complete Flow', () => {
         it('should transition through analysis -> planning -> execution -> verification -> success', async () => {
