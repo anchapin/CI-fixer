@@ -10,6 +10,28 @@ const verificationNodeHandler: NodeHandler = async (state, context) => {
 
     log('INFO', '[VerificationNode] Verifying changes...');
 
+    // Phase 2: Reproduction-First Workflow - Fail early if no reproduction command
+    if (!diagnosis?.reproductionCommand) {
+        log('ERROR', '[Verification] No reproduction command available. Cannot verify fix without knowing how to reproduce the failure.');
+        log('ERROR', '[Verification] This indicates the analysis phase did not identify a reproduction command.');
+        log('INFO', '[Verification] Suggestion: Ensure ReproductionInferenceService is run during analysis to identify the reproduction command.');
+        log('INFO', '[Verification] Human intervention may be needed to identify the correct reproduction command.');
+
+        return {
+            status: 'failed',
+            failureReason: 'No reproduction command available. Fix cannot be verified without reproducing the failure.',
+            feedback: [
+                ...state.feedback,
+                'Verification Failed: No reproduction command was identified during analysis.',
+                'The agent must be able to reproduce the failure before attempting fixes.',
+                'Please run the CI workflow manually to identify the reproduction command.'
+            ],
+            reproductionRequired: true,
+            reproductionCommandMissing: true,
+            currentNode: 'finish' // End the workflow - this is a hard stop
+        };
+    }
+
     // 1. Apply Changes to Sandbox
     if (sandbox) {
         log('VERBOSE', `[Verification] Writing ${Object.keys(files).length} files to sandbox.`);

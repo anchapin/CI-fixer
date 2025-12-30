@@ -66,7 +66,9 @@ vi.mock('../../../../services/analysis/LogAnalysisService.js', () => ({
     formatPlanToMarkdown: vi.fn().mockReturnValue('# Plan\\n- Add null check'),
     generateFix: vi.fn().mockResolvedValue('const x = undefined;\\nif (x) x.foo();'),
     runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: 'All tests passed' }),
-    judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 10, reasoning: 'Good fix' })
+    judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 10, reasoning: 'Good fix' }),
+    // Phase 2: Add reproduction command inference
+    inferReproductionCommand: vi.fn().mockResolvedValue('npm test')
 }));
 
 vi.mock('../../../../services/analysis/CodeAnalysisService.js', () => ({
@@ -211,7 +213,11 @@ describe('Graph State Machine Flow Tests', () => {
 
             let state = new GraphStateBuilder()
                 .withLogText('Error in tests')
-                .withDiagnosis({ filePath: 'src/app.ts', fixAction: 'edit' })
+                .withDiagnosis({
+                    filePath: 'src/app.ts',
+                    fixAction: 'edit',
+                    reproductionCommand: 'npm test' // Phase 2: Required for verification
+                })
                 .withFile('src/app.ts')
                 .atNode('verification')
                 .atIteration(0)

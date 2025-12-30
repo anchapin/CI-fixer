@@ -105,9 +105,9 @@ describe('Verification Node', () => {
         };
 
         const validateSpy = vi.mocked(DockerfileValidator.validate);
-        validateSpy.mockResolvedValueOnce({ 
-            valid: false, 
-            issues: [{ level: 'error', message: 'comment error', code: 'SC100', line: 2 }] 
+        validateSpy.mockResolvedValueOnce({
+            valid: false,
+            issues: [{ level: 'error', message: 'comment error', code: 'SC100', line: 2 }]
         });
 
         const result = await verificationNode(mockState, mockContext);
@@ -116,5 +116,48 @@ describe('Verification Node', () => {
         expect(result.currentNode).toBe('analysis');
         expect(result.feedback![0]).toContain('Dockerfile Validation Failed for Dockerfile:');
         expect(result.feedback![0]).toContain('[ERROR] Line 2: comment error (SC100)');
+    });
+
+    describe('Phase 2: Reproduction-First Workflow', () => {
+        it('should fail early when reproduction command is missing', async () => {
+            mockState.diagnosis = { summary: 'Error' }; // No reproductionCommand
+
+            const result = await verificationNode(mockState, mockContext);
+
+            expect(result.status).toBe('failed');
+            expect(result.failureReason).toContain('No reproduction command available');
+            expect(result.reproductionRequired).toBe(true);
+            expect(result.reproductionCommandMissing).toBe(true);
+            expect(result.currentNode).toBe('finish');
+        });
+
+        it('should log clear error messages when reproduction command is missing', async () => {
+            mockState.diagnosis = { summary: 'Error' }; // No reproductionCommand
+
+            await verificationNode(mockState, mockContext);
+
+            expect(mockContext.logCallback).toHaveBeenCalledWith('ERROR', expect.stringContaining('No reproduction command available'));
+            expect(mockContext.logCallback).toHaveBeenCalledWith('INFO', expect.stringContaining('ReproductionInferenceService'));
+        });
+
+        it('should provide helpful feedback when reproduction command is missing', async () => {
+            mockState.diagnosis = { summary: 'Error' };
+            mockState.feedback = ['Previous feedback'];
+
+            const result = await verificationNode(mockState, mockContext);
+
+            expect(result.feedback).toContain('Previous feedback');
+            expect(result.feedback).toContain('Verification Failed: No reproduction command was identified during analysis.');
+            expect(result.feedback).toContain('The agent must be able to reproduce the failure before attempting fixes.');
+        });
+
+        it('should proceed normally when reproduction command is present', async () => {
+            mockState.diagnosis = { summary: 'Error', reproductionCommand: 'npm test' };
+
+            const result = await verificationNode(mockState, mockContext);
+
+            expect(result.status).toBe('success');
+            expect(mockSandbox.runCommand).toHaveBeenCalledWith('npm test');
+        });
     });
 });

@@ -83,6 +83,27 @@ export async function runGraphAgent(
         // 2. Event Loop
         while (state.status === 'working' && state.iteration < state.maxIterations) {
 
+            // Phase 2: Reproduction-First Workflow - Check before transitioning to execution
+            if (state.currentNode === 'execution' || state.currentNode === 'repair-agent') {
+                if (!state.diagnosis?.reproductionCommand) {
+                    log('ERROR', '[Reproduction-First] Cannot proceed to execution without reproduction command.');
+                    log('ERROR', '[Reproduction-First] The agent must identify a reproduction command before attempting fixes.');
+                    log('INFO', '[Reproduction-First] Suggestion: Run ReproductionInferenceService to identify the reproduction command.');
+
+                    state.status = 'failed';
+                    state.failureReason = 'Reproduction command required but missing. Agent attempted to fix without verifying reproducibility.';
+                    state.reproductionRequired = true;
+                    state.reproductionCommandMissing = true;
+
+                    // Record the failure metrics
+                    const duration = (Date.now() - startTime) / 1000;
+                    services.metrics.recordFixAttempt(false, duration, state.iteration, 'reproduction-command-missing');
+
+                    break;
+                }
+                log('VERBOSE', '[Reproduction-First] Reproduction command verified, proceeding to execution.');
+            }
+
             const handler = NODE_MAP[state.currentNode];
 
             if (!handler) {
@@ -167,9 +188,43 @@ export async function runGraphAgent(
                 log('INFO', '[AoT] Problem has converged to atomic state. Ready for final solution.');
             }
 
-            // Warn if diverging (complexity increasing)
+            // Phase 3: Strategy Loop Detection - Enhanced divergence handling
             if (convergence.isDiverging) {
-                log('WARN', '[AoT] Complexity is increasing - problem may be getting harder. Consider alternative approach.');
+                // Track how many consecutive iterations have been diverging with high complexity
+                const currentComplexity = state.problemComplexity || 0;
+                const highComplexityThreshold = 15;
+                const divergenceIterationsThreshold = 2;
+
+                // Count iterations with high complexity that are diverging
+                let divergingHighComplexityCount = 0;
+                for (let i = Math.max(0, state.complexityHistory.length - 3); i < state.complexityHistory.length; i++) {
+                    if (state.complexityHistory[i] > highComplexityThreshold) {
+                        divergingHighComplexityCount++;
+                    }
+                }
+
+                // Check if we have persistent high complexity divergence
+                if (currentComplexity > highComplexityThreshold && divergingHighComplexityCount >= divergenceIterationsThreshold) {
+                    log('ERROR', '[Strategy Loop] Agent is stuck in a strategy loop with increasing complexity.');
+                    log('ERROR', `[Strategy Loop] Complexity: ${currentComplexity} > ${highComplexityThreshold}, diverging for ${divergingHighComplexityCount}+ iterations`);
+                    log('INFO', '[Strategy Loop] Suggested actions:');
+                    log('INFO', '  1. Break down the problem into smaller sub-problems');
+                    log('INFO', '  2. Try a different approach (e.g., file recreation instead of modification)');
+                    log('INFO', '  3. Request human guidance for alternative strategies');
+                    log('INFO', `[Strategy Loop] Complexity history: [${state.complexityHistory.join(', ')}]`);
+
+                    // Set state to failed with clear context
+                    state.status = 'failed';
+                    state.failureReason = `Strategy loop detected: Complexity diverging at ${currentComplexity.toFixed(1)} for ${divergingHighComplexityCount}+ iterations. Human intervention recommended.`;
+                    state.loopDetected = true;
+                    state.loopGuidance = `Complexity trend: [${state.complexityHistory.join(' → ')}]. Consider alternative approach or manual intervention.`;
+
+                    // Record the failure metrics
+                    const duration = (Date.now() - startTime) / 1000;
+                    services.metrics.recordFixAttempt(false, duration, state.iteration, 'strategy-loop-detected');
+                } else {
+                    log('WARN', '[AoT] Complexity is increasing - problem may be getting harder. Consider alternative approach.');
+                }
             }
 
             // Log complexity trend

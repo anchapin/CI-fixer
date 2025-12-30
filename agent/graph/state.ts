@@ -74,6 +74,10 @@ export interface GraphState {
     // Loop Detection
     loopDetected?: boolean;
     loopGuidance?: string;
+
+    // Reproduction Requirement (Phase 2: Reproduction-First Workflow)
+    reproductionRequired?: boolean; // Tracks if reproduction command is required
+    reproductionCommandMissing?: boolean; // Tracks if reproduction command was found missing
 }
 
 export interface GraphContext {
