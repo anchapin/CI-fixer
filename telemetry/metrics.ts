@@ -59,6 +59,40 @@ export const reproductionInferred = meter.createCounter('reproduction_inferred_t
     unit: '1'
 });
 
+// ============================================================================
+// REFLECTION LEARNING SYSTEM METRICS
+// ============================================================================
+
+export const learningPatternSave = meter.createCounter('learning_pattern_save_total', {
+    description: 'Total number of learning patterns saved to database',
+    unit: '1'
+});
+
+export const learningPatternSaveError = meter.createCounter('learning_pattern_save_error_total', {
+    description: 'Total number of errors saving learning patterns',
+    unit: '1'
+});
+
+export const learningPatternLoad = meter.createCounter('learning_pattern_load_total', {
+    description: 'Total number of learning patterns loaded from database',
+    unit: '1'
+});
+
+export const learningDatabaseTimeout = meter.createCounter('learning_database_timeout_total', {
+    description: 'Total number of database timeout errors',
+    unit: '1'
+});
+
+export const learningQueueSize = meter.createGauge('learning_queue_size', {
+    description: 'Current size of the write queue',
+    unit: '1'
+});
+
+export const learningWriteLatency = meter.createHistogram('learning_write_latency_ms', {
+    description: 'Latency of database write operations in milliseconds',
+    unit: 'ms'
+});
+
 /**
  * Record a fix attempt with its outcome
  */

@@ -1,5 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { ReflectionLearningSystem } from '../../services/reflection/learning-system.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ReflectionLearningSystem, PersistentLearning } from '../../services/reflection/learning-system.js';
+
+// Mock the database module
+vi.mock('../../db/client.js', () => ({
+    db: {
+        learningFailure: {
+            findMany: vi.fn(),
+            upsert: vi.fn()
+        },
+        learningSuccess: {
+            findMany: vi.fn(),
+            upsert: vi.fn()
+        }
+    }
+}));
 
 describe('Reflection & Learning', () => {
     let system: ReflectionLearningSystem;
@@ -9,8 +23,8 @@ describe('Reflection & Learning', () => {
     });
 
     describe('Failure Recording', () => {
-        it('should record failures', () => {
-            system.recordFailure(
+        it('should record failures', async () => {
+            await system.recordFailure(
                 'TypeError',
                 'Null reference',
                 'Added null check',
@@ -21,10 +35,10 @@ describe('Reflection & Learning', () => {
             expect(stats.totalFailurePatterns).toBe(1);
         });
 
-        it('should track failure frequency', () => {
-            system.recordFailure('TypeError', 'Null reference', 'Fix 1', 'ctx1');
-            system.recordFailure('TypeError', 'Null reference', 'Fix 2', 'ctx2');
-            system.recordFailure('TypeError', 'Null reference', 'Fix 3', 'ctx3');
+        it('should track failure frequency', async () => {
+            await system.recordFailure('TypeError', 'Null reference', 'Fix 1', 'ctx1');
+            await system.recordFailure('TypeError', 'Null reference', 'Fix 2', 'ctx2');
+            await system.recordFailure('TypeError', 'Null reference', 'Fix 3', 'ctx3');
 
             const stats = system.getStats();
             expect(stats.mostCommonFailure).toBe('Null reference');
@@ -32,8 +46,8 @@ describe('Reflection & Learning', () => {
     });
 
     describe('Success Recording', () => {
-        it('should record successes', () => {
-            system.recordSuccess(
+        it('should record successes', async () => {
+            await system.recordSuccess(
                 'TypeError',
                 'Added null check before access',
                 'user.ts:42'
@@ -45,10 +59,10 @@ describe('Reflection & Learning', () => {
     });
 
     describe('Reflection', () => {
-        it('should generate insights from patterns', () => {
+        it('should generate insights from patterns', async () => {
             // Record multiple failures
             for (let i = 0; i < 5; i++) {
-                system.recordFailure(
+                await system.recordFailure(
                     'TypeError',
                     'Null reference',
                     `Attempt ${i}`,
@@ -62,10 +76,10 @@ describe('Reflection & Learning', () => {
             expect(result.patternsIdentified).toBeGreaterThan(0);
         });
 
-        it('should provide improvement suggestions', () => {
+        it('should provide improvement suggestions', async () => {
             // Record frequent failures
             for (let i = 0; i < 6; i++) {
-                system.recordFailure(
+                await system.recordFailure(
                     'SyntaxError',
                     'Missing semicolon',
                     'Added semicolon',
@@ -78,12 +92,12 @@ describe('Reflection & Learning', () => {
             expect(result.improvementSuggestions.length).toBeGreaterThan(0);
         });
 
-        it('should detect high failure rate', () => {
+        it('should detect high failure rate', async () => {
             // Record more failures than successes
             for (let i = 0; i < 5; i++) {
-                system.recordFailure('Error', `Reason ${i}`, 'Fix', 'ctx');
+                await system.recordFailure('Error', `Reason ${i}`, 'Fix', 'ctx');
             }
-            system.recordSuccess('Error', 'Fix', 'ctx');
+            await system.recordSuccess('Error', 'Fix', 'ctx');
 
             const result = system.reflect();
 
@@ -121,10 +135,10 @@ describe('Reflection & Learning', () => {
     });
 
     describe('Statistics', () => {
-        it('should calculate failure rate', () => {
-            system.recordFailure('E1', 'R1', 'F1', 'C1');
-            system.recordFailure('E2', 'R2', 'F2', 'C2');
-            system.recordSuccess('E3', 'F3', 'C3');
+        it('should calculate failure rate', async () => {
+            await system.recordFailure('E1', 'R1', 'F1', 'C1');
+            await system.recordFailure('E2', 'R2', 'F2', 'C2');
+            await system.recordSuccess('E3', 'F3', 'C3');
 
             const stats = system.getStats();
 

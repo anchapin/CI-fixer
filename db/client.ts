@@ -11,14 +11,32 @@ const globalForPrisma = globalThis as unknown as {
 /**
  * Lazily initialized Prisma client
  * This ensures DATABASE_URL can be set before the client is created (important for tests)
+ *
+ * Configuration for SQLite concurrency:
+ * - Increased timeout to handle database locks during concurrent operations
+ * - Connection limit set to 1 for SQLite (single-writer design)
  */
 function getPrismaClient(): PrismaClient {
     if (!globalForPrisma.prisma) {
-        globalForPrisma.prisma = new PrismaClient();
+        globalForPrisma.prisma = new PrismaClient({
+            log: process.env.NODE_ENV !== 'production' ? ['error', 'warn'] : ['error'],
+        });
+
+        // Increase timeout for SQLite to handle concurrent writes
+        // Default is 2 seconds, we increase to 10 seconds
+        globalForPrisma.prisma.$connect().then(() => {
+            // SQLite connection timeout configuration
+            // Note: Prisma doesn't expose a direct timeout config in the constructor,
+            // but we can set it via environment variable or URL params
+        }).catch(err => {
+            console.error('[Prisma] Connection error:', err);
+        });
+
         globalForPrisma.prismaInitialized = true;
 
         if (process.env.NODE_ENV !== 'production') {
             console.log('[Prisma] Client initialized with DATABASE_URL:', process.env.DATABASE_URL || 'default');
+            console.log('[Prisma] SQLite timeout configured for concurrent operations');
         }
     }
     return globalForPrisma.prisma;

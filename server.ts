@@ -46,8 +46,57 @@ const defaultAdapterConfig: AppConfig = {
 };
 const adapter = new CIMultiAdapter(defaultAdapterConfig);
 
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+    try {
+        // Basic health check
+        const health = {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            services: {
+                database: 'unknown',
+                reflection_learning: 'unknown'
+            }
+        };
+
+        // Check database connectivity
+        try {
+            await db.$queryRaw`SELECT 1`;
+            health.services.database = 'ok';
+        } catch (dbError) {
+            health.services.database = 'error';
+            health.status = 'degraded';
+        }
+
+        // Check reflection learning system status
+        try {
+            // Get reflection system instance and check telemetry
+            const { getReflectionSystem } = await import('./services/reflection/learning-system.js');
+            const reflectionSystem = getReflectionSystem();
+            const reflectionTelemetry = reflectionSystem['persistence'].getTelemetry();
+
+            health.services.reflection_learning = {
+                status: 'ok',
+                telemetry: {
+                    successCount: reflectionTelemetry.successCount,
+                    failureCount: reflectionTelemetry.failureCount,
+                    queueSize: reflectionTelemetry.queueSize,
+                    isQueueActive: reflectionTelemetry.isQueueActive
+                }
+            };
+        } catch (reflectionError) {
+            health.services.reflection_learning = 'error';
+            health.status = 'degraded';
+        }
+
+        const statusCode = health.status === 'ok' ? 200 : 503;
+        res.status(statusCode).json(health);
+    } catch (e: any) {
+        res.status(503).json({
+            status: 'error',
+            timestamp: new Date().toISOString(),
+            error: e.message
+        });
+    }
 });
 
 // Start Agent

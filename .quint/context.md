@@ -2,8 +2,9 @@
 
 **Project:** CI-Fixer (recursive-devops-agent)
 **Domain:** Autonomous CI/CD Failure Diagnosis and Repair
-**Date:** 2025-12-29
-**Last Commit:** 7776be0 - conductor(cleanup): Archive 'Dependency Solver Loops' and sync docs (2025-12-28 21:19:56)
+**Date:** 2025-12-30
+**Last Commit:** 29f2bb9 - test(agent): improve test stability and coverage (2025-12-30)
+**Recent Focus:** Multi-layer reliability enhancements with adaptive thresholds and recovery strategies
 
 ## Vocabulary
 
@@ -21,6 +22,9 @@
 | **Language Scoping** | Hybrid keyword/manifest detection that enforces strict boundaries between JS/TS, Python, and Go contexts to ensure relevant file/tool selection. |
 | **Path Verification** | Automatic correction of hallucinated file paths to prevent directory traversal attacks. |
 | **Dependency Solver** | Autonomous package manager integration that resolves and installs dependencies when reproduction fails due to missing packages. |
+| **Reliability Layer** | Multi-phase protection system with adaptive thresholds, loop detection, and recovery strategies for preventing infinite loops. |
+| **ReliabilityEvent** | Telemetry table tracking when reliability layers trigger, including context, outcome, and recovery success. |
+| **ToolOrchestra** | Multi-objective optimization system tracking cost, latency, token usage, and quality metrics for tool invocations. |
 
 ## Invariants
 
@@ -32,7 +36,7 @@
 
 ### Development Invariants
 - **TDD Workflow**: All features MUST start with failing tests. Red-Green-Refactor cycle is MANDATORY.
-- **Coverage Requirement**: Code coverage MUST be >80% for all modules before marking tasks complete.
+- **Coverage Requirement**: Code coverage MUST be >85% lines and >80% branches/functions (enforced in vitest.config.ts).
 - **Non-Interactive Commands**: Use `CI=true` environment variable for watch-mode tools (tests, linters) to ensure single execution in CI environments.
 - **Conductor Workflow**: All work MUST be tracked in `conductor/tracks/*/plan.md`. Tasks marked `[~]` during work, `[x]` with commit SHA when complete.
 
@@ -71,12 +75,11 @@
 - **Sandbox Options**: E2B (cloud, requires API key) or Docker (local, requires Docker Desktop)
 
 ### Current Phase Context
-- **Active Tracks**: None currently active (archived tracks include env_persistence, fs_grounding, dependency_solver_loops)
-- **Recent Work**: Dependency solver integration (Phase 5 complete), agent workflow refinement, test reliability improvements
-- **Uncommitted Changes**: Multiple test file updates, agent tool enhancements, path verification improvements
-- **Tech Stack**: React 19.2.1 + Vite, Express, Prisma, Vitest, Playwright
-- **Latest Phase**: Agent Integration and Refinement (completed 2025-12-28)
-- **Current Session**: 2025-12-29 - User reliability and test improvements in progress
+- **Active Tracks**: Check `conductor/tracks/*/plan.md` for active development tracks
+- **Recent Work**: Multi-layer reliability enhancements (Phases 2-4), adaptive thresholds, recovery strategies
+- **Tech Stack**: React 19.2.1 + Vite (port 5173), Node.js/Express (port 3001), SQLite/Prisma, Vitest, Playwright
+- **Test Coverage**: 85% lines, 80% branches enforced in vitest.config.ts
+- **Current Session**: 2025-12-30 - Context initialization for reasoning session
 
 ### Security Constraints
 - **Path Validation**: All user-provided paths MUST be validated against project root
@@ -99,3 +102,4 @@
 - **Agent Tools** (`/services/sandbox/agent_tools.ts`): Tool execution interface for agents
 - **Graph Coordinator** (`/agent/graph/coordinator.ts`): Orchestrates specialized nodes in DAG execution
 - **Worker Loop** (`/agent/worker.ts`): Main execution loop that runs the graph-based agent
+- **ReliabilityManager** (`/services/reliability/`): Manages adaptive thresholds, loop detection, and recovery strategies

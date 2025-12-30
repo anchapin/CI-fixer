@@ -127,8 +127,36 @@ model ErrorSolution {
   timesApplied      Int      @default(0)
   avgIterations     Float
   createdAt         DateTime @default(now())
-  
+
   @@index([errorFingerprint])
+}
+
+// ============================================================================
+// REFLECTION & LEARNING SYSTEM
+// ============================================================================
+
+model LearningFailure {
+  id            String   @id // Maps to patternId (e.g., "typeerror:undefined-property")
+  errorType     String
+  failureReason String
+  attemptedFix  String
+  context       String   // JSON content
+  frequency     Int      @default(1)
+  firstSeen     DateTime @default(now())
+  lastSeen      DateTime @default(now())
+
+  @@index([errorType])
+  @@index([frequency])
+}
+
+model LearningSuccess {
+  id            String   @id // Maps to patternId
+  errorType     String
+  successfulFix String
+  context       String   // JSON content
+  timestamp     DateTime @default(now())
+
+  @@index([errorType])
 }
 
 // ============================================================================

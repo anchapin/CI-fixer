@@ -4,6 +4,10 @@
  * Based on "Code Generation Agents" survey - reflection mechanisms
  */
 
+import { db } from '../../db/client.js';
+import { WriteQueue } from './write-queue.js';
+import * as Metrics from '../../telemetry/metrics.js';
+
 export interface FailurePattern {
     id: string;
     errorType: string;
@@ -35,52 +39,110 @@ export class ReflectionLearningSystem {
     private failurePatterns: Map<string, FailurePattern> = new Map();
     private successPatterns: Map<string, any> = new Map();
     private learningHistory: Array<{ timestamp: number; insight: string }> = [];
+    private persistence = new PersistentLearning();
+    private isInitialized = false;
+
+    /**
+     * Initialize the system by loading historical data
+     */
+    async initialize(): Promise<void> {
+        if (this.isInitialized) return;
+
+        try {
+            const data = await this.persistence.load();
+            if (data) {
+                // Hydrate failure patterns
+                data.failures.forEach((f: any) => {
+                    this.failurePatterns.set(f.id, {
+                        ...f,
+                        firstSeen: f.firstSeen.getTime(),
+                        lastSeen: f.lastSeen.getTime()
+                    });
+                });
+
+                // Hydrate success patterns
+                data.successes.forEach((s: any) => {
+                    this.successPatterns.set(s.id, {
+                        ...s,
+                        timestamp: s.timestamp.getTime()
+                    });
+                });
+
+                console.log(`[Learning] Loaded ${this.failurePatterns.size} failure patterns and ${this.successPatterns.size} success patterns.`);
+            }
+            this.isInitialized = true;
+        } catch (error) {
+            console.error('[Learning] Failed to initialize persistence:', error);
+            this.isInitialized = true; // Still mark as initialized to avoid retry loops
+        }
+    }
 
     /**
      * Record a failure for learning
      */
-    recordFailure(
+    async recordFailure(
         errorType: string,
         failureReason: string,
         attemptedFix: string,
         context: string
-    ): void {
-        const patternId = this.generatePatternId(errorType, failureReason);
+    ): Promise<void> {
+        // Ensure we are initialized
+        if (!this.isInitialized) await this.initialize();
 
-        const existing = this.failurePatterns.get(patternId);
-        if (existing) {
-            existing.frequency++;
-            existing.lastSeen = Date.now();
+        const patternId = this.generatePatternId(errorType, failureReason);
+        const now = Date.now();
+
+        let pattern = this.failurePatterns.get(patternId);
+
+        if (pattern) {
+            pattern.frequency++;
+            pattern.lastSeen = now;
         } else {
-            this.failurePatterns.set(patternId, {
+            pattern = {
                 id: patternId,
                 errorType,
                 failureReason,
                 attemptedFix,
                 context,
                 frequency: 1,
-                firstSeen: Date.now(),
-                lastSeen: Date.now()
-            });
+                firstSeen: now,
+                lastSeen: now
+            };
+            this.failurePatterns.set(patternId, pattern);
         }
+
+        // Persist immediately (fire & forget)
+        this.persistence.saveFailure(pattern).catch(e =>
+            console.warn('[Learning] Failed to persist failure pattern:', e)
+        );
     }
 
     /**
      * Record a success for learning
      */
-    recordSuccess(
+    async recordSuccess(
         errorType: string,
         successfulFix: string,
         context: string
-    ): void {
+    ): Promise<void> {
+        // Ensure we are initialized
+        if (!this.isInitialized) await this.initialize();
+
         const patternId = this.generatePatternId(errorType, 'success');
 
-        this.successPatterns.set(patternId, {
+        const successItem = {
             errorType,
             successfulFix,
             context,
             timestamp: Date.now()
-        });
+        };
+
+        this.successPatterns.set(patternId, successItem);
+
+        // Persist immediately (fire & forget)
+        this.persistence.saveSuccess(patternId, successItem).catch(e =>
+            console.warn('[Learning] Failed to persist success pattern:', e)
+        );
     }
 
     /**
@@ -228,37 +290,119 @@ export class ReflectionLearningSystem {
 }
 
 /**
- * Persistent learning storage
+ * Persistent learning storage with write queue and retry logic
  */
 export class PersistentLearning {
-    private storageKey = 'ci-fixer-learning';
+    private writeQueue: WriteQueue;
+    private telemetry = {
+        successCount: 0,
+        failureCount: 0,
+        retryCount: 0
+    };
 
-    /**
-     * Save learning data
-     */
-    save(data: any): void {
+    constructor() {
+        this.writeQueue = new WriteQueue();
+    }
+
+    async load() {
         try {
-            // In a real implementation, this would save to database or file
-            const serialized = JSON.stringify(data);
-            // localStorage.setItem(this.storageKey, serialized);
+            const [failures, successes] = await Promise.all([
+                db.learningFailure.findMany(),
+                db.learningSuccess.findMany()
+            ]);
+
+            // Record telemetry
+            Metrics.learningPatternLoad.add(failures.length + successes.length, {
+                type: 'failure'
+            });
+            Metrics.learningPatternLoad.add(successes.length, {
+                type: 'success'
+            });
+
+            return { failures, successes };
         } catch (error) {
-            console.warn('Failed to save learning data:', error);
+            console.error('Failed to load learning data from DB:', error);
+            Metrics.learningPatternSaveError.add(1, {
+                operation: 'load',
+                error: error instanceof Error ? error.name : 'unknown'
+            });
+            return null;
         }
     }
 
+    async saveFailure(pattern: FailurePattern): Promise<void> {
+        const startTime = Date.now();
+        await this.writeQueue.enqueue(async () => {
+            await db.learningFailure.upsert({
+                where: { id: pattern.id },
+                create: {
+                    id: pattern.id,
+                    errorType: pattern.errorType,
+                    failureReason: pattern.failureReason,
+                    attemptedFix: pattern.attemptedFix,
+                    context: pattern.context,
+                    frequency: pattern.frequency,
+                    firstSeen: new Date(pattern.firstSeen),
+                    lastSeen: new Date(pattern.lastSeen)
+                },
+                update: {
+                    frequency: pattern.frequency,
+                    lastSeen: new Date(pattern.lastSeen),
+                    // Optionally update context or fix if it changes
+                }
+            });
+            this.telemetry.successCount++;
+            Metrics.learningPatternSave.add(1, { type: 'failure' });
+            Metrics.learningWriteLatency.record(Date.now() - startTime, { type: 'failure' });
+            console.log(`[Learning] Persisted failure pattern: ${pattern.id}`);
+        });
+    }
+
+    async saveSuccess(id: string, item: any): Promise<void> {
+        const startTime = Date.now();
+        await this.writeQueue.enqueue(async () => {
+            await db.learningSuccess.upsert({
+                where: { id },
+                create: {
+                    id,
+                    errorType: item.errorType,
+                    successfulFix: item.successfulFix,
+                    context: item.context,
+                    timestamp: new Date(item.timestamp)
+                },
+                update: {
+                    // Successes might just need timestamp updates or ignore if immutable
+                    timestamp: new Date(item.timestamp)
+                }
+            });
+            this.telemetry.successCount++;
+            Metrics.learningPatternSave.add(1, { type: 'success' });
+            Metrics.learningWriteLatency.record(Date.now() - startTime, { type: 'success' });
+            console.log(`[Learning] Persisted success pattern: ${id}`);
+        });
+    }
+
     /**
-     * Load learning data
+     * Get telemetry statistics (for monitoring)
      */
-    load(): any | null {
-        try {
-            // In a real implementation, this would load from database or file
-            // const serialized = localStorage.getItem(this.storageKey);
-            // return serialized ? JSON.parse(serialized) : null;
-            return null;
-        } catch (error) {
-            console.warn('Failed to load learning data:', error);
-            return null;
-        }
+    getTelemetry() {
+        const queueSize = this.writeQueue.getQueueSize();
+        // Record queue size to gauge metric
+        Metrics.learningQueueSize.record(queueSize);
+
+        return {
+            ...this.telemetry,
+            queueSize,
+            isQueueActive: this.writeQueue.isActive()
+        };
+    }
+
+    /**
+     * Flush any pending write operations
+     * Useful for tests to ensure all writes are complete before assertions
+     */
+    async flush(): Promise<void> {
+        await this.writeQueue.flush();
     }
 }
 
