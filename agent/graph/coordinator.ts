@@ -394,7 +394,7 @@ export async function runGraphAgent(
                         const duration = (Date.now() - startTime) / 1000;
                         services.metrics.recordFixAttempt(false, duration, state.iteration, 'strategy-loop-detected');
 
-                        break;
+                        // Loop will exit due to state.status = 'failed' above
                     }
                 } else {
                     log('WARN', '[AoT] Complexity is increasing - problem may be getting harder. Consider alternative approach.');

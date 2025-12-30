@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LogInput } from './components/LogInput';
 import { AgentStatus } from './components/AgentStatus';
 import { LearningDashboard } from './components/LearningDashboard';
+import { ReliabilityDashboard } from './components/ReliabilityDashboard';
 import { TerminalOutput } from './components/TerminalOutput';
 import { DiffView } from './components/DiffView';
 import { SettingsModal } from './components/SettingsModal';
@@ -12,7 +13,7 @@ import { Resizer } from './components/Resizer';
 import { AgentPhase, LogLine, AppConfig, FileChange, RunGroup, AgentState } from './types';
 import { INITIAL_ERROR_LOG, BROKEN_CODE, SCENARIO_FAILURE_LOOP } from './constants';
 import { useChat, fetchHttpStream } from '@tanstack/ai-react';
-import { Play, RotateCcw, ShieldCheck, Zap, Wifi, Settings, Loader2, RefreshCw, FileText, Terminal, Activity, Brain } from 'lucide-react';
+import { Play, RotateCcw, ShieldCheck, Zap, Wifi, Settings, Loader2, RefreshCw, FileText, Terminal, Activity, Brain, Shield, ChevronDown } from 'lucide-react';
 import {
     groupFailedRuns,
     generateRepoSummary,
@@ -76,7 +77,7 @@ const App: React.FC = () => {
     const [isSimulating, setIsSimulating] = useState(false);
     const [simStepIndex, setSimStepIndex] = useState(0);
 
-    const [showDashboard, setShowDashboard] = useState(false);
+    const [activeDashboard, setActiveDashboard] = useState<'learning' | 'reliability' | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [appConfig, setAppConfig] = useState<AppConfig | null>(() => {
         const saved = localStorage.getItem('riv_app_config'); // Unique key to avoid collisions
@@ -709,16 +710,37 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="mt-4 md:mt-0 flex gap-4">
-                    <button
-                        onClick={() => setShowDashboard(!showDashboard)}
-                        aria-label={showDashboard ? "Operations" : "Dashboard"}
-                        className={`px-4 py-2 rounded border font-mono text-sm flex items-center transition-all ${showDashboard 
-                            ? 'bg-purple-900/40 border-purple-500 text-purple-300' 
-                            : 'border-slate-700 hover:bg-slate-900 text-slate-400 hover:text-white'}`}
-                    >
-                        <Brain className="w-4 h-4 mr-2" />
-                        {showDashboard ? "OPERATIONS" : "DASHBOARD"}
-                    </button>
+                    {/* Dashboard Selector */}
+                    <div className="relative">
+                        <button
+                            onClick={() => activeDashboard ? setActiveDashboard(null) : setActiveDashboard('learning')}
+                            className={`px-4 py-2 rounded border font-mono text-sm flex items-center transition-all ${activeDashboard
+                                ? 'bg-purple-900/40 border-purple-500 text-purple-300'
+                                : 'border-slate-700 hover:bg-slate-900 text-slate-400 hover:text-white'}`}
+                        >
+                            {activeDashboard === 'reliability' ? <Shield className="w-4 h-4 mr-2" /> : <Brain className="w-4 h-4 mr-2" />}
+                            {activeDashboard ? (activeDashboard === 'reliability' ? "RELIABILITY" : "LEARNING") : "DASHBOARD"}
+                            {activeDashboard && <ChevronDown className="w-4 h-4 ml-2" />}
+                        </button>
+                        {activeDashboard && (
+                            <div className="absolute top-full mt-2 right-0 bg-slate-900 border border-slate-700 rounded shadow-xl z-50 min-w-[200px]">
+                                <button
+                                    onClick={() => setActiveDashboard('learning')}
+                                    className={`w-full px-4 py-2 text-left text-sm font-mono flex items-center hover:bg-slate-800 transition-colors ${activeDashboard === 'learning' ? 'text-cyan-400 bg-slate-800' : 'text-slate-400'}`}
+                                >
+                                    <Brain className="w-4 h-4 mr-2" />
+                                    Learning Dashboard
+                                </button>
+                                <button
+                                    onClick={() => setActiveDashboard('reliability')}
+                                    className={`w-full px-4 py-2 text-left text-sm font-mono flex items-center hover:bg-slate-800 transition-colors ${activeDashboard === 'reliability' ? 'text-purple-400 bg-slate-800' : 'text-slate-400'}`}
+                                >
+                                    <Shield className="w-4 h-4 mr-2" />
+                                    Reliability Dashboard
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
                         aria-label="Settings"
@@ -754,9 +776,9 @@ const App: React.FC = () => {
 
             {/* Main Content Area */}
             <main className="flex-1 min-h-0 relative overflow-hidden">
-                {showDashboard ? (
+                {activeDashboard ? (
                     <div className="absolute inset-0 animate-[fadeIn_0.3s_ease-out]">
-                        <LearningDashboard />
+                        {activeDashboard === 'learning' ? <LearningDashboard /> : <ReliabilityDashboard />}
                     </div>
                 ) : (
                     /* Dynamic Grid Layout */

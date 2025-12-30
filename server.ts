@@ -466,15 +466,107 @@ app.get('/api/learning/summary', async (req, res) => {
     try {
         const fixRate = await serverServices.learningMetrics.getAverageMetricValue('Fix Rate', 50);
         const patterns = await prisma.fixPattern.count();
-        
+
         // Mock optimization gain for now
-        const optimizationGain = 0.32; 
+        const optimizationGain = 0.32;
 
         res.json({
             fixRate,
             patternsLearned: patterns,
             optimizationGain,
             systemConfidence: 0.842
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================================
+// RELIABILITY DASHBOARD ENDPOINTS
+// ============================================================================
+
+app.get('/api/reliability/dashboard', async (req, res) => {
+    try {
+        const dashboard = await serverServices.reliabilityMetrics.getDashboardSummary();
+        const thresholdStats = await serverServices.adaptiveThresholds.getThresholdStats();
+
+        res.json({
+            ...dashboard,
+            thresholds: thresholdStats.config,
+            phase2CurrentThreshold: thresholdStats.config.phase2ReproductionThreshold.current,
+            phase3ComplexityThreshold: thresholdStats.config.phase3ComplexityThreshold.current,
+            phase3IterationThreshold: thresholdStats.config.phase3IterationThreshold.current,
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/reliability/metrics/:layer', async (req, res) => {
+    try {
+        const { layer } = req.params;
+        const days = parseInt(req.query.days as string) || 7;
+
+        const [metrics, trend, topStrategies] = await Promise.all([
+            serverServices.reliabilityMetrics.getLayerMetrics(layer as any),
+            serverServices.reliabilityMetrics.getThresholdTrend(layer as any, days),
+            serverServices.reliabilityMetrics.getTopStrategies(layer as any, 5)
+        ]);
+
+        res.json({
+            metrics,
+            trend,
+            topStrategies
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/reliability/thresholds', async (req, res) => {
+    try {
+        const stats = await serverServices.adaptiveThresholds.getThresholdStats();
+
+        // Get strategy stats for both phases
+        const [phase2Strategies, phase3Strategies] = await Promise.all([
+            serverServices.recoveryStrategy.getStrategyStats('phase2-reproduction'),
+            serverServices.recoveryStrategy.getStrategyStats('phase3-loop-detection')
+        ]);
+
+        res.json({
+            thresholds: stats.config,
+            phase2Metrics: stats.phase2Metrics,
+            phase3Metrics: stats.phase3Metrics,
+            phase2Strategies: phase2Strategies,
+            phase3Strategies: phase3Strategies
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/reliability/thresholds/analyze', async (req, res) => {
+    try {
+        const { minDataPoints = 30 } = req.body;
+
+        const adjustments = await serverServices.adaptiveThresholds.analyzeAndAdjustThresholds(minDataPoints);
+
+        res.json({
+            adjustments,
+            newConfig: serverServices.adaptiveThresholds.getConfig()
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/reliability/thresholds/reset', async (req, res) => {
+    try {
+        serverServices.adaptiveThresholds.resetToDefaults();
+
+        res.json({
+            success: true,
+            config: serverServices.adaptiveThresholds.getConfig()
         });
     } catch (e: any) {
         res.status(500).json({ error: e.message });

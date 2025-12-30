@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-12-29T04:12:05.206Z",
+  "timestamp": "2025-12-30T05:48:12.165Z",
   "totalCases": 1,
   "successCount": 1,
   "failureCount": 0,
@@ -8,7 +8,7 @@
     {
       "caseId": "mock-failure-01",
       "success": true,
-      "durationSeconds": 0.121,
+      "durationSeconds": 0.104,
       "stepsTaken": 5
     }
   ]
