@@ -70,6 +70,35 @@ export class ReliabilityTelemetry {
   }
 
   /**
+   * Record multiple reliability layer activation events in a single batch operation
+   * This is significantly more efficient than calling recordEvent multiple times
+   */
+  async recordEvents(events: ReliabilityEventData[]): Promise<void> {
+    if (events.length === 0) {
+      return;
+    }
+
+    try {
+      await this.prisma.reliabilityEvent.createMany({
+        data: events.map((event) => ({
+          layer: event.layer,
+          triggered: event.triggered,
+          threshold: event.threshold,
+          context: JSON.stringify(event.context),
+          outcome: event.outcome || 'pending',
+          recoveryAttempted: event.recoveryAttempted || false,
+          recoveryStrategy: event.recoveryStrategy,
+          recoverySuccess: event.recoverySuccess,
+          agentRunId: event.context?.agentRunId,
+        })),
+      });
+    } catch (error) {
+      // Log but don't throw - telemetry failures shouldn't break the agent
+      console.error('[ReliabilityTelemetry] Failed to record events:', error);
+    }
+  }
+
+  /**
    * Record Phase 2: Reproduction-First Workflow trigger
    */
   async recordReproductionRequired(

@@ -390,20 +390,18 @@ describe('Full Reliability Flow Integration', () => {
         it('should handle large volumes of events efficiently', async () => {
             const startTime = Date.now();
 
-            // Create 100 events
-            const promises = [];
+            // Create 100 events using batch insertion
+            const events = [];
             for (let i = 0; i < 100; i++) {
-                promises.push(
-                    telemetry.recordEvent({
-                        layer: i % 2 === 0 ? 'phase2-reproduction' : 'phase3-loop-detection',
-                        triggered: i % 5 === 0,
-                        threshold: i % 2 === 0 ? 1 : 15,
-                        context: `{ "iteration": ${i} }`
-                    })
-                );
+                events.push({
+                    layer: (i % 2 === 0 ? 'phase2-reproduction' : 'phase3-loop-detection') as 'phase2-reproduction' | 'phase3-loop-detection',
+                    triggered: i % 5 === 0,
+                    threshold: i % 2 === 0 ? 1 : 15,
+                    context: { iteration: i }
+                });
             }
 
-            await Promise.all(promises);
+            await telemetry.recordEvents(events);
 
             const duration = Date.now() - startTime;
 
