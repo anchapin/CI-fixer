@@ -2,27 +2,47 @@
 import { AppConfig } from '../types.js';
 import * as path from 'path';
 import { unifiedGenerate, extractCode } from './llm/LLMService.js';
+import { getModelForTask } from '../config/models.js';
 
 export class TestGenerator {
     constructor(private config: AppConfig) {}
 
-    async generateTest(sourcePath: string, sourceContent: string): Promise<string> {
+    /**
+     * Generates a unit test for the given source file.
+     * @param sourcePath Path to the source file
+     * @param sourceContent Content of the source file
+     * @param repoContext Optional context about the repository (dependencies, helpers, etc.)
+     */
+    async generateTest(sourcePath: string, sourceContent: string, repoContext?: string): Promise<string> {
+        let contextSection = "";
+        if (repoContext) {
+            contextSection = `
+REPOSITORY CONTEXT:
+${repoContext}
+`;
+        }
+
         const prompt = `
 You are an expert software engineer.
 Generate a minimal unit test for the following file: "${sourcePath}"
+
+${contextSection}
 
 Source Code:
 \`\`\`
 ${sourceContent}
 \`\`\`
 
-The test should be written using the standard testing framework for the language (e.g., Vitest for TypeScript, Pytest for Python).
-Return ONLY the code for the test file within a markdown code block.
+INSTRUCTIONS:
+1. Use the standard testing framework detected in the Repository Context (e.g., Vitest, Jest, Pytest).
+2. Reuse existing test helpers or setup files if listed in the Context.
+3. Ensure imports match the project's structure (e.g., using @/ aliases if tsconfig suggests it, or relative paths).
+4. Return ONLY the code for the test file within a markdown code block.
 `;
-        
+
         const response = await unifiedGenerate(this.config, {
             contents: prompt,
-            model: "gemini-3-pro-preview", // Use smart model for generation
+            model: getModelForTask('coding'), // Use coding model for generation
             config: { temperature: 0.2 }
         });
 

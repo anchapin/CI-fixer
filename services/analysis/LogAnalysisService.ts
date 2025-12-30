@@ -8,9 +8,7 @@ import { getWorkflowLogs, pushMultipleFilesToGitHub } from '../github/GitHubServ
 import { ContextManager, ContextPriority } from '../context-manager.js';
 import { postProcessPatch } from '../repair-agent/post-processor.js';
 import { extractCodeBlock, extractCodeBlockStrict } from '../../utils/parsing.js';
-
-const MODEL_SMART = "gemini-3-pro-preview";
-const MODEL_FAST = "gemini-2.5-flash";
+import { getModelForTask } from '../../config/models.js';
 
 function logTrace(msg: string) {
     // No-op in browser and server for now to maintain compatibility
@@ -75,7 +73,7 @@ Return ONLY the refined problem statement, no preamble or explanation.`;
     try {
         const res = await unifiedGenerate(config, {
             contents: prompt,
-            model: MODEL_FAST, // Use fast model for efficiency
+            model: getModelForTask('fast'), // Use fast model for efficiency
             config: { maxOutputTokens: 500 }
         });
 
@@ -151,7 +149,7 @@ export async function diagnoseError(
         const response = await unifiedGenerate(config, {
             contents: prompt,
             config: { temperature: 0.1, maxOutputTokens: 2048 },
-            model: MODEL_FAST,
+            model: getModelForTask('fast'),
             responseFormat: 'json'  // Force JSON output
         });
         logTrace(`[Diagnosis] Got response: ${response ? 'object' : 'null'}`);
@@ -320,10 +318,10 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
         const prompt = contextManager.compile();
 
         const segments: string[] = [];
-        
+
         const firstResponse = await unifiedGenerate(config, {
             contents: prompt,
-            model: MODEL_SMART,
+            model: getModelForTask('coding'),
             config: { maxOutputTokens: 8192 },
             validate: (text) => text.includes('```')
         });
@@ -338,7 +336,7 @@ export async function generateFix(config: AppConfig, context: any): Promise<stri
             const contPrompt = `Continue generating code from where you left off. Last chars:\n\`\`\`${trimmed.slice(-1000)}\`\`\``;
             const res = await unifiedGenerate(config, {
                 contents: contPrompt,
-                model: MODEL_SMART,
+                model: getModelForTask('coding'),
                 config: { maxOutputTokens: 8192 }
             });
             segments.push(res.text);
@@ -387,7 +385,7 @@ export async function judgeFix(config: AppConfig, original: string, fixed: strin
         const res = await unifiedGenerate(config, {
             contents: prompt,
             config: { responseMimeType: "application/json" },
-            model: MODEL_SMART
+            model: getModelForTask('reasoning')
         });
         return safeJsonParse(res.text, { passed: true, score: 7, reasoning: "Assuming fix is valid (fallback)." });
     } catch (e: any) {
@@ -399,7 +397,7 @@ export async function judgeFix(config: AppConfig, original: string, fixed: strin
 export async function generatePostMortem(config: AppConfig, failedAgents: any[]): Promise<string> {
     try {
         const prompt = `Generate a post-mortem for these failed agents: ${JSON.stringify(failedAgents)}`;
-        const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
+        const res = await unifiedGenerate(config, { contents: prompt, model: getModelForTask('reasoning') });
         return res.text;
     } catch (e: any) {
         console.error('[generatePostMortem] Error:', e);
@@ -414,7 +412,7 @@ export async function getAgentChatResponse(config: AppConfig, message: string, c
       User: ${message}
       Respond as a helpful DevOps AI Agent. Keep it brief.
     `;
-        const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_SMART });
+        const res = await unifiedGenerate(config, { contents: prompt, model: getModelForTask('reasoning') });
         return res.text;
     } catch (e: any) {
         console.error('[getAgentChatResponse] Error:', e);
@@ -425,7 +423,7 @@ export async function getAgentChatResponse(config: AppConfig, message: string, c
 export async function generateWorkflowOverride(config: AppConfig, originalContent: string, branchName: string, errorGoal: string): Promise<string> {
     try {
         const prompt = `Modify this workflow to run only relevant tests for error "${errorGoal}" on branch "${branchName}".\n${originalContent}`;
-        const res = await unifiedGenerate(config, { contents: prompt, model: MODEL_FAST });
+        const res = await unifiedGenerate(config, { contents: prompt, model: getModelForTask('fast') });
         return extractCode(res.text, 'yaml');
     } catch (e: any) {
         console.error('[generateWorkflowOverride] Error:', e);
@@ -446,7 +444,7 @@ export async function generateDetailedPlan(config: AppConfig, error: string, fil
         const res = await unifiedGenerate(config, {
             contents: prompt,
             config: { responseMimeType: "application/json" },
-            model: MODEL_SMART
+            model: getModelForTask('reasoning')
         });
         return safeJsonParse(res.text, { goal: "Fix error", tasks: [], approved: true });
     } catch (e: any) {
@@ -493,17 +491,42 @@ export async function runSandboxTest(config: AppConfig, group: RunGroup, iterati
                     if (testExistsRes.exitCode !== 0) {
                         logCallback('INFO', `Test file not found at ${expectedTestPath}. Generating new test...`);
                         try {
-                            const testContent = await generator.generateTest(fileChange.path, fileChange.modified.content);
+                            // --- NEW: Gather Repository Context ---
+                            let repoContext = "";
+
+                            // 1. Get Dependencies (package.json)
+                            const pkgJson = await sandbox.runCommand('cat package.json');
+                            if (pkgJson.exitCode === 0) {
+                                repoContext += `\n=== package.json (Dependencies) ===\n${pkgJson.output.slice(0, 1500)}\n`;
+                            }
+
+                            // 2. Scan for Test Helpers/Setup
+                            const findHelpers = await sandbox.runCommand('find . -type f -not -path "*/node_modules/*" \\( -name "*setup*" -o -name "*helper*" -o -name "jest.config.*" -o -name "vitest.config.*" \\) | head -n 5');
+                            if (findHelpers.exitCode === 0 && findHelpers.output.trim()) {
+                                repoContext += `\n=== Test Configuration & Helpers ===\nFiles found:\n${findHelpers.output.trim()}\n`;
+
+                                // Try to read a config file if found
+                                const configFile = findHelpers.output.split('\n').find(f => f.includes('config'));
+                                if (configFile) {
+                                    const configContent = await sandbox.runCommand(`cat ${configFile.trim()}`);
+                                    if (configContent.exitCode === 0) {
+                                        repoContext += `\n--- Content of ${configFile.trim()} ---\n${configContent.output.slice(0, 1000)}\n`;
+                                    }
+                                }
+                            }
+                            // --------------------------------------
+
+                            const testContent = await generator.generateTest(fileChange.path, fileChange.modified.content, repoContext);
                             if (testContent) {
                                 await sandbox.writeFile(expectedTestPath, testContent);
                                 logCallback('INFO', `Generated and wrote test to ${expectedTestPath}`);
-                                
+
                                 // Update command to run the new test
                                 if (expectedTestPath.endsWith('.py')) {
                                     cmd = `python -m pytest "${expectedTestPath}"`;
                                 } else {
                                     // Default to npx vitest for JS/TS as it's the project standard
-                                    cmd = `npx vitest run "${expectedTestPath}"`; 
+                                    cmd = `npx vitest run "${expectedTestPath}"`;
                                 }
                             }
                         } catch (genError: any) {
