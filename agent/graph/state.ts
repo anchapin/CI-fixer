@@ -78,6 +78,12 @@ export interface GraphState {
     // Reproduction Requirement (Phase 2: Reproduction-First Workflow)
     reproductionRequired?: boolean; // Tracks if reproduction command is required
     reproductionCommandMissing?: boolean; // Tracks if reproduction command was found missing
+
+    // Recovery Strategy (Phase 3: Automatic Recovery)
+    recoveryGuidance?: { // Guidance from recovery strategy attempts
+        guidance?: string;
+        suggestedActions?: string[];
+    };
 }
 
 export interface GraphContext {

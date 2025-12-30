@@ -35,6 +35,10 @@ import { LoopDetector } from './LoopDetector.js';
 import { ReproductionInferenceService } from './reproduction-inference.js';
 import { FixPatternService } from './FixPatternService.js';
 import { DependencySolverService } from './DependencySolverService.js';
+import { getReliabilityTelemetry } from './reliability/ReliabilityTelemetry.js';
+import { getReliabilityMetrics } from './reliability/ReliabilityMetrics.js';
+import { getAdaptiveThresholdService, DEFAULT_ADAPTIVE_THRESHOLDS_CONFIG } from './reliability/AdaptiveThresholdService.js';
+import { getRecoveryStrategyService } from './reliability/RecoveryStrategyService.js';
 
 export interface ServerServiceContainer {
     github: typeof GitHub;
@@ -58,6 +62,10 @@ export interface ServerServiceContainer {
     learningMetrics: LearningMetricService;
     reproductionInference: ReproductionInferenceService;
     fixPattern: FixPatternService;
+    reliabilityTelemetry: ReturnType<typeof getReliabilityTelemetry>;
+    reliabilityMetrics: ReturnType<typeof getReliabilityMetrics>;
+    adaptiveThresholds: ReturnType<typeof getAdaptiveThresholdService>;
+    recoveryStrategy: ReturnType<typeof getRecoveryStrategyService>;
 }
 
 /**
@@ -87,5 +95,9 @@ export const serverServices: ServerServiceContainer = {
     learning: new LearningLoopService(db), // Database required
     learningMetrics: new LearningMetricService(db), // Database required
     reproductionInference: new ReproductionInferenceService(),
-    fixPattern: new FixPatternService(db as any) // Database required
+    fixPattern: new FixPatternService(db as any), // Database required
+    reliabilityTelemetry: getReliabilityTelemetry(db), // Database required
+    reliabilityMetrics: getReliabilityMetrics(db), // Database required
+    adaptiveThresholds: getAdaptiveThresholdService(db, DEFAULT_ADAPTIVE_THRESHOLDS_CONFIG), // Database required
+    recoveryStrategy: getRecoveryStrategyService(db) // Database required
 };

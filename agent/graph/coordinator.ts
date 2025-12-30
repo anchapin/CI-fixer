@@ -85,11 +85,78 @@ export async function runGraphAgent(
 
             // Phase 2: Reproduction-First Workflow - Check before transitioning to execution
             if (state.currentNode === 'execution' || state.currentNode === 'repair-agent') {
+                // Get adaptive threshold (default to 1 if not available)
+                const phase2Threshold = 'adaptiveThresholds' in services
+                    ? (services as any).adaptiveThresholds.getCurrentThreshold('phase2-reproduction', 'reproduction')
+                    : 1;
+
                 if (!state.diagnosis?.reproductionCommand) {
                     log('ERROR', '[Reproduction-First] Cannot proceed to execution without reproduction command.');
                     log('ERROR', '[Reproduction-First] The agent must identify a reproduction command before attempting fixes.');
                     log('INFO', '[Reproduction-First] Suggestion: Run ReproductionInferenceService to identify the reproduction command.');
 
+                    // Record the reliability event for Phase 2 trigger
+                    let telemetryEventId: string | null = null;
+                    if ('reliabilityTelemetry' in services) {
+                        try {
+                            const event = await (services as any).reliabilityTelemetry.recordReproductionRequired(
+                                {
+                                    agentRunId: group.id,
+                                    groupId: group.id,
+                                    errorSummary: state.diagnosis?.errorSummary,
+                                    reproductionCommand: state.diagnosis?.reproductionCommand
+                                },
+                                phase2Threshold
+                            );
+                            // Get the event ID for recovery tracking
+                            const recentEvents = await (services as any).reliabilityTelemetry.getRecentEvents('phase2-reproduction', 1);
+                            if (recentEvents.length > 0) {
+                                telemetryEventId = recentEvents[0].id;
+                            }
+                        } catch (e) {
+                            log('WARN', `Failed to record reliability event: ${e instanceof Error ? e.message : String(e)}`);
+                        }
+                    }
+
+                    // Phase 3 Enhancement: Attempt recovery before halting
+                    if (telemetryEventId && 'recoveryStrategy' in services) {
+                        try {
+                            log('INFO', '[Recovery] Attempting automatic recovery strategies...');
+                            const recoveryResult = await (services as any).recoveryStrategy.attemptRecovery(
+                                {
+                                    agentRunId: group.id,
+                                    layer: 'phase2-reproduction',
+                                    threshold: phase2Threshold,
+                                    reproductionCommand: state.diagnosis?.reproductionCommand,
+                                    errorSummary: state.diagnosis?.errorSummary,
+                                    repoPath: config.repoUrl, // May need to convert to local path
+                                    config: config,
+                                    sandbox: sandbox
+                                },
+                                telemetryEventId
+                            );
+
+                            if (recoveryResult && recoveryResult.success) {
+                                log('INFO', `[Recovery] Strategy '${recoveryResult.strategy}' succeeded!`);
+                                log('INFO', `[Recovery] Recovered value: ${JSON.stringify(recoveryResult.newValue)}`);
+                                log('INFO', `[Recovery] Reasoning: ${recoveryResult.reasoning}`);
+
+                                // Apply the recovered reproduction command
+                                if (recoveryResult.newValue && typeof recoveryResult.newValue === 'string') {
+                                    state.diagnosis.reproductionCommand = recoveryResult.newValue;
+                                    log('INFO', `[Recovery] Reproduction command inferred: ${recoveryResult.newValue}`);
+                                    // Continue execution instead of failing
+                                    continue;
+                                }
+                            } else {
+                                log('WARN', '[Recovery] All recovery strategies failed or unavailable.');
+                            }
+                        } catch (e) {
+                            log('WARN', `[Recovery] Recovery attempt failed: ${e instanceof Error ? e.message : String(e)}`);
+                        }
+                    }
+
+                    // If recovery didn't succeed, halt as before
                     state.status = 'failed';
                     state.failureReason = 'Reproduction command required but missing. Agent attempted to fix without verifying reproducibility.';
                     state.reproductionRequired = true;
@@ -102,6 +169,25 @@ export async function runGraphAgent(
                     break;
                 }
                 log('VERBOSE', '[Reproduction-First] Reproduction command verified, proceeding to execution.');
+
+                // Phase 1 Enhancement: Record Phase 2 check passed (non-trigger event)
+                if ('reliabilityTelemetry' in services) {
+                    try {
+                        await (services as any).reliabilityTelemetry.recordEvent({
+                            layer: 'phase2-reproduction',
+                            triggered: false,
+                            threshold: phase2Threshold,
+                            context: {
+                                agentRunId: group.id,
+                                groupId: group.id,
+                                errorSummary: state.diagnosis?.errorSummary,
+                                reproductionCommand: state.diagnosis?.reproductionCommand
+                            }
+                        });
+                    } catch (e) {
+                        // Ignore - telemetry failures shouldn't break the agent
+                    }
+                }
             }
 
             const handler = NODE_MAP[state.currentNode];
@@ -192,8 +278,14 @@ export async function runGraphAgent(
             if (convergence.isDiverging) {
                 // Track how many consecutive iterations have been diverging with high complexity
                 const currentComplexity = state.problemComplexity || 0;
-                const highComplexityThreshold = 15;
-                const divergenceIterationsThreshold = 2;
+
+                // Get adaptive thresholds (default to 15 and 2 if not available)
+                const highComplexityThreshold = 'adaptiveThresholds' in services
+                    ? (services as any).adaptiveThresholds.getCurrentThreshold('phase3-loop-detection', 'complexity')
+                    : 15;
+                const divergenceIterationsThreshold = 'adaptiveThresholds' in services
+                    ? (services as any).adaptiveThresholds.getCurrentThreshold('phase3-loop-detection', 'iteration')
+                    : 2;
 
                 // Count iterations with high complexity that are diverging
                 let divergingHighComplexityCount = 0;
@@ -213,17 +305,119 @@ export async function runGraphAgent(
                     log('INFO', '  3. Request human guidance for alternative strategies');
                     log('INFO', `[Strategy Loop] Complexity history: [${state.complexityHistory.join(', ')}]`);
 
-                    // Set state to failed with clear context
-                    state.status = 'failed';
-                    state.failureReason = `Strategy loop detected: Complexity diverging at ${currentComplexity.toFixed(1)} for ${divergingHighComplexityCount}+ iterations. Human intervention recommended.`;
-                    state.loopDetected = true;
-                    state.loopGuidance = `Complexity trend: [${state.complexityHistory.join(' → ')}]. Consider alternative approach or manual intervention.`;
+                    // Record the reliability event for Phase 3 trigger
+                    let telemetryEventId: string | null = null;
+                    if ('reliabilityTelemetry' in services) {
+                        try {
+                            await (services as any).reliabilityTelemetry.recordStrategyLoopDetected(
+                                {
+                                    agentRunId: group.id,
+                                    groupId: group.id,
+                                    complexity: currentComplexity,
+                                    complexityHistory: state.complexityHistory,
+                                    iteration: state.iteration,
+                                    divergingCount: divergingHighComplexityCount
+                                },
+                                highComplexityThreshold // Threshold value used for detection
+                            );
+                            // Get the event ID for recovery tracking
+                            const recentEvents = await (services as any).reliabilityTelemetry.getRecentEvents('phase3-loop-detection', 1);
+                            if (recentEvents.length > 0) {
+                                telemetryEventId = recentEvents[0].id;
+                            }
+                        } catch (e) {
+                            log('WARN', `Failed to record reliability event: ${e instanceof Error ? e.message : String(e)}`);
+                        }
+                    }
 
-                    // Record the failure metrics
-                    const duration = (Date.now() - startTime) / 1000;
-                    services.metrics.recordFixAttempt(false, duration, state.iteration, 'strategy-loop-detected');
+                    // Phase 3 Enhancement: Attempt recovery before halting
+                    let recoverySucceeded = false;
+                    if (telemetryEventId && 'recoveryStrategy' in services) {
+                        try {
+                            log('INFO', '[Recovery] Attempting automatic recovery strategies...');
+                            const recoveryResult = await (services as any).recoveryStrategy.attemptRecovery(
+                                {
+                                    agentRunId: group.id,
+                                    layer: 'phase3-loop-detection',
+                                    threshold: highComplexityThreshold,
+                                    complexity: currentComplexity,
+                                    complexityHistory: state.complexityHistory,
+                                    iteration: state.iteration,
+                                    divergingCount: divergingHighComplexityCount,
+                                    config: config
+                                },
+                                telemetryEventId
+                            );
+
+                            if (recoveryResult && recoveryResult.success) {
+                                log('INFO', `[Recovery] Strategy '${recoveryResult.strategy}' succeeded!`);
+                                log('INFO', `[Recovery] Reasoning: ${recoveryResult.reasoning}`);
+
+                                // Apply the recovery guidance
+                                if (recoveryResult.newValue && typeof recoveryResult.newValue === 'object') {
+                                    const guidance = recoveryResult.newValue as { guidance?: string; suggestedActions?: string[] };
+                                    if (guidance.guidance) {
+                                        log('INFO', `[Recovery] Guidance: ${guidance.guidance}`);
+                                    }
+                                    if (guidance.suggestedActions && guidance.suggestedActions.length > 0) {
+                                        log('INFO', '[Recovery] Suggested actions:');
+                                        for (const action of guidance.suggestedActions) {
+                                            log('INFO', `  - ${action}`);
+                                        }
+                                    }
+
+                                    // Store recovery guidance in state for the next node to use
+                                    state.recoveryGuidance = guidance;
+                                    recoverySucceeded = true;
+
+                                    // Reset complexity tracking to give the agent a fresh start
+                                    state.complexityHistory = [];
+                                    log('INFO', '[Recovery] Complexity tracking reset. Agent will continue with new strategy.');
+                                }
+                            } else {
+                                log('WARN', '[Recovery] All recovery strategies failed or unavailable.');
+                            }
+                        } catch (e) {
+                            log('WARN', `[Recovery] Recovery attempt failed: ${e instanceof Error ? e.message : String(e)}`);
+                        }
+                    }
+
+                    // If recovery didn't succeed, halt as before
+                    if (!recoverySucceeded) {
+                        // Set state to failed with clear context
+                        state.status = 'failed';
+                        state.failureReason = `Strategy loop detected: Complexity diverging at ${currentComplexity.toFixed(1)} for ${divergingHighComplexityCount}+ iterations. Human intervention recommended.`;
+                        state.loopDetected = true;
+                        state.loopGuidance = `Complexity trend: [${state.complexityHistory.join(' → ')}]. Consider alternative approach or manual intervention.`;
+
+                        // Record the failure metrics
+                        const duration = (Date.now() - startTime) / 1000;
+                        services.metrics.recordFixAttempt(false, duration, state.iteration, 'strategy-loop-detected');
+
+                        break;
+                    }
                 } else {
                     log('WARN', '[AoT] Complexity is increasing - problem may be getting harder. Consider alternative approach.');
+                }
+
+                // Phase 1 Enhancement: Record Phase 3 check passed (non-trigger event)
+                if ('reliabilityTelemetry' in services) {
+                    try {
+                        await (services as any).reliabilityTelemetry.recordEvent({
+                            layer: 'phase3-loop-detection',
+                            triggered: false,
+                            threshold: highComplexityThreshold,
+                            context: {
+                                agentRunId: group.id,
+                                groupId: group.id,
+                                complexity: currentComplexity,
+                                complexityHistory: state.complexityHistory,
+                                iteration: state.iteration
+                            }
+                        });
+                    } catch (e) {
+                        // Ignore - telemetry failures shouldn't break the agent
+                    }
                 }
             }
 

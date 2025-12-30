@@ -263,3 +263,25 @@ model PathCorrection {
   @@index([filename])
   @@index([createdAt])
 }
+
+// ============================================================================
+// RELIABILITY LAYER TELEMETRY
+// ============================================================================
+
+model ReliabilityEvent {
+  id                String   @id @default(uuid())
+  layer             String   // "phase2-reproduction", "phase3-loop-detection"
+  triggered         Boolean  // Whether the reliability layer was triggered
+  threshold         Float    // The threshold value that was used
+  context           String   // JSON: complexity, iteration, error type, etc.
+  outcome           String   // "recovered", "failed", "human-intervention"
+  recoveryAttempted Boolean  @default(false)
+  recoveryStrategy  String?  // Name of the recovery strategy attempted
+  recoverySuccess   Boolean?
+  agentRunId        String?  // Optional: Link to agent run
+  createdAt         DateTime @default(now())
+
+  @@index([layer])
+  @@index([triggered])
+  @@index([createdAt])
+}

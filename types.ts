@@ -107,6 +107,12 @@ export interface AppConfig {
   // Logging
   logLevel?: 'info' | 'debug' | 'verbose';
 
+  // Reliability Layer Settings
+  adaptiveThresholdsEnabled?: boolean;
+  phase2ReproductionThreshold?: number; // Default: 1
+  phase3ComplexityThreshold?: number; // Default: 15
+  phase3IterationThreshold?: number; // Default: 2
+
   // Execution Internal Logic
   executionBackend?: 'e2b' | 'docker_local';
   dockerImage?: string; // e.g., 'node:20-bullseye'
