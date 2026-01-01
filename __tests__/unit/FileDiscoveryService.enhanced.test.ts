@@ -156,6 +156,66 @@ describe('FileDiscoveryService Enhanced', () => {
         });
     });
 
+    describe('disablePathVerification flag', () => {
+        it('should skip FS checks and return mock result when flag is true', async () => {
+            const filename = 'test.txt';
+            const result = await service.findUniqueFile(filename, rootDir, true);
+
+            expect(result.found).toBe(true);
+            expect(result.verificationDisabled).toBe(true);
+            expect(result.path).toBe(path.resolve(rootDir, filename));
+            expect(result.relativePath).toBe(filename);
+            expect(result.matches).toEqual([path.resolve(rootDir, filename)]);
+            expect(result.relativeMatches).toEqual([filename]);
+            expect(result.depth).toBe(0);
+
+            // Verify FS checks were NOT called
+            expect(fs.existsSync).not.toHaveBeenCalled();
+            expect(fs.statSync).not.toHaveBeenCalled();
+        });
+
+        it('should handle absolute paths when verification is disabled', async () => {
+            const absPath = '/absolute/path/to/file.txt';
+            const result = await service.findUniqueFile(absPath, rootDir, true);
+
+            expect(result.found).toBe(true);
+            expect(result.verificationDisabled).toBe(true);
+            expect(result.path).toBe(absPath);
+            expect(result.relativePath).toBe(path.relative(rootDir, absPath));
+
+            // Verify FS checks were NOT called
+            expect(fs.existsSync).not.toHaveBeenCalled();
+        });
+
+        it('should perform normal FS checks when flag is false or undefined', async () => {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as any);
+
+            const result1 = await service.findUniqueFile('test.txt', rootDir, false);
+            expect(result1.verificationDisabled).toBeUndefined();
+            expect(fs.existsSync).toHaveBeenCalled();
+
+            vi.clearAllMocks();
+            const result2 = await service.findUniqueFile('test.txt', rootDir);
+            expect(result2.verificationDisabled).toBeUndefined();
+            expect(fs.existsSync).toHaveBeenCalled();
+        });
+
+        it('should return depth 0 when verification is disabled', async () => {
+            const result = await service.findUniqueFile('any/file.txt', rootDir, true);
+            expect(result.depth).toBe(0);
+        });
+
+        it('should calculate relative path correctly when verification is disabled', async () => {
+            const filename = 'src/components/App.tsx';
+            const result = await service.findUniqueFile(filename, rootDir, true);
+
+            // Use path.normalize to handle Windows vs Unix path separators
+            expect(result.relativePath).toBe(path.normalize(filename));
+            expect(result.path).toBe(path.resolve(rootDir, filename));
+        });
+    });
+
     describe('checkGitHistoryForDeletion error paths', () => {
         it('should return false if git command fails', async () => {
             vi.mocked(sandbox.runCommand).mockResolvedValue({

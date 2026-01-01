@@ -1,0 +1,93 @@
+# Complete RBAC Configuration for CI-Fixer Kubernetes-Native Sandbox
+#
+# This file contains all RBAC resources needed for CI-Fixer to create and manage
+# Kubernetes Jobs as sandbox execution environments.
+#
+# Usage:
+#   kubectl apply -f k8s/rbac/k8s.yaml
+#
+# The resources include:
+# 1. ServiceAccount for sandbox Jobs
+# 2. ServiceAccount for the CI-Fixer application
+# 3. Role with permissions to manage Jobs, Pods, and exec into them
+# 4. RoleBinding to bind ServiceAccounts to the Role
+
+---
+# ServiceAccount for CI-Fixer Sandbox Jobs
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-fixer-sandbox
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: sandbox
+
+---
+# ServiceAccount for the CI-Fixer application itself (controller)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-fixer-app
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: controller
+
+---
+# Role for CI-Fixer Sandbox Management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-fixer-sandbox-manager
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: sandbox
+rules:
+  # Jobs management
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Pods management (for exec and monitoring)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+
+  # Pods/exec (for running commands in sandbox pods)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+  # Pods/log (for reading logs)
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # ConfigMaps and Secrets (optional, for future use)
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# RoleBinding for CI-Fixer Sandbox Jobs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-fixer-sandbox-binding
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: sandbox
+subjects:
+  - kind: ServiceAccount
+    name: ci-fixer-sandbox
+    namespace: default
+  - kind: ServiceAccount
+    name: ci-fixer-app
+    namespace: default
+roleRef:
+  kind: Role
+  name: ci-fixer-sandbox-manager
+  apiGroup: rbac.authorization.k8s.io

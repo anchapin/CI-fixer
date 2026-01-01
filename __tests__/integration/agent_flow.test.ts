@@ -259,6 +259,14 @@ describe('Agent Flow Integration (Mocked)', () => {
                     historicalStats: { successRate: 0.8 }
                 })
             } as any,
+            reproductionInference: {
+                inferCommand: vi.fn().mockResolvedValue({
+                    command: 'npm test',
+                    confidence: 0.9,
+                    strategy: 'workflow',
+                    reasoning: 'Detected test workflow from log patterns'
+                })
+            } as any,
             discovery: {
                 findUniqueFile: vi.fn().mockResolvedValue({ found: true, path: 'src/file.ts', relativePath: 'src/file.ts', matches: ['src/file.ts'] }),
                 recursiveSearch: vi.fn().mockResolvedValue(null),
@@ -280,7 +288,9 @@ describe('Agent Flow Integration (Mocked)', () => {
         vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
             summary: 'Fix me',
             filePath: 'src/file.ts',
-            fixAction: 'edit'
+            fixAction: 'edit',
+            reproductionCommand: 'npm test',
+            suggestedCommand: 'npm test'
         });
         vi.mocked(LogAnalysisService.formatPlanToMarkdown).mockReturnValue("Plan MD");
         vi.mocked(GitHubService.findClosestFile).mockResolvedValue({

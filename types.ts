@@ -114,7 +114,7 @@ export interface AppConfig {
   phase3IterationThreshold?: number; // Default: 2
 
   // Execution Internal Logic
-  executionBackend?: 'e2b' | 'docker_local';
+  executionBackend?: 'e2b' | 'docker_local' | 'kubernetes';
   dockerImage?: string; // e.g., 'node:20-bullseye'
 }
 

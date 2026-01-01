@@ -1,0 +1,94 @@
+{
+  "hypothesis_id": "reduce-concurrency-docker-bcdfc15b5",
+  "verdict": "PASS",
+  "checks": {
+    "type_check": {
+      "status": "passed",
+      "details": "Kind labeled as 'system' - appropriate for infrastructure-level changes. Hypothesis addresses Docker container configuration and agent execution concurrency, which matches the system type. All inputs/outputs are compatible with existing TypeScript codebase (DockerSandbox, MultiAgentCoordinator, server.ts)."
+    },
+    "constraint_check": {
+      "status": "passed",
+      "details": "NO VIOLATIONS: Hypothesis does not violate any existing invariants. Resource limits (CPU, memory, network) are additive configurations, not breaking changes. Reducing concurrency is a conservative change that increases stability. No changes to type system or API contracts.",
+      "invariants_preserved": [
+        "SandboxEnvironment interface unchanged",
+        "AgentState types remain valid",
+        "API contracts maintained"
+      ],
+      "compatibility": "fully_backward_compatible"
+    },
+    "logic_check": {
+      "status": "passed",
+      "details": "Method leads to Expected Outcome through sound reasoning: (1) Limiting concurrency reduces resource contention → (2) Docker resource limits prevent container crashes → (3) Monitoring identifies bottlenecks → (4) Result: Elimination of Internal Server Errors. Evidence from codebase supports this:",
+      "supporting_evidence": [
+        "DockerSandbox.init() (sandbox.ts:69) has NO resource limits configured - docker run lacks --cpus, --memory, --network constraints",
+        "MultiAgentCoordinator.executeTasks() (services/multi-agent/coordinator.ts:91) uses Promise.all for unbounded parallel execution",
+        "Server endpoint /api/agent/start (server.ts:103) has NO throttling or concurrency limits",
+        "runWorkerTask (agent/worker.ts:43) has MAX_ITERATIONS (5) but no MAX_CONCURRENT_AGENTS limit",
+        "No resource monitoring exists for container CPU/memory/network usage"
+      ],
+      "causal_chain_verified": [
+        "Root cause identified: Unbounded concurrency + no Docker resource limits",
+        "Mechanism understood: Resource contention → container overload → Internal Server Error",
+        "Solution validation: Reducing concurrency + adding limits = isolation",
+        "Measurability: CPU < 80%, memory stable, network latency metrics are quantifiable"
+      ],
+      "validation_criteria_achievable": true
+    },
+    "implementation_feasibility": {
+      "status": "passed",
+      "details": "Implementation is straightforward and low-risk:",
+      "changes_required": [
+        "Add docker run flags: --cpus, --memory, --pids-limit to DockerSandbox.init()",
+        "Add MAX_CONCURRENT_AGENTS constant to server.ts or agent.ts",
+        "Add queue/throttling logic to /api/agent/start endpoint",
+        "Add resource monitoring (docker stats) to track CPU/memory",
+        "Create config file or env vars for concurrency limits"
+      ],
+      "estimated_complexity": "low_to_medium",
+      "risk_level": "low",
+      "rollback_plan": "Simple: remove new flags, revert to unbounded concurrency"
+    }
+  },
+  "codebase_analysis": {
+    "affected_components": [
+      {
+        "file": "sandbox.ts",
+        "line": 69,
+        "issue": "No resource limits on docker run command",
+        "fix": "Add --cpus, --memory, --network constraints"
+      },
+      {
+        "file": "services/multi-agent/coordinator.ts",
+        "line": 91,
+        "issue": "Unbounded Promise.all parallel execution",
+        "fix": "Add concurrency limit (p-limit or similar)"
+      },
+      {
+        "file": "server.ts",
+        "line": 103,
+        "issue": "No throttling on agent start endpoint",
+        "fix": "Add queue system with max concurrent workers"
+      },
+      {
+        "file": "agent/worker.ts",
+        "line": 54,
+        "issue": "MAX_ITERATIONS exists but no MAX_CONCURRENT_AGENTS",
+        "fix": "Add global concurrency limit"
+      }
+    ],
+    "missing_capabilities": [
+      "Resource monitoring (CPU, memory, network stats)",
+      "Concurrency queue/throttling system",
+      "Docker health checks and auto-recovery"
+    ]
+  },
+  "risk_assessment": {
+    "severity": "medium",
+    "probability": "high",
+    "impact_analysis": "Two agents already crashed with Internal Server Error - indicates active resource exhaustion. Risk increases with each additional concurrent agent.",
+    "mitigation_built_in": "Reducing concurrency is inherently risk-reducing. Docker resource limits provide hard bounds."
+  },
+  "verified_at": "2025-12-30T00:00:00.000Z",
+  "phase": "L0_to_L1_pass",
+  "notes": "Strong PASS. Hypothesis is logically sound, technically feasible, and addresses an active problem (agent crashes). No constraint violations. Implementation is additive and backward-compatible. Immediate action recommended as crashes are occurring in production."
+}

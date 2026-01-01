@@ -12,6 +12,7 @@ export interface FileVerificationResult {
     matches: string[];
     relativeMatches?: string[];  // Matches as relative paths
     depth?: number;  // Directory depth for context (0 = root, 1 = root/..., etc.)
+    verificationDisabled?: boolean;  // Flag indicating path verification was skipped
 }
 
 /**
@@ -24,9 +25,27 @@ export class FileDiscoveryService {
      * Searches for a unique file in the project that matches the given filename.
      * Respects common ignore patterns.
      * ALWAYS returns relative paths from workspace root for LLM clarity.
+     *
+     * @param filename - The filename to search for
+     * @param rootDir - The root directory to search in
+     * @param disablePathVerification - If true, skip FS checks and return mock result for testing
      */
-    async findUniqueFile(filename: string, rootDir: string): Promise<FileVerificationResult> {
+    async findUniqueFile(filename: string, rootDir: string, disablePathVerification?: boolean): Promise<FileVerificationResult> {
         const absolutePath = path.isAbsolute(filename) ? filename : path.resolve(rootDir, filename);
+
+        // If verification is disabled (for testing), return mock result
+        if (disablePathVerification) {
+            const relativePath = path.relative(rootDir, absolutePath);
+            return {
+                found: true,
+                path: absolutePath,
+                relativePath,
+                matches: [absolutePath],
+                relativeMatches: [relativePath],
+                depth: 0,
+                verificationDisabled: true
+            };
+        }
 
         // Helper function to calculate depth
         const calculateDepth = (filePath: string): number => {

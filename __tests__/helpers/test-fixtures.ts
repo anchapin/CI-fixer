@@ -253,6 +253,32 @@ export const createMockServices = (overrides?: Partial<ServiceContainer>): Servi
                 strategy: 'workflow',
                 reasoning: 'Mock reasoning'
             })
+        } as any,
+        fallback: {
+            generatePlaceholder: vi.fn().mockResolvedValue(undefined)
+        } as any,
+        environment: {
+            refreshDependencies: vi.fn().mockResolvedValue(true),
+            purgeEnvironment: vi.fn().mockResolvedValue(true),
+            repairPatches: vi.fn().mockResolvedValue(true),
+            killDanglingProcesses: vi.fn().mockResolvedValue(true)
+        } as any,
+        loopDetector: {
+            addState: vi.fn(),
+            detectLoop: vi.fn().mockReturnValue({ detected: false }),
+            recordHallucination: vi.fn().mockReturnValue({ shiftStrategy: false }),
+            getHallucinationCount: vi.fn().mockReturnValue(0),
+            getTotalHallucinations: vi.fn().mockReturnValue(0),
+            resetHallucinationTracking: vi.fn()
+        } as any,
+        ingestion: {
+            ingestRun: vi.fn().mockResolvedValue('run-id'),
+            ingestWorkflowLogs: vi.fn().mockResolvedValue([])
+        } as any,
+        learningMetrics: {
+            recordSuccess: vi.fn().mockResolvedValue(undefined),
+            recordFailure: vi.fn().mockResolvedValue(undefined),
+            getMetricsSummary: vi.fn().mockResolvedValue({})
         } as any
     };
 

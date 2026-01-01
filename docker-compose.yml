@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: cifixer-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cifixer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-cifixer_db}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cifixer} -d ${POSTGRES_DB:-cifixer_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - cifixer-network
+    ports:
+      - "5432:5432"  # Expose for local debugging
+
+  # CI-Fixer Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cifixer-app
+    restart: on-failure
+    ports:
+      - "3000:3001"  # Map host 3000 to container 3001
+      - "5173:5173"  # Vite dev server (for development)
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cifixer}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-cifixer_db}
+      - NODE_ENV=production
+      - PORT=3000
+      # LLM Provider (use your existing provider)
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Optional: For local sandbox spawning
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Optional: Mount Docker socket for local sandbox spawning
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optional: Mount local source for development (comment out for production)
+      # - ./services:/app/services
+      # - ./agent:/app/agent
+      # - ./server.ts:/app/server.ts
+    networks:
+      - cifixer-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  cifixer-network:
+    driver: bridge

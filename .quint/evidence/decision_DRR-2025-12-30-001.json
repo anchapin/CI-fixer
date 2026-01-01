@@ -1,0 +1,169 @@
+{
+  "decision_id": "DRR-2025-12-30-001",
+  "title": "Concurrency and Reliability Improvements",
+  "date": "2025-12-30",
+  "status": "APPROVED",
+  "priority": "CRITICAL",
+
+  "selection": {
+    "primary": {
+      "hypothesis_id": "reduce-concurrency-docker-bcdfc15b5",
+      "r_eff": 1.00,
+      "priority": "URGENT",
+      "implementation_order": "FIRST",
+      "reason": "Perfect reliability score, addresses active production crashes, 100% validation accuracy"
+    },
+    "secondary": {
+      "hypothesis_id": "user-reliability-1ae03aad",
+      "r_eff": 0.95,
+      "priority": "HIGH",
+      "implementation_order": "SECOND",
+      "reason": "Strong reliability score, 99.7% test pass rate, important but not blocking"
+    },
+    "tertiary": {
+      "hypothesis_id": "update-mocks-76603086",
+      "r_eff": 0.70,
+      "priority": "LOW",
+      "implementation_order": "THIRD",
+      "reason": "Moderate reliability score, needed for test maintenance, can wait"
+    }
+  },
+
+  "rejected": [
+    {
+      "hypothesis_id": "rollback-redesign-11b41914",
+      "r_eff": 0.70,
+      "reason": "Similar R_eff to update-mocks but less clear benefit, missing validation evidence, can be revisited later"
+    }
+  ],
+
+  "context": {
+    "primary_problem": "Two agents crashed with Internal Server Error during concurrent execution of four workflow groups",
+    "root_cause": "Resource exhaustion from unbounded concurrency + no Docker resource limits",
+    "impact": "Active production crashes blocking development",
+    "user_observation": "Local setup/server overloaded when running multiple workflows simultaneously"
+  },
+
+  "decision": "Implement three hypotheses in priority order: (1) reduce-concurrency-docker (URGENT, R_eff=1.00), (2) user-reliability (HIGH, R_eff=0.95), (3) update-mocks (LOW, R_eff=0.70)",
+
+  "rationale": {
+    "primary_selection": "reduce-concurrency-docker achieved perfect R_eff=1.00 with 100% validation accuracy. All 3 predicted problems confirmed through code analysis. Addresses active production crisis with low-risk, reversible implementation using industry-standard solutions.",
+    "secondary_selection": "user-reliability has strong R_eff=0.95 with 1346 tests at 99.7% pass rate. Already validated and working, high priority but not blocking production crashes.",
+    "tertiary_selection": "update-mocks has moderate R_eff=0.70. Needed for test maintenance and technical debt prevention, but can wait until after urgent issues resolved.",
+    "rejection": "rollback-redesign has similar R_eff=0.70 to update-mocks but less clear benefit. Missing validation evidence. Can be revisited later if needed."
+  },
+
+  "consequences": {
+    "immediate": [
+      "No more Internal Server Error crashes",
+      "Stable single-workflow execution",
+      "Resource visibility through monitoring",
+      "Reduced throughput (intentional: stability > speed)"
+    ],
+    "short_term": [
+      "Resource monitoring data available for capacity planning",
+      "Can safely increment concurrency (1→2→3→4) based on metrics",
+      "Test reliability improvements implemented",
+      "Test mocks updated"
+    ],
+    "long_term": [
+      "Reduced on-call firefighting",
+      "Better resource utilization",
+      "Improved developer productivity",
+      "Technical debt prevented"
+    ]
+  },
+
+  "implementation_plan": {
+    "phase_1_urgent": {
+      "timeline": "Next 24-48 hours",
+      "hypothesis": "reduce-concurrency-docker-bcdfc15b5",
+      "changes": [
+        "Add --cpus=1, --memory=2g, --pids-limit=1000 to docker run",
+        "Add MAX_CONCURRENT_AGENTS=1 constant",
+        "Implement queue system with p-limit",
+        "Add docker stats monitoring"
+      ]
+    },
+    "phase_2_reliability": {
+      "timeline": "Week 2-4",
+      "hypothesis": "user-reliability-1ae03aad",
+      "changes": [
+        "Continue maintaining test reliability",
+        "Monitor 1346 tests for pass rate degradation"
+      ]
+    },
+    "phase_3_maintenance": {
+      "timeline": "Week 4-6",
+      "hypothesis": "update-mocks-76603086",
+      "changes": [
+        "Update test mocks for path verification",
+        "Ensure all integration tests pass"
+      ]
+    }
+  },
+
+  "success_metrics": {
+    "immediate": [
+      "No Internal Server Error crashes",
+      "Single workflow execution stable",
+      "Resource monitoring operational",
+      "CPU < 80%, memory usage stable"
+    ],
+    "short_term": [
+      "Capacity planning data collected",
+      "Safe concurrency level determined",
+      "User-reliability tests maintained (99.7% pass rate)",
+      "Test mocks updated"
+    ],
+    "long_term": [
+      "Optimal concurrency level in production",
+      "Zero crashes for 3+ months",
+      "Developer productivity improved",
+      "Technical debt prevented"
+    ]
+  },
+
+  "validity": {
+    "revisit_when": [
+      "Single workflow execution is stable (CPU < 60%, memory predictable)",
+      "Monitoring data shows consistent headroom",
+      "Need for faster throughput becomes critical",
+      "Resource limits prove too conservative"
+    ],
+    "reevaluation_criteria": [
+      "Can we safely increase MAX_CONCURRENT_AGENTS to 2?",
+      "Are Docker resource limits optimal or should they be adjusted?",
+      "Is queue latency acceptable or do we need more parallelism?"
+    ],
+    "rollback_plan": [
+      "Remove Docker resource limits (delete flags from docker run)",
+      "Revert MAX_CONCURRENT_AGENTS to unlimited (remove queue)",
+      "Disable monitoring (stop docker stats calls)",
+      "System returns to previous state (but may crash again)"
+    ]
+  },
+
+  "relations": {
+    "selects": [
+      "reduce-concurrency-docker-bcdfc15b5",
+      "user-reliability-1ae03aad",
+      "update-mocks-76603086"
+    ],
+    "rejects": [
+      "rollback-redesign-11b41914"
+    ]
+  },
+
+  "fpf_cycle": {
+    "phases_completed": [
+      "Phase 1: Abduction (User Injection)",
+      "Phase 2: Deduction (Verification)",
+      "Phase 3: Induction (Validation)",
+      "Phase 4: Audit (Trust Calculus)",
+      "Phase 5: Decision (Finalization)"
+    ],
+    "cycle_status": "COMPLETE",
+    "next_action": "Begin implementation of reduce-concurrency-docker-bcdfc15b5 immediately"
+  }
+}

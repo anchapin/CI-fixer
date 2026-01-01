@@ -46,8 +46,10 @@ Start both the backend server and frontend client concurrently:
 npm run dev
 ```
 
--   **Frontend**: [http://localhost:5173](http://localhost:5173)
--   **Backend**: [http://localhost:3000](http://localhost:3000)
+-   **Frontend**: [http://localhost:3000](http://localhost:3000)
+-   **Backend**: [http://localhost:3001](http://localhost:3001)
+
+> **Note**: If port 3000 is in use, Vite will automatically try the next available port (e.g., 3001, 3002).
 
 ## 🐳 Execution Environments
 

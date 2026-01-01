@@ -16,6 +16,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve frontend static files
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files from dist directory
+const distPath = path.join(process.cwd(), 'dist');
+app.use(express.static(distPath));
+
 import { chat, toStreamResponse } from '@tanstack/ai';
 import { CIMultiAdapter } from './services/CIMultiAdapter.js';
 import { createTools } from './services/sandbox/SandboxService.js';
@@ -24,9 +35,92 @@ import { serverServices } from './services/server-container.js'; // Use server-s
 const PORT = 3001;
 
 import { db } from './db/client.js';
+import { MAX_CONCURRENT_AGENTS, QUEUE_TIMEOUT_MS } from './agent/concurrency.js';
 
 // In-Memory Store (for AbortControllers only)
 const abortControllers = new Map<string, AbortController>();
+
+/**
+ * Agent Execution Queue
+ *
+ * Implements concurrency control to prevent resource exhaustion.
+ * Limits the number of concurrently running agents to MAX_CONCURRENT_AGENTS.
+ *
+ * Per DRR-2025-12-30-001, this prevents Internal Server Error crashes from
+ * unbounded concurrent execution.
+ */
+class AgentExecutionQueue {
+    private running = 0;
+    private queue: Array<{
+        task: () => Promise<void>;
+        resolve: (value: void) => void;
+        reject: (reason?: any) => void;
+    }> = [];
+
+    /**
+     * Add a task to the queue and execute when capacity is available.
+     */
+    async add(task: () => Promise<void>): Promise<void> {
+        return new Promise((resolve, reject) => {
+            // Add timeout to reject if queued too long
+            const timeout = setTimeout(() => {
+                const index = this.queue.findIndex(item => item.reject === reject);
+                if (index !== -1) {
+                    this.queue.splice(index, 1);
+                    reject(new Error(`Agent queue timeout after ${QUEUE_TIMEOUT_MS}ms`));
+                }
+            }, QUEUE_TIMEOUT_MS);
+
+            this.queue.push({
+                task,
+                resolve: (value) => {
+                    clearTimeout(timeout);
+                    resolve(value);
+                },
+                reject: (reason) => {
+                    clearTimeout(timeout);
+                    reject(reason);
+                }
+            });
+
+            this.processQueue();
+        });
+    }
+
+    /**
+     * Process the queue, starting tasks when capacity is available.
+     */
+    private processQueue() {
+        while (this.running < MAX_CONCURRENT_AGENTS && this.queue.length > 0) {
+            const item = this.queue.shift();
+            if (!item) break;
+
+            this.running++;
+
+            item.task()
+                .then(() => item.resolve())
+                .catch((err) => item.reject(err))
+                .finally(() => {
+                    this.running--;
+                    this.processQueue(); // Process next item
+                });
+        }
+    }
+
+    /**
+     * Get current queue statistics.
+     */
+    getStats() {
+        return {
+            running: this.running,
+            queued: this.queue.length,
+            maxConcurrency: MAX_CONCURRENT_AGENTS
+        };
+    }
+}
+
+// Global agent execution queue
+const agentQueue = new AgentExecutionQueue();
 
 // Initialize Adapter
 // Note: We use process.env to populate AppConfig. 
@@ -162,44 +256,71 @@ app.post('/api/agent/start', async (req, res) => {
             // Logs are persisted via updateCallback (activeLog)
         };
 
+        // Get current queue stats
+        const queueStats = agentQueue.getStats();
+        console.log(`[QUEUE] Agent ${group.name} joining queue. Running: ${queueStats.running}, Queued: ${queueStats.queued}`);
 
+        // Queue the agent execution task
+        const agentTask = async () => {
+            console.log(`[QUEUE] Agent ${group.name} starting execution (running: ${queueStats.running + 1}/${MAX_CONCURRENT_AGENTS})`);
 
-        // Run asynchronously
-        runIndependentAgentLoop(
-            config,
-            group,
-            initialRepoContext,
-            serverServices,
-            updateCallback,
-            logCallback
-        ).then(async finalState => {
+            // Run the agent loop
+            await runIndependentAgentLoop(
+                config,
+                group,
+                initialRepoContext,
+                serverServices,
+                updateCallback,
+                logCallback
+            );
+        };
+
+        // Queue the task and handle completion/errors
+        agentQueue.add(agentTask).then(async finalState => {
             await db.agentRun.update({
                 where: { id: agentId },
                 data: {
-                    status: finalState.status,
+                    status: 'completed',
                     state: JSON.stringify(finalState)
                 }
             });
-            console.log(`[AGENT:${group.name}] Finished with status: ${finalState.status}`);
+            console.log(`[AGENT:${group.name}] Finished with status: completed`);
         }).catch(async err => {
             console.error(`[AGENT:${group.name}] Crashed:`, err);
             await db.agentRun.update({
                 where: { id: agentId },
                 data: {
-                    status: 'failed'
-                    // We'd ideally start updating state with error message, 
-                    // but we can trust runIndependentAgentLoop calls updateCallback with error info before throwing?
-                    // Actually, supervisor catches and returns state. So .catch here is for truly catastrophic failures.
+                    status: 'failed',
+                    state: JSON.stringify({ error: err.message, status: 'failed' })
                 }
             });
         });
 
-        res.json({ agentId, status: 'started' });
+        res.json({
+            agentId,
+            status: 'queued',
+            queue: {
+                position: queueStats.queued,
+                running: queueStats.running,
+                maxConcurrency: MAX_CONCURRENT_AGENTS
+            }
+        });
 
     } catch (e: any) {
         console.error('Failed to start agent:', e);
         res.status(500).json({ error: e.message, stack: e.stack });
     }
+});
+
+// Get Queue Status
+app.get('/api/queue/status', (req, res) => {
+    const stats = agentQueue.getStats();
+    res.json({
+        running: stats.running,
+        queued: stats.queued,
+        maxConcurrency: stats.maxConcurrency,
+        utilizationPercent: (stats.running / stats.maxConcurrency) * 100
+    });
 });
 
 // Get Agent Status
@@ -620,6 +741,33 @@ app.post('/api/reliability/thresholds/reset', async (req, res) => {
     } catch (e: any) {
         res.status(500).json({ error: e.message });
     }
+});
+
+// DEBUG: Test route
+app.get('/_debug', (req, res) => {
+    res.json({ message: 'Debug route works!', path: req.path });
+});
+
+// Serve index.html for all non-API routes (SPA support)
+// This middleware catches all requests that didn't match API routes above
+// express.static already handled actual static files
+app.use((req, res, next) => {
+    // Skip if path starts with /api/
+    if (req.path.startsWith('/api/')) {
+        return next();
+    }
+    // Serve index.html for all other routes
+    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'), (err) => {
+        if (err) {
+            // If index.html not found, pass to 404 handler
+            next();
+        }
+    });
+});
+
+// Catch-all 404 handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not Found', path: req.path });
 });
 
 app.listen(PORT, () => {

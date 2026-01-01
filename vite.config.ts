@@ -74,7 +74,12 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
-      }
+      },
+      // Don't bundle server-only dependencies
+      dedupe: ['@kubernetes/client-node'],
+    },
+    optimizeDeps: {
+      exclude: ['@kubernetes/client-node', 'k8s'],
     },
     test: {
       exclude: ['**/node_modules/**', '**/dist/**', '**/cypress/**', '**/.{idea,git,cache,output,temp}/**', '**/__tests__/e2e/**'],
@@ -87,7 +92,12 @@ export default defineConfig(({ mode }) => {
         input: {
           main: path.resolve(__dirname, 'index.html'),
         },
+        output: {
+          manualChunks: undefined,
+        },
+        // Don't bundle server-only dependencies
+        external: ['@kubernetes/client-node', 'k8s'],
       },
-    }
+    },
   };
 });

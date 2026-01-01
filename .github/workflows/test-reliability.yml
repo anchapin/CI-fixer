@@ -1,0 +1,102 @@
+name: Test Reliability Monitor
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 00:00 UTC to check reliability trends
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  test-reliability:
+    name: Check Test Reliability
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        continue-on-error: true # Continue even if some tests fail
+
+      - name: Check test reliability
+        id: reliability
+        run: npm run check-reliability
+        continue-on-error: true
+
+      - name: Export reliability metrics
+        if: always()
+        run: |
+          mkdir -p .reliability
+          npm run check-reliability -- --export .reliability/metrics.json || true
+
+      - name: Upload reliability metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reliability-metrics-${{ github.run_number }}
+          path: .reliability/metrics.json
+          retention-days: 90
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## 🧪 Test Reliability Report\n\n';
+
+            try {
+              const metrics = JSON.parse(fs.readFileSync('.reliability/metrics.json', 'utf8'));
+              const { metrics: m } = metrics;
+
+              comment += `**Overall Pass Rate:** ${(m.overallPassRate * 100).toFixed(2)}%\n`;
+              comment += `**Target:** ${(m.targetPassRate * 100).toFixed(2)}%\n`;
+              comment += `**Status:** ${m.meetsTarget ? '✅ MEETS TARGET' : '❌ BELOW TARGET'}\n\n`;
+
+              if (m.failed > 0) {
+                comment += `**Failed Tests:** ${m.failed}\n`;
+              }
+
+              if (metrics.alerts && metrics.alerts.length > 0) {
+                comment += `\n**⚠️ Alerts:**\n`;
+                metrics.alerts.forEach(alert => {
+                  comment += `- ${alert}\n`;
+                });
+              }
+
+              if (metrics.flakyTests && metrics.flakyTests.length > 0) {
+                comment += `\n**🔀 Flaky Tests:**\n`;
+                metrics.flakyTests.forEach(test => {
+                  comment += `- ${test}\n`;
+                });
+              }
+            } catch (error) {
+              comment += `⚠️ Unable to generate reliability report\n`;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail if below threshold
+        if: steps.reliability.outcome == 'failure'
+        run: |
+          echo "::error::Test reliability check failed - pass rate below 99.7% target"
+          exit 1

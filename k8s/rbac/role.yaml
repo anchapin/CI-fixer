@@ -1,0 +1,35 @@
+# Role for CI-Fixer Sandbox Management
+# Defines permissions for creating, managing, and deleting Jobs and Pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-fixer-sandbox-manager
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: sandbox
+rules:
+  # Jobs management (create, get, list, watch, delete)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Pods management (for exec and monitoring)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+
+  # Pods/exec (for running commands in sandbox pods)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+  # Pods/log (for reading logs)
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # ConfigMaps and Secrets (optional, for future use)
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

@@ -1,0 +1,72 @@
+# CI-Fixer Application Deployment (Local Testing)
+# Simplified version for local Docker Desktop Kubernetes testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ci-fixer-app
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ci-fixer
+      component: controller
+  template:
+    metadata:
+      labels:
+        app: ci-fixer
+        component: controller
+    spec:
+      serviceAccountName: ci-fixer-app
+      containers:
+      - name: ci-fixer
+        image: ci-fixer:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        env:
+        # Execution Backend Configuration
+        - name: EXECUTION_BACKEND
+          value: "kubernetes"
+        # LLM Provider (use your actual key)
+        - name: GEMINI_API_KEY
+          value: ""  # Set your API key here for testing
+        # Database (SQLite for local testing)
+        - name: DATABASE_URL
+          value: "file:./dev.db"
+        # Node environment
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          limits:
+            cpu: '500m'
+            memory: '512Mi'
+          requests:
+            cpu: '250m'
+            memory: '256Mi'
+---
+# Service to expose CI-Fixer locally
+apiVersion: v1
+kind: Service
+metadata:
+  name: ci-fixer-service
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: controller
+spec:
+  type: NodePort  # Use NodePort for local access
+  selector:
+    app: ci-fixer
+    component: controller
+  ports:
+  - name: http
+    protocol: TCP
+    port: 3001
+    targetPort: 3001
+    nodePort: 30001

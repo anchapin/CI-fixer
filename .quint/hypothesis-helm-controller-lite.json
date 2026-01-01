@@ -1,0 +1,11 @@
+{
+  "title": "Helm-based Kubernetes Deployment with Controller-Lite Architecture",
+  "content": "## Method: Helm Chart + Controller-Lite Pattern\n\n### 1. Helm Chart Structure\nCreate a standard Helm chart to package CI-fixer for cloud-agnostic deployment with Chart.yaml, values files for different environments (local vs production), and templates for deployment, service, RBAC, ConfigMap, and Secret resources.\n\n### 2. Controller-Lite Implementation\nUse @kubernetes/client-node library within the Node.js app to directly call K8s API for spawning/monitoring Jobs (sandbox execution). Logic stays in TypeScript without Go/Ansible Operator. RBAC permissions granted via ServiceAccount.\n\n### 3. Deployment Strategy\nLocal/Minikube: 'helm install ci-fixer ./chart -f values.yaml'\nProduction: 'helm install ci-fixer ./chart -f values-prod.yaml'\nConfiguration differences handled via values files (GPU, storage class, resources).\n\n### 4. Explicit Decisions\n- Helm: YES (Mandatory for environment portability)\n- Operator Framework: NO (Overkill, Node.js app already has orchestration logic)\n- Custom Resources: NO (Managing standard K8s Jobs directly)\n\n## Expected Outcome\n\n1. Configuration Portability: Single Helm chart deploys to Minikube, AWS EKS, or GCP GKE via values file toggle\n2. Runtime Flexibility: App spawns K8s Jobs via TypeScript client, not external controller\n3. Simplified Operations: No CRDs to manage, no reconciliation logic to debug\n4. Day 2 Readiness: Upgrades via helm upgrade, rollbacks via helm rollback, secrets management via K8s Secrets\n5. Cost Efficiency: 90% of operator power with 10% complexity\n\n## Success Metrics\n\n- Can deploy to fresh Minikube cluster with single command\n- Can deploy to production with different config via single flag\n- RBAC correctly scoped (can create Jobs, not cluster-wide chaos)\n- No Custom Resource Definitions (CRDs) installed\n- Upgrade path documented (helm upgrade ci-fixer ./chart)",
+  "scope": "Global",
+  "kind": "system",
+  "rationale": {
+    "source": "User input",
+    "anomaly": "Need cloud-agnostic deployment strategy for CI-fixer that works locally and in production without complexity overhead",
+    "note": "User proposed Helm packaging with Controller-Lite approach (app-managed K8s Jobs) instead of full Operator Framework"
+  }
+}

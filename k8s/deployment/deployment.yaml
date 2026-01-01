@@ -1,0 +1,109 @@
+# CI-Fixer Application Deployment
+# Deploys the CI-Fixer application with Kubernetes-native sandbox support
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ci-fixer-app
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ci-fixer
+      component: controller
+  template:
+    metadata:
+      labels:
+        app: ci-fixer
+        component: controller
+    spec:
+      serviceAccountName: ci-fixer-app
+      containers:
+      - name: ci-fixer
+        image: ci-fixer:latest  # Replace with your actual image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        env:
+        # Execution Backend Configuration
+        - name: EXECUTION_BACKEND
+          value: "kubernetes"
+        # Database Configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ci-fixer-secrets
+              key: database-url
+        # LLM Provider Configuration
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ci-fixer-secrets
+              key: gemini-api-key
+        # Optional: GitHub Token
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ci-fixer-secrets
+              key: github-token
+        resources:
+          limits:
+            cpu: '2'
+            memory: '4Gi'
+          requests:
+            cpu: '500m'
+            memory: '1Gi'
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+# Service to expose CI-Fixer application
+apiVersion: v1
+kind: Service
+metadata:
+  name: ci-fixer-service
+  namespace: default
+  labels:
+    app: ci-fixer
+    component: controller
+spec:
+  type: LoadBalancer  # Use LoadBalancer for external access, or ClusterIP for internal only
+  selector:
+    app: ci-fixer
+    component: controller
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: http
+---
+# Example Secret (DO NOT commit actual secrets to version control)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ci-fixer-secrets
+  namespace: default
+type: Opaque
+stringData:
+  # Replace these with actual values or use external secret management
+  database-url: "postgresql://user:password@postgres:5432/cifixer_db"
+  gemini-api-key: "your-gemini-api-key-here"
+  github-token: "your-github-token-here"
