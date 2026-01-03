@@ -527,7 +527,10 @@ export async function runGraphAgent(
             files: state.files,
             fileReservations: state.fileReservations,
             activeLog: state.activeLog,
-            message: state.failureReason
+            message: state.failureReason,
+            reproductionCommandMissing: state.reproductionCommandMissing,
+            loopDetected: state.loopDetected,
+            loopGuidance: state.loopGuidance
         };
     }, {
         attributes: {

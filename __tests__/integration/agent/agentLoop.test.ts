@@ -242,7 +242,7 @@ describe('Agent Loop Integration', () => {
 
     // Reset default values for happy path
     vi.mocked(GitHubService.getWorkflowLogs).mockResolvedValue({ logText: "Error: Division by zero", jobName: "test", headSha: "abc" });
-    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({ summary: "Diagnosis", filePath: "f.py", fixAction: 'edit' });
+    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({ summary: "Diagnosis", filePath: "f.py", fixAction: 'edit', reproductionCommand: 'npm test' });
     vi.mocked(GitHubService.findClosestFile).mockResolvedValue({ file: { name: 'f.py', content: '', language: 'py' }, path: 'f.py' });
     vi.mocked(LogAnalysisService.generateFix).mockResolvedValue("fixed");
     vi.mocked(SandboxService.toolLintCheck).mockResolvedValue({ valid: true });
@@ -297,7 +297,7 @@ describe('Agent Loop Integration', () => {
 
   it('should fallback to summary search if diagnosis filepath is empty', async () => {
     // Override Diagnosis for this test
-    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValueOnce({ summary: "Duplicate Test Module", filePath: "", fixAction: 'edit' });
+    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValueOnce({ summary: "Duplicate Test Module", filePath: "", fixAction: 'edit', reproductionCommand: 'npm test' });
     vi.mocked(GitHubService.findClosestFile)
       .mockResolvedValueOnce(null) // 1st call for empty path
       .mockResolvedValueOnce({ file: { name: 'test_dup.py', content: '', language: 'py' }, path: 'test_dup.py' });
@@ -433,7 +433,7 @@ describe('Agent Loop Integration', () => {
   });
 
   it('should fallback to CREATE file mode when file is missing and error implies missing file', async () => {
-    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValueOnce({ summary: "Error: No such file or directory: 'new.py'", filePath: "new.py", fixAction: 'edit' });
+    vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValueOnce({ summary: "Error: No such file or directory: 'new.py'", filePath: "new.py", fixAction: 'edit', reproductionCommand: 'npm test' });
     vi.mocked(GitHubService.findClosestFile).mockResolvedValueOnce(null);
     vi.mocked(SandboxService.toolCodeSearch).mockResolvedValueOnce([]);
 
