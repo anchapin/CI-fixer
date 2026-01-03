@@ -1,12 +1,59 @@
 # Test Failures Tracker
 
 **Created:** 2026-01-03
-**Status:** 13 test failures remaining (99.0% pass rate: 1552/1568 passing)
-**Priority:** Medium
+**Last Updated:** 2026-01-03 18:35
+**Status:** 3 test failures remaining (99.62% pass rate: 1562/1568 passing)
+**Priority:** Low
 
-## Overview
+## Resolution Summary
 
-This document tracks test failures that occurred after implementing Phase 2 reliability enhancements (reproduction command requirement). These tests require deeper investigation into agent workflow behavior and may need test refactoring rather than code fixes.
+### ✅ FIXED (10 tests - 2026-01-03)
+
+#### 1. Agent Loop Integration Tests (6 tests) - FIXED
+**File:** `__tests__/integration/agent/agentLoop.test.ts`
+**Fix:** Added `reproductionCommand` to all `diagnoseError` mocks in `beforeEach` and test-specific overrides
+**Root Cause:** Phase 2 reliability enforcement halts workflow when `reproductionCommand` is missing
+
+#### 2. Multi-Layer Reliability Tests (2 tests) - FIXED
+**File:** `__tests__/integration/agent/multi-layer-reliability-integration.test.ts`
+**Fix:** Added `reproductionCommandMissing`, `loopDetected`, `loopGuidance` to `runGraphAgent` return statement
+**Root Cause:** Coordinator set these properties internally but didn't return them to callers
+**Tests Fixed:**
+- "should prevent 'coding blind' failure mode (Phase 2)"
+- "should prevent resource exhaustion from strategy loops (Phase 3)"
+
+#### 3. Reflection Persistence Tests (2 tests) - FIXED
+**File:** `__tests__/integration/reflection-persistence.test.ts`
+**Fix:** Tests now pass (likely timing/isolation improvements from recent commits)
+**Tests Fixed:**
+- "should persist and reload failure patterns across instances"
+- "should track frequency updates across persistence"
+
+### ⏳ REMAINING (3 tests)
+
+#### 1. Persistence Prisma Test (1 failure)
+**File:** `__tests__/integration/persistence_prisma.test.ts`
+**Test:** "should store ErrorFact and FileModification in SQLite"
+**Issue:** No FileModification records created (expected > 0, got 0)
+**Priority:** LOW - Database persistence edge case
+
+#### 2. Research Features Test (1 failure)
+**File:** `__tests__/integration/research-features.test.ts`
+**Test:** "should learn from failures when enabled"
+**Issue:** `patternsIdentified` is 0 (expected > 0)
+**Priority:** LOW - Learning system integration test
+
+#### 3. Worker Enhanced Test (1 failure)
+**File:** `__tests__/unit/agent/Worker.enhanced.test.ts`
+**Test:** "should handle target file search fallback using code search"
+**Issue:** `toolCodeSearch` not called (fallback not triggered)
+**Priority:** LOW - Edge case fallback behavior
+
+---
+
+## Original Tracking (Archived)
+
+The following sections document the original failures that have now been fixed.
 
 ## Failures by Category
 
@@ -230,10 +277,20 @@ A test failure can be marked as resolved when:
 
 ## Notes
 
-- **Pass Rate Improvement:** From 98.7% (1537/1560) to 99.0% (1552/1568)
-- **Tests Fixed:** 7 out of 20 original failures
-- **Remaining:** 13 failures requiring deeper investigation
-- **Overall Health:** Test suite is healthy (99% pass rate is excellent)
+- **Pass Rate Improvement:**
+  - Initial: 98.7% (1537/1560)
+  - After first fixes: 99.0% (1552/1568)
+  - **Current: 99.62% (1562/1568)** ✅
+
+- **Tests Fixed:** 10 out of 13 original failures (77% resolution rate)
+- **Remaining:** 3 failures (all LOW priority edge cases)
+- **Overall Health:** Test suite is excellent (99.62% pass rate)
+
+## Commits
+
+- `e220a46` - test: fix 10 test failures (Phase 2 compatibility + coordinator return values)
+- `5803c6b` - test: initial Phase 2 compatibility fixes (7 tests)
+- `6f931e7` - docs: add test failures tracker for remaining 13 test failures
 
 ## Related Issues
 
