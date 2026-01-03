@@ -194,7 +194,8 @@ describe('Chatty Output Integration', () => {
         vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
             summary: 'Error: requirements.txt failure',
             filePath: 'requirements.txt',
-            fixAction: 'edit'
+            fixAction: 'edit',
+            reproductionCommand: 'pip install -r requirements.txt'
         });
         vi.mocked(GitHubService.findClosestFile).mockResolvedValue({
             path: 'requirements.txt',

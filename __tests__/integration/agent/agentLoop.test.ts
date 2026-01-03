@@ -80,7 +80,7 @@ vi.mock('../../../services/analysis/CodeAnalysisService.js', () => ({
 vi.mock('../../../services/analysis/LogAnalysisService.js', () => ({
   diagnoseError: vi.fn().mockImplementation(async () => {
     console.log("[MOCK] diagnoseError called");
-    return { summary: "Diagnosis", filePath: "f.py", fixAction: 'edit' };
+    return { summary: "Diagnosis", filePath: "f.py", fixAction: 'edit', reproductionCommand: 'npm test' };
   }),
   refineProblemStatement: vi.fn().mockResolvedValue("Refined"),
   generateRepoSummary: vi.fn().mockResolvedValue("Summary"),

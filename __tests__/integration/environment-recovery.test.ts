@@ -168,7 +168,8 @@ describe('Environment Recovery Integration', () => {
         vi.mocked(LogAnalysisService.diagnoseError).mockResolvedValue({
             summary: 'Fix me',
             filePath: 'src/file.ts',
-            fixAction: 'edit'
+            fixAction: 'edit',
+            reproductionCommand: 'npm test'
         });
         vi.mocked(GitHubService.findClosestFile).mockResolvedValue({
             path: 'src/file.ts',

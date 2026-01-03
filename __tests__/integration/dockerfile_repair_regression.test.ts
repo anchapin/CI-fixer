@@ -59,7 +59,8 @@ describe('Dockerfile Repair Regression', () => {
                 diagnoseError: vi.fn().mockResolvedValue({
                     summary: 'Typo in apt-get flag',
                     filePath: 'docker/base-images/Dockerfile.python-base',
-                    fixAction: 'edit'
+                    fixAction: 'edit',
+                    reproductionCommand: 'docker build -t python-base .'
                 }),
                 generateDetailedPlan: vi.fn().mockResolvedValue({ goal: 'fix', tasks: [], approved: true }),
                 generateFix: LogAnalysisService.generateFix, // USE REAL ONE

@@ -28,7 +28,7 @@ vi.mock('../../../services/context-manager.js', () => ({
 }));
 
 vi.mock('../../../services/analysis/LogAnalysisService.js', () => ({
-    diagnoseError: vi.fn().mockResolvedValue({ summary: 'S', fixAction: 'edit', filePath: 'f.ts' }),
+    diagnoseError: vi.fn().mockResolvedValue({ summary: 'S', fixAction: 'edit', filePath: 'f.ts', reproductionCommand: 'npm test' }),
     generateDetailedPlan: vi.fn().mockResolvedValue({ goal: 'g', tasks: [] }),
     generateFix: vi.fn().mockResolvedValue('fixed code'),
     judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 8, reasoning: 'good' }),
@@ -156,7 +156,7 @@ describe('Worker Agent Enhanced', () => {
     });
 
     it('should handle target file search fallback using code search', async () => {
-        vi.mocked(diagnoseError).mockResolvedValue({ summary: 'Error: no such file f.ts', fixAction: 'edit', filePath: 'missing.ts' } as any);
+        vi.mocked(diagnoseError).mockResolvedValue({ summary: 'Error: no such file f.ts', fixAction: 'edit', filePath: 'missing.ts', reproductionCommand: 'npm test' } as any);
         vi.mocked(findClosestFile).mockResolvedValueOnce(null).mockResolvedValue({ path: 'found.ts', file: { content: 'c', language: 'ts' } } as any);
         vi.mocked(toolCodeSearch).mockResolvedValue(['found.ts']);
 

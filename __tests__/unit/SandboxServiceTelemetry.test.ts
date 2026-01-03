@@ -8,7 +8,7 @@ vi.mock('../../services/telemetry/PathCorrectionCollector', () => ({
 }));
 
 describe('SandboxService Telemetry', () => {
-    it('should call collectPathCorrections when output contains logs', async () => {
+    it('should NOT call collectPathCorrections (disabled for frontend compatibility)', async () => {
         const mockConfig = { model: 'test' } as any;
         const mockSandbox: any = {
             writeFile: vi.fn(),
@@ -21,6 +21,7 @@ describe('SandboxService Telemetry', () => {
 
         await toolRunCodeMode(mockConfig, 'script', mockSandbox);
 
-        expect(collectPathCorrections).toHaveBeenCalled();
+        // collectPathCorrections is disabled for frontend compatibility
+        expect(collectPathCorrections).not.toHaveBeenCalled();
     });
 });

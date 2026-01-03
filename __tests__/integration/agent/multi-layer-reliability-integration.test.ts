@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runGraphAgent } from '../../../agent/graph/coordinator.js';
-import { TestDatabaseManager } from '../../../__tests__/utils/testDb.js';
+import { TestDatabaseManager } from '../../../__tests__/helpers/test-database.js';
 
 // Mock the nodes
 vi.mock('../../../agent/graph/nodes/analysis.js', () => ({

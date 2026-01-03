@@ -45,7 +45,8 @@ describe('Dockerfile Recovery Integration', () => {
                 diagnoseError: vi.fn().mockResolvedValue({
                     summary: 'Fix Dockerfile',
                     filePath: 'Dockerfile',
-                    fixAction: 'edit'
+                    fixAction: 'edit',
+                    reproductionCommand: 'docker build -t test .'
                 }),
                 generateFix: vi.fn(),
                 runSandboxTest: vi.fn(),

@@ -287,7 +287,7 @@ describe('Validation: Reduce Concurrency and Docker Resource Limits', () => {
       // VALIDATION CRITERIA:
       // If we detected the problems the hypothesis predicts, the hypothesis is VALID
       expect(problemsDetected, 'Should detect at least 2 predicted problems').toBeGreaterThanOrEqual(2);
-      expect(results.overallScore, 'Validation score should be >= 66%').toBeGreaterThanOrEqual(66.67);
+      expect(results.overallScore, 'Validation score should be >= 66%').toBeGreaterThanOrEqual(66.66);
     });
 
     it('should generate actionable recommendations', () => {

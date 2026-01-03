@@ -36,8 +36,10 @@ describe('VerificationNode Logic', () => {
 
         const result = await verificationNode(state, mockContext);
 
-        expect(result.currentNode).toBe('analysis');
-        expect(result.feedback[0]).toContain('no `reproductionCommand` was available');
+        // Phase 2 reliability: Halts workflow with 'finish' instead of looping back to 'analysis'
+        expect(result.currentNode).toBe('finish');
+        expect(result.status).toBe('failed');
+        expect(result.reproductionCommandMissing).toBe(true);
     });
 
     it('should ACCEPT command fix if reproductionCommand passed', async () => {

@@ -22,7 +22,8 @@ describe('Auto-Learning Live Ingestion Integration', () => {
             ...defaultServices,
             ingestion: new DataIngestionService(testDb),
             learning: new LearningLoopService(testDb),
-            learningMetrics: new LearningMetricService(testDb)
+            learningMetrics: new LearningMetricService(testDb),
+            metrics: { recordFixAttempt: vi.fn().mockResolvedValue(undefined) }
         };
     });
 
@@ -69,6 +70,7 @@ describe('Auto-Learning Live Ingestion Integration', () => {
             summary: 'test error',
             filePath: 'src/app.ts',
             fixAction: 'edit',
+            reproductionCommand: 'npm test',
             confidence: 0.9
         });
 
