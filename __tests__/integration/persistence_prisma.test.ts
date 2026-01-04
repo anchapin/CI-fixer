@@ -38,7 +38,8 @@ vi.mock('../../services/analysis/LogAnalysisService.js', async (importOriginal) 
         diagnoseError: vi.fn().mockResolvedValue({
             summary: "Test Failure DB Check",
             fixAction: "edit",
-            filePath: "src/test.ts"
+            filePath: "src/test.ts",
+            reproductionCommand: "npm test"
         }),
         generateDetailedPlan: vi.fn().mockResolvedValue({ goal: "Fix", tasks: [], approved: true }),
         generateFix: vi.fn().mockResolvedValue("fixed code"),

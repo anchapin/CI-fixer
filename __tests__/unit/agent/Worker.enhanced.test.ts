@@ -20,6 +20,11 @@ vi.mock('../../../services/github/GitHubService.js', () => ({
     pushMultipleFilesToGitHub: vi.fn().mockResolvedValue('url')
 }));
 
+vi.mock('../../../services/path-resolution.js', () => ({
+    toAbsolutePath: vi.fn((p) => p),
+    findClosestFileAbsolute: vi.fn().mockResolvedValue(null)
+}));
+
 vi.mock('../../../services/context-manager.js', () => ({
     thinLog: vi.fn(t => t),
     formatHistorySummary: vi.fn(t => 'summary'),
@@ -33,7 +38,9 @@ vi.mock('../../../services/analysis/LogAnalysisService.js', () => ({
     generateFix: vi.fn().mockResolvedValue('fixed code'),
     judgeFix: vi.fn().mockResolvedValue({ passed: true, score: 8, reasoning: 'good' }),
     generateRepoSummary: vi.fn().mockResolvedValue('repo summary'),
-    runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: 'test passed' })
+    runSandboxTest: vi.fn().mockResolvedValue({ passed: true, logs: 'test passed' }),
+    refineProblemStatement: vi.fn(),
+    formatPlanToMarkdown: vi.fn().mockReturnValue('Plan')
 }));
 
 vi.mock('../../../errorClassification.js', () => ({
@@ -60,7 +67,10 @@ vi.mock('../../../services/reproduction-inference.js', () => ({
 
 vi.mock('../../../validation.js', () => ({
     validateFileExists: vi.fn().mockResolvedValue(true),
-    validateCommand: vi.fn().mockReturnValue({ valid: true })
+    validateCommand: vi.fn().mockReturnValue({ valid: true }),
+    buildRepositoryProfile: vi.fn().mockResolvedValue({}),
+    analyzeRepository: vi.fn().mockResolvedValue({}),
+    formatProfileSummary: vi.fn().mockReturnValue("Summary")
 }));
 
 vi.mock('../../../services/metrics.js', () => ({
@@ -104,14 +114,21 @@ import { getWorkflowLogs, findClosestFile } from '../../../services/github/GitHu
 import { diagnoseError, runSandboxTest } from '../../../services/analysis/LogAnalysisService.js';
 import { classifyErrorWithHistory, isCascadingError, getErrorPriority } from '../../../errorClassification.js';
 import { toolCodeSearch } from '../../../services/sandbox/SandboxService.js';
+import { findClosestFileAbsolute } from '../../../services/path-resolution.js';
+import { validateFileExists } from '../../../validation.js';
 
 describe('Worker Agent Enhanced', () => {
     const mockConfig = { githubToken: 'token', repoUrl: 'owner/repo' };
     const mockGroup = { id: 'g1', name: 'Workflow', runIds: [123], mainRun: { head_sha: 'sha' } };
-    const mockSandbox = { 
+    const mockSandbox = {
         runCommand: vi.fn().mockResolvedValue({ stdout: '', exitCode: 0 }),
         writeFile: vi.fn().mockResolvedValue(undefined),
-        getLocalPath: vi.fn().mockReturnValue('.')
+        readFile: vi.fn().mockResolvedValue('code'),
+        getLocalPath: vi.fn().mockReturnValue('.'),
+        getWorkDir: vi.fn().mockReturnValue('/'),
+        getId: vi.fn().mockReturnValue('mock-sandbox'),
+        init: vi.fn(),
+        teardown: vi.fn()
     };
     
     const mockProfile = {
@@ -133,6 +150,10 @@ describe('Worker Agent Enhanced', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(getWorkflowLogs).mockResolvedValue({ logText: 'error logs', headSha: 'sha' } as any);
+        // Reset findClosestFileAbsolute to return null (file not found)
+        vi.mocked(findClosestFileAbsolute).mockResolvedValue(null);
+        // Reset validateFileExists to return true by default
+        vi.mocked(validateFileExists).mockResolvedValue(true);
     });
 
     it('should handle log discovery fallbacks when logs are missing', async () => {
@@ -157,11 +178,15 @@ describe('Worker Agent Enhanced', () => {
 
     it('should handle target file search fallback using code search', async () => {
         vi.mocked(diagnoseError).mockResolvedValue({ summary: 'Error: no such file f.ts', fixAction: 'edit', filePath: 'missing.ts', reproductionCommand: 'npm test' } as any);
-        vi.mocked(findClosestFile).mockResolvedValueOnce(null).mockResolvedValue({ path: 'found.ts', file: { content: 'c', language: 'ts' } } as any);
+        // Always return null so fallback to code search is triggered
+        vi.mocked(findClosestFile).mockResolvedValue(null);
+        vi.mocked(findClosestFileAbsolute).mockResolvedValue(null);
         vi.mocked(toolCodeSearch).mockResolvedValue(['found.ts']);
+        // Make validation fail so the worker knows the file doesn't exist
+        vi.mocked(validateFileExists).mockResolvedValue(false);
 
         await runWorkerTask(mockConfig as any, mockGroup as any, mockSandbox as any, mockProfile as any, '', {} as any, vi.fn(), vi.fn());
-        
+
         expect(toolCodeSearch).toHaveBeenCalled();
     });
 

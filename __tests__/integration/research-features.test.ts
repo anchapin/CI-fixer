@@ -161,9 +161,13 @@ describe('Research Features Integration', () => {
             const { ReflectionLearningSystem } = await import('../../services/reflection/learning-system.js');
             const system = new ReflectionLearningSystem();
 
-            system.recordFailure('TypeError', 'Null reference', 'Fix attempt', 'context');
-            system.recordFailure('TypeError', 'Null reference', 'Fix attempt 2', 'context');
-            system.recordFailure('TypeError', 'Null reference', 'Fix attempt 3', 'context');
+            // Initialize the system first
+            await system.initialize();
+
+            // Await the async recordFailure calls
+            await system.recordFailure('TypeError', 'Null reference', 'Fix attempt', 'context');
+            await system.recordFailure('TypeError', 'Null reference', 'Fix attempt 2', 'context');
+            await system.recordFailure('TypeError', 'Null reference', 'Fix attempt 3', 'context');
 
             const result = system.reflect();
 
