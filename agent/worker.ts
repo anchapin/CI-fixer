@@ -850,7 +850,8 @@ export async function runWorkerTask(
                                 group.id,
                                 classifiedErrors[0],
                                 filesChanged,
-                                commandsUsed
+                                commandsUsed,
+                                i + 1  // Track actual iteration count (1-indexed)
                             );
                             log('VERBOSE', `[Knowledge Base] Extracted fix pattern for future use`);
                         } catch (e) {

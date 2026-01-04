@@ -1,7 +1,21 @@
 import { LoopStateSnapshot, LoopDetectionResult } from '../types';
-// NOTE: recordLoopDetected removed from telemetry/metrics to prevent database import in frontend
-// Metrics service imports db/client.js which requires Node.js environment
-// TODO: Re-enable metrics tracking in server-side context only
+
+// Metrics tracking is conditionally enabled in server-side contexts only
+// This prevents database import errors in browser environments
+let recordLoopDetected: ((duplicateOfIteration: number, hash: string) => void) | null = null;
+
+// Try to load metrics module (only works in Node.js server context)
+const isServerSide = typeof window === 'undefined' && typeof process !== 'undefined' && process.versions?.node;
+
+if (isServerSide) {
+  // Dynamic import to avoid loading in browser
+  import('../telemetry/metrics.js').then(metrics => {
+    recordLoopDetected = metrics.recordLoopDetected;
+  }).catch(() => {
+    // Metrics module not available, continue without telemetry
+    console.warn('[LoopDetector] Metrics module not available, continuing without telemetry');
+  });
+}
 
 export class LoopDetector {
   private history: LoopStateSnapshot[] = [];
@@ -59,12 +73,18 @@ export class LoopDetector {
 
   detectLoop(currentState: LoopStateSnapshot): LoopDetectionResult {
     const hash = this.generateHash(currentState);
-    
+
     if (this.stateMap.has(hash)) {
       const previousIteration = this.stateMap.get(hash);
-      
-      if (previousIteration !== undefined) {
-        // recordLoopDetected(previousIteration, hash); // Disabled for frontend compatibility
+
+      if (previousIteration !== undefined && recordLoopDetected) {
+        // Record metrics in server-side context only
+        try {
+          recordLoopDetected(previousIteration, hash);
+        } catch (e) {
+          // Metrics recording failed, continue without telemetry
+          console.warn('[LoopDetector] Failed to record metrics:', e);
+        }
       }
 
       return {

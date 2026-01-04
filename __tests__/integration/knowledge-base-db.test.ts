@@ -98,7 +98,7 @@ describe('Knowledge Base - Database Integration Tests', () => {
                 status: 'modified' as const
             }];
 
-            await extractFixPattern('run-123', classifiedError, filesChanged, [], testDb);
+            await extractFixPattern('run-123', classifiedError, filesChanged, [], 1, testDb);
 
             const patterns = await testDb.fixPattern.findMany({});
             expect(patterns).toHaveLength(1);
@@ -129,7 +129,7 @@ describe('Knowledge Base - Database Integration Tests', () => {
 
             const commandsUsed = ['pip install requests'];
 
-            await extractFixPattern('run-124', classifiedError, filesChanged, commandsUsed, testDb);
+            await extractFixPattern('run-124', classifiedError, filesChanged, commandsUsed, 1, testDb);
 
             const patterns = await testDb.fixPattern.findMany({});
             expect(patterns).toHaveLength(1);
@@ -157,12 +157,12 @@ describe('Knowledge Base - Database Integration Tests', () => {
             }];
 
             // First extraction
-            await extractFixPattern('run-1', classifiedError, filesChanged, [], testDb);
+            await extractFixPattern('run-1', classifiedError, filesChanged, [], 1, testDb);
             let patterns = await testDb.fixPattern.findMany({});
             expect(patterns[0].successCount).toBe(1);
 
             // Second extraction with same error
-            await extractFixPattern('run-2', classifiedError, filesChanged, [], testDb);
+            await extractFixPattern('run-2', classifiedError, filesChanged, [], 3, testDb);
             patterns = await testDb.fixPattern.findMany({});
             expect(patterns).toHaveLength(1); // Still only one pattern
             expect(patterns[0].successCount).toBe(2); // Count incremented
@@ -185,7 +185,7 @@ describe('Knowledge Base - Database Integration Tests', () => {
                 status: 'modified' as const
             }];
 
-            await extractFixPattern('run-125', classifiedError, filesChanged, [], testDb);
+            await extractFixPattern('run-125', classifiedError, filesChanged, [], 1, testDb);
 
             const solutions = await testDb.errorSolution.findMany({});
             expect(solutions).toHaveLength(1);
@@ -211,10 +211,10 @@ describe('Knowledge Base - Database Integration Tests', () => {
             }];
 
             // First application
-            await extractFixPattern('run-1', classifiedError, filesChanged, [], testDb);
+            await extractFixPattern('run-1', classifiedError, filesChanged, [], 2, testDb);
 
             // Second application
-            await extractFixPattern('run-2', classifiedError, filesChanged, [], testDb);
+            await extractFixPattern('run-2', classifiedError, filesChanged, [], 4, testDb);
 
             const solutions = await testDb.errorSolution.findMany({});
             expect(solutions).toHaveLength(1);

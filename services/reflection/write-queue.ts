@@ -8,8 +8,8 @@
 import * as Metrics from '../../telemetry/metrics.js';
 
 export interface QueueOperation {
-    fn: () => Promise<void>;
-    resolve: () => void;
+    fn: () => Promise<unknown>;
+    resolve: (value: unknown) => void;
     reject: (error: unknown) => void;
 }
 
@@ -26,8 +26,8 @@ export class WriteQueue {
     async enqueue<T>(fn: () => Promise<T>): Promise<T> {
         return new Promise((resolve, reject) => {
             this.queue.push({
-                fn: async () => { await fn(); },
-                resolve: () => resolve(),
+                fn: async () => { return await fn(); },
+                resolve: (value) => resolve(value as T),
                 reject
             });
 
@@ -62,8 +62,8 @@ export class WriteQueue {
             if (!operation) break;
 
             try {
-                await this.executeWithRetry(operation.fn);
-                operation.resolve();
+                const result = await this.executeWithRetry(operation.fn);
+                operation.resolve(result);
             } catch (error) {
                 operation.reject(error);
             }
@@ -81,13 +81,13 @@ export class WriteQueue {
     /**
      * Execute operation with exponential backoff retry
      */
-    private async executeWithRetry(fn: () => Promise<void>): Promise<void> {
+    private async executeWithRetry(fn: () => Promise<unknown>): Promise<unknown> {
         let lastError: unknown;
 
         for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
             try {
-                await fn();
-                return;
+                const result = await fn();
+                return result;
             } catch (error) {
                 lastError = error;
 

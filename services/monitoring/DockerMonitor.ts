@@ -11,7 +11,8 @@
  * - Historical metrics tracking (in-memory for now)
  */
 
-import { ResourceStats, RESOURCE_THRESHOLDS } from '../../sandbox.js';
+import { ResourceStats } from '../../sandbox.js';
+import { RESOURCE_THRESHOLDS } from '../../agent/concurrency.js';
 
 export interface ContainerHealth {
     containerId: string;

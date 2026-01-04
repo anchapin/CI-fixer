@@ -144,8 +144,47 @@ export const analysisNode: NodeHandler = async (state, context) => {
         }
         // --- LOOP DETECTION END ---
 
-        // TODO: Future enhancement: if classified.cascadingErrors contains things that look like 
-        // independent errors, classify them too.
+        // --- CASCADING ERROR ANALYSIS ---
+        // If cascading errors exist and appear to be independent issues, classify them separately
+        if (classified.cascadingErrors && classified.cascadingErrors.length > 0) {
+            const independentErrors: string[] = [];
+
+            // Detect patterns that suggest independent errors (not just consequences)
+            for (const cascadeErr of classified.cascadingErrors) {
+                const cascadeErrLower = cascadeErr.toLowerCase();
+
+                // Skip if it's clearly a consequence of the root cause
+                if (cascadeErrLower.includes('cannot write') ||
+                    cascadeErrLower.includes('build failed') ||
+                    cascadeErrLower.includes('compilation failed') ||
+                    cascadeErrLower.includes('npm install failed')) {
+                    continue; // These are likely consequences
+                }
+
+                // Look for independent error indicators
+                if (cascadeErrLower.includes('error:') &&
+                    !cascadeErrLower.includes(classified.errorMessage?.toLowerCase() || '')) {
+                    independentErrors.push(cascadeErr);
+                }
+            }
+
+            if (independentErrors.length > 0) {
+                log('INFO', `[AnalysisNode] Detected ${independentErrors.length} potential independent cascading errors`);
+                // Classify independent errors to provide additional context
+                for (const independentErr of independentErrors.slice(0, 2)) { // Limit to 2 to avoid noise
+                    try {
+                        const subClassification = await classifyErrorWithHistory(independentErr, db);
+                        if (subClassification.category !== classified.category) {
+                            log('WARN', `[AnalysisNode] Independent cascading error detected: ${subClassification.category} - ${independentErr.substring(0, 100)}`);
+                        }
+                    } catch (e) {
+                        // Classification failed, continue with next error
+                        console.warn('[AnalysisNode] Failed to classify cascading error:', e);
+                    }
+                }
+            }
+        }
+        // --- CASCADING ERROR ANALYSIS END ---
 
         const classificationForDiagnosis = {
             category: classified.category,

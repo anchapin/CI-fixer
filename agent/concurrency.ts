@@ -13,14 +13,19 @@
  * Set to 1 (single workflow at a time) as per DRR-2025-12-30-001
  * to prevent Internal Server Error crashes from resource exhaustion.
  *
- * Can be safely incremented (1→2→3→4) after:
- * - Single workflow execution is stable
- * - Resource monitoring shows headroom (CPU < 80%, memory stable)
- * - No crashes for 1+ week
+ * Dynamic concurrency optimization:
+ * - Use `calculateRecommendedConcurrency(resourceStats)` to determine optimal level
+ * - Call `canIncreaseConcurrency(resourceStats)` before incrementing
+ * - Resource stats should come from Docker stats API or monitoring system
  *
- * TODO: Use monitoring data to determine optimal safe concurrency level
+ * To enable dynamic concurrency, set MAX_CONCURRENT_AGENTS environment variable
+ * to "auto" and implement a monitoring loop that updates based on resource usage.
+ *
+ * Manual override: Set MAX_CONCURRENT_AGENTS to 1-4 based on stability.
  */
-export const MAX_CONCURRENT_AGENTS = parseInt(process.env.MAX_CONCURRENT_AGENTS || '1');
+export const MAX_CONCURRENT_AGENTS = parseInt(
+    process.env.MAX_CONCURRENT_AGENTS === 'auto' ? '1' : (process.env.MAX_CONCURRENT_AGENTS || '1')
+);
 
 /**
  * Queue timeout in milliseconds.

@@ -73,6 +73,11 @@ export function generateErrorFingerprint(
 /**
  * Extracts a reusable fix pattern from a successful agent run.
  * Stores the pattern for future similarity matching.
+ * @param runId - The agent run ID
+ * @param classifiedError - The classified error that was fixed
+ * @param filesChanged - Files that were modified during the fix
+ * @param commandsUsed - Commands that were executed during the fix
+ * @param iteration - The iteration count when the fix was successful
  * @param dbClient - Optional database client for testing (defaults to global prisma)
  */
 export async function extractFixPattern(
@@ -80,6 +85,7 @@ export async function extractFixPattern(
     classifiedError: ClassifiedError,
     filesChanged: FileChange[],
     commandsUsed: string[],
+    iteration: number,
     dbClient = prisma
 ): Promise<void> {
     const fingerprint = generateErrorFingerprint(
@@ -137,12 +143,15 @@ export async function extractFixPattern(
         const newTimesApplied = existingSolution.timesApplied + 1;
         const newSuccessRate = ((existingSolution.successRate * existingSolution.timesApplied) + 1.0) / newTimesApplied;
 
+        // Update average iterations using weighted average
+        const newAvgIterations = ((existingSolution.avgIterations * existingSolution.timesApplied) + iteration) / newTimesApplied;
+
         await dbClient.errorSolution.update({
             where: { id: existingSolution.id },
             data: {
                 timesApplied: newTimesApplied,
                 successRate: newSuccessRate,
-                avgIterations: existingSolution.avgIterations // TODO: track actual iterations
+                avgIterations: newAvgIterations
             }
         });
     } else {
@@ -154,7 +163,7 @@ export async function extractFixPattern(
                 commandsUsed: JSON.stringify(commandsUsed),
                 successRate: 1.0,
                 timesApplied: 1,
-                avgIterations: 1.0
+                avgIterations: iteration
             }
         });
     }

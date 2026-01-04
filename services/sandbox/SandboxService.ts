@@ -8,9 +8,23 @@ import { retryWithBackoff, unifiedGenerate, safeJsonParse } from '../llm/LLMServ
 import { CapabilityProbe } from './CapabilityProbe.js';
 import { ProvisioningService } from './ProvisioningService.js';
 import { LoopDetector } from '../LoopDetector.js';
-// NOTE: collectPathCorrections removed from telemetry/PathCorrectionCollector to prevent database import in frontend
-// PathCorrectionService imports db/client.js which requires Node.js environment
-// TODO: Re-enable path correction collection in server-side context only
+
+// Path correction collection is conditionally enabled in server-side contexts only
+// This prevents database import errors in browser environments
+let collectPathCorrections: ((output: string, agentRunId?: string) => Promise<number>) | null = null;
+
+// Try to load path correction module (only works in Node.js server context)
+const isServerSide = typeof window === 'undefined' && typeof process !== 'undefined' && process.versions?.node;
+
+if (isServerSide) {
+  // Dynamic import to avoid loading in browser
+  import('../telemetry/PathCorrectionCollector.js').then(module => {
+    collectPathCorrections = module.collectPathCorrections;
+  }).catch(() => {
+    // Path correction module not available, continue without telemetry
+    console.warn('[SandboxService] PathCorrectionCollector module not available, continuing without telemetry');
+  });
+}
 
 // Environment Detection
 const IS_BROWSER = typeof window !== 'undefined' && typeof window.document !== 'undefined';
@@ -377,8 +391,10 @@ main();
 
     let output = result.stdout + (result.stderr ? `\n[STDERR]\n${result.stderr}` : "");
 
-    // MIDDLEWARE: Telemetry - Collect Path Corrections (DISABLED for frontend compatibility)
-    // collectPathCorrections(output).catch(e => console.warn("Failed to collect path corrections", e));
+    // MIDDLEWARE: Telemetry - Collect Path Corrections (server-side only)
+    if (collectPathCorrections) {
+      collectPathCorrections(output).catch(e => console.warn("Failed to collect path corrections", e));
+    }
 
     // MIDDLEWARE: Intercept Path Hallucinations
     if (loopDetector && output.includes('[PATH_NOT_FOUND]')) {

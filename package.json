@@ -18,9 +18,11 @@
     "benchmark": "tsx scripts/run_benchmark.ts",
     "view-traces": "tsx scripts/view-traces.ts",
     "check-reliability": "tsx scripts/check-test-reliability.ts",
+    "fix-tests": "tsx scripts/fix-tests-ensure-coverage.ts",
     "prepare": "husky"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "^2.0.76",
     "@e2b/code-interpreter": "latest",
     "@google/genai": "latest",
     "@kubernetes/client-node": "^1.4.0",
