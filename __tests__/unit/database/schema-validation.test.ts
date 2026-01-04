@@ -382,9 +382,9 @@ describe('Database Schema Validation', () => {
     });
 
     describe('Relationships', () => {
-        it.skip('should cascade delete ErrorFacts when AgentRun is deleted (depends on schema config)', async () => {
-            // This test is skipped because cascade delete behavior depends on Prisma schema configuration
-            // To enable: add onDelete: Cascade to the relation in schema.prisma
+        it('should NOT cascade delete ErrorFacts when AgentRun is deleted (referential integrity)', async () => {
+            // Current schema behavior: cascade delete is NOT enabled
+            // Deleting a parent AgentRun will fail if there are related ErrorFacts
             const run = await testDb.agentRun.create({
                 data: {
                     id: 'cascade-test',
@@ -403,17 +403,20 @@ describe('Database Schema Validation', () => {
                 }
             });
 
-            // Delete parent
-            await testDb.agentRun.delete({
-                where: { id: run.id }
-            });
+            // Attempting to delete parent should fail due to foreign key constraint
+            // (unless cascade delete is enabled in schema.prisma)
+            await expect(
+                testDb.agentRun.delete({
+                    where: { id: run.id }
+                })
+            ).rejects.toThrow();
 
-            // Child should be deleted too (if cascade is configured)
+            // Verify ErrorFact still exists
             const facts = await testDb.errorFact.findMany({
                 where: { runId: run.id }
             });
 
-            expect(facts.length).toBe(0);
+            expect(facts.length).toBe(1);
         });
 
         it('should maintain referential integrity', async () => {
