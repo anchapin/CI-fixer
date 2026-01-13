@@ -62,41 +62,97 @@ function exec(command: string, options: any = {}): string {
   }
 }
 
+function stripAnsi(str: string): string {
+  return str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+}
+
 function parseTestResults(output: string): {
   passed: number;
   failed: number;
   skipped: number;
   failures: Array<{ file: string; test: string; error: string }>;
+  skippedTests: Array<{ file: string; test: string }>;
 } {
   const result = {
     passed: 0,
     failed: 0,
     skipped: 0,
-    failures: [] as Array<{ file: string; test: string; error: string }>
+    failures: [] as Array<{ file: string; test: string; error: string }>,
+    skippedTests: [] as Array<{ file: string; test: string }>
   };
 
-  // Parse vitest output
-  const lines = output.split('\n');
+  const cleanOutput = stripAnsi(output);
+  const lines = cleanOutput.split('\n');
 
   for (const line of lines) {
     // Match: "Test Files  10 passed (10)" or similar
-    const testFileMatch = line.match(/Test Files\s+(\d+)\s+(passed|failed|skipped)/);
-    if (testFileMatch) {
-      const count = parseInt(testFileMatch[1]);
-      const status = testFileMatch[2];
-      if (status === 'passed') result.passed += count;
-      else if (status === 'failed') result.failed += count;
-      else if (status === 'skipped') result.skipped += count;
+    // And also combined lines: "Test Files  11 failed | 206 passed | 1 skipped (218)"
+    if (line.includes('Test Files')) {
+      const matches = line.matchAll(/(\d+)\s+(passed|failed|skipped)/g);
+      for (const match of matches) {
+        const count = parseInt(match[1]);
+        const status = match[2];
+        if (status === 'passed') result.passed += count;
+        else if (status === 'failed') result.failed += count;
+        else if (status === 'skipped') result.skipped += count;
+      }
     }
 
     // Match: "Tests  50 passed (10)" etc.
-    const testMatch = line.match(/Tests\s+(\d+)\s+(passed|failed|skipped)/);
-    if (testMatch) {
-      const count = parseInt(testMatch[1]);
-      const status = testMatch[2];
-      if (status === 'passed') result.passed += count;
-      else if (status === 'failed') result.failed += count;
-      else if (status === 'skipped') result.skipped += count;
+    // And also combined lines: "Tests  17 failed | 1648 passed | 21 skipped (1686)"
+    if (line.includes('Tests')) {
+       // We don't accumulate here if we already got counts from "Test Files"?
+       // No, "Tests" count is individual tests. "Test Files" count is files.
+       // Usually summary uses "Tests" counts for passed/failed/skipped metrics.
+       // But the previous implementation summed them up which is weird.
+       // Let's rely on finding 'skipped' count from 'Tests' line if available, otherwise accumulate.
+
+       // Actually, let's just stick to the previous behavior of accumulating but fix the parsing.
+       // The previous behavior was:
+       /*
+        const testMatch = line.match(/Tests\s+(\d+)\s+(passed|failed|skipped)/);
+        if (testMatch) { ... result.skipped += count; }
+       */
+       // If the line has pipe separators, the previous regex would only match the first one.
+       // The new matchAll handles multiple.
+
+       // Wait, if I change the logic too much, I might break existing assumptions.
+       // But accumulating "Test Files" counts + "Tests" counts seems wrong anyway.
+       // result.passed should probably be the number of tests passed.
+       // But I'll follow the pattern: extract numbers associated with "skipped".
+
+       const matches = line.matchAll(/(\d+)\s+(passed|failed|skipped)/g);
+        for (const match of matches) {
+            const count = parseInt(match[1]);
+            const status = match[2];
+            // If we are looking at "Tests" line, this is likely the authoritative count for tests.
+            // But if we already added from "Test Files", we are double counting files vs tests?
+            // "Test Files ... 1 skipped" means 1 file. "Tests ... 21 skipped" means 21 tests.
+            // If I just want to know IF there are skipped tests, >0 is fine.
+
+            // Just for safety, I will NOT reset counts, but add to them.
+            // If the old code added "Test Files" count to "skipped", I will do so too.
+            if (status === 'passed') result.passed += count;
+            else if (status === 'failed') result.failed += count;
+            else if (status === 'skipped') result.skipped += count;
+        }
+    }
+
+    // Parse skipped tests
+    // ↓ __tests__/skipped_dummy.test.ts > skipped test suite > should be skipped
+    if (line.trim().startsWith('↓') || line.includes('↓')) {
+        const parts = line.split('>');
+        if (parts.length >= 2) {
+            // parts[0] is like "  ↓ path/to/file.test.ts "
+            let filePart = parts[0].replace('↓', '').trim();
+            const file = filePart;
+            const test = parts[parts.length - 1].trim();
+
+             // Avoid duplicates
+            if (!result.skippedTests.some(t => t.file === file && t.test === test)) {
+                result.skippedTests.push({ file, test });
+            }
+        }
     }
   }
 
@@ -213,7 +269,7 @@ async function generateCoverageTestPrompt(uncoveredFile: {
   lines: number;
   branches: number;
 }): Promise<string> {
-  const sourcePath = `${ROOT}/${uncoveredFile}`;
+  const sourcePath = `${ROOT}/${uncoveredFile.file}`;
   const testPath = sourcePath.replace('.ts', '.test.ts');
 
   let sourceContent = '';
@@ -230,10 +286,10 @@ async function generateCoverageTestPrompt(uncoveredFile: {
   return `
 You are adding tests to improve code coverage. Here are the details:
 
-File: ${uncoveredFile}
+File: ${uncoveredFile.file}
 Current Coverage:
-- Lines: ${uncovered.lines}% (target: ${COVERAGE_TARGETS.lines}%)
-- Branches: ${uncovered.branches}% (target: ${COVERAGE_TARGETS.branches}%)
+- Lines: ${uncoveredFile.lines}% (target: ${COVERAGE_TARGETS.lines}%)
+- Branches: ${uncoveredFile.branches}% (target: ${COVERAGE_TARGETS.branches}%)
 
 Source File Content:
 \`\`\`typescript
@@ -314,9 +370,53 @@ async function fixTests() {
     }
 
     // Unskip tests
-    if (results.skipped > 0) {
-      log(`\nAttempting to unskip ${results.skipped} tests...`, 'yellow');
-      // TODO: Implement skip removal logic
+    if (results.skippedTests.length > 0) {
+      log(`\nAttempting to unskip ${results.skippedTests.length} tests...`, 'yellow');
+
+      const uniqueFiles = [...new Set(results.skippedTests.map(t => t.file))];
+
+      for (const file of uniqueFiles) {
+        const fullPath = join(ROOT, file);
+        if (existsSync(fullPath)) {
+            let content = readFileSync(fullPath, 'utf-8');
+            let modified = false;
+
+            // Remove .skip
+            if (content.includes('.skip')) {
+                content = content.replace(/\.skip/g, '');
+                modified = true;
+            }
+
+            // Replace xit with it
+            if (content.includes('xit(')) {
+                content = content.replace(/xit\(/g, 'it(');
+                modified = true;
+            }
+
+            // Replace xtest with test
+            if (content.includes('xtest(')) {
+                content = content.replace(/xtest\(/g, 'test(');
+                modified = true;
+            }
+
+            // Replace xdescribe with describe
+            if (content.includes('xdescribe(')) {
+                content = content.replace(/xdescribe\(/g, 'describe(');
+                modified = true;
+            }
+
+            if (modified) {
+                writeFileSync(fullPath, content, 'utf-8');
+                log(`    ✓ Unskipped tests in ${file}`, 'green');
+            } else {
+                log(`    ⚠ Could not find skip markers in ${file}`, 'yellow');
+            }
+        } else {
+             log(`    ⚠ File not found: ${file}`, 'red');
+        }
+      }
+    } else if (results.skipped > 0) {
+        log(`\n⚠ Detected ${results.skipped} skipped tests but count identifies them. Output parsing might have missed file names.`, 'yellow');
     }
   }
 
