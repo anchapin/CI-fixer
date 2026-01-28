@@ -146,7 +146,8 @@ describe('tool-types', () => {
 
             // First tool should be the cheapest (syntax_validator or linter, both 0.001)
             expect(['syntax_validator', 'linter']).toContain(tools[0].tool);
-            expect(tools[0].estimatedCost).toBeLessThan(tools[1].estimatedCost);
+            // First tool should be less than or equal to the second (allowing equal costs)
+            expect(tools[0].estimatedCost).toBeLessThanOrEqual(tools[1].estimatedCost);
         });
 
         it('should order tools by latency (fastest first)', () => {
