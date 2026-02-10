@@ -13,7 +13,15 @@ export type CIFixerTool =
     | 'git_blame_analyzer'      // Cheap, useful for regressions
     | 'llm_code_generator'      // Very expensive, last resort
     | 'static_analyzer'         // Cheap, good for type errors
-    | 'linter';                 // Cheap, always useful
+    | 'linter'                  // Cheap, always useful
+    | 'read_file'               // Basic IO
+    | 'write_file'              // Basic IO
+    | 'run_cmd'                 // Basic IO
+    | 'file_search'             // Basic IO
+    | 'read_file_with_limit'    // Basic IO
+    | 'run_test'                // Alias/Variant
+    | 'git_diff'                // Git
+    | 'semantic_search';        // Alias
 
 export interface ToolCostEstimate {
     tool: CIFixerTool;
@@ -33,6 +41,12 @@ export const TOOL_COSTS: Record<CIFixerTool, ToolCostEstimate> = {
         estimatedLatency: 3000,
         complexity: 8
     },
+    'semantic_search': {
+        tool: 'semantic_search',
+        estimatedCost: 0.05,
+        estimatedLatency: 3000,
+        complexity: 8
+    },
     'syntax_validator': {
         tool: 'syntax_validator',
         estimatedCost: 0.001,
@@ -47,6 +61,12 @@ export const TOOL_COSTS: Record<CIFixerTool, ToolCostEstimate> = {
     },
     'test_runner': {
         tool: 'test_runner',
+        estimatedCost: 0.02,
+        estimatedLatency: 5000,
+        complexity: 5
+    },
+    'run_test': {
+        tool: 'run_test',
         estimatedCost: 0.02,
         estimatedLatency: 5000,
         complexity: 5
@@ -74,6 +94,42 @@ export const TOOL_COSTS: Record<CIFixerTool, ToolCostEstimate> = {
         estimatedCost: 0.001,
         estimatedLatency: 100,
         complexity: 1
+    },
+    'read_file': {
+        tool: 'read_file',
+        estimatedCost: 0.0001,
+        estimatedLatency: 10,
+        complexity: 1
+    },
+    'write_file': {
+        tool: 'write_file',
+        estimatedCost: 0.0001,
+        estimatedLatency: 20,
+        complexity: 1
+    },
+    'run_cmd': {
+        tool: 'run_cmd',
+        estimatedCost: 0.0005,
+        estimatedLatency: 100,
+        complexity: 1
+    },
+    'file_search': {
+        tool: 'file_search',
+        estimatedCost: 0.0002,
+        estimatedLatency: 50,
+        complexity: 1
+    },
+    'read_file_with_limit': {
+        tool: 'read_file_with_limit',
+        estimatedCost: 0.0001,
+        estimatedLatency: 10,
+        complexity: 1
+    },
+    'git_diff': {
+        tool: 'git_diff',
+        estimatedCost: 0.0005,
+        estimatedLatency: 50,
+        complexity: 1
     }
 };
 
@@ -89,4 +145,28 @@ export function estimateTotalCost(tools: CIFixerTool[]): number {
  */
 export function estimateTotalLatency(tools: CIFixerTool[]): number {
     return tools.reduce((sum, tool) => sum + TOOL_COSTS[tool].estimatedLatency, 0);
+}
+
+/**
+ * Get a list of tools that fit within a specified budget.
+ *
+ * @param maxCost Maximum allowable cost
+ * @returns List of tool names
+ */
+export function getCostEfficientTools(maxCost: number): CIFixerTool[] {
+    // Sort tools by cost (ascending) to maximize tool count within budget
+    // Note: This is a naive knapsack implementation, but sufficient for this use case
+    const allTools = Object.values(TOOL_COSTS).sort((a, b) => a.estimatedCost - b.estimatedCost);
+
+    const selectedTools: CIFixerTool[] = [];
+    let currentCost = 0;
+
+    for (const tool of allTools) {
+        if (currentCost + tool.estimatedCost <= maxCost) {
+            selectedTools.push(tool.tool);
+            currentCost += tool.estimatedCost;
+        }
+    }
+
+    return selectedTools;
 }
