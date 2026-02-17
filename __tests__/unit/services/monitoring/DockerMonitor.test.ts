@@ -182,7 +182,7 @@ describe('DockerMonitorService', () => {
                 getResourceStats: vi.fn().mockResolvedValue({
                     cpuPercent: 50,
                     memoryPercent: 50,
-                    pids: 1500
+                    pids: 900 // Between 800 (WARNING) and 950 (CRITICAL)
                 })
             };
 

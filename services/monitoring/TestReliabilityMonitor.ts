@@ -108,7 +108,7 @@ export class TestReliabilityMonitor {
         if (fileResults.length === 0) return null;
 
         const passed = fileResults.filter(r => r.status === 'pass').length;
-        const failed = fileResults.filter(r => r.status === 'fail').length;
+        const failed = fileResults.filter(r => r.status === 'fail' || r.status === 'timeout').length;
         const skipped = fileResults.filter(r => r.status === 'skip').length;
         const totalRuns = fileResults.length;
 

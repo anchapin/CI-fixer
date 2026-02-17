@@ -78,6 +78,12 @@ describe('Knowledge Base', () => {
     });
 
     describe('Pattern Extraction and Matching (Integration)', () => {
+        const mockDbClient = {
+            fixPattern: {
+                findMany: vi.fn().mockResolvedValue([])
+            }
+        };
+
         it('should handle empty classified error gracefully', async () => {
             const classified = {
                 category: ErrorCategory.UNKNOWN,
@@ -89,7 +95,7 @@ describe('Knowledge Base', () => {
             };
 
             // Should not throw
-            const matches = await findSimilarFixes(classified, 5);
+            const matches = await findSimilarFixes(classified, 5, mockDbClient as any);
             expect(Array.isArray(matches)).toBe(true);
         });
     });
@@ -122,6 +128,12 @@ describe('Knowledge Base', () => {
     });
 
     describe('findSimilarFixes', () => {
+        const mockDbClient = {
+            fixPattern: {
+                findMany: vi.fn().mockResolvedValue([])
+            }
+        };
+
         it('should return empty array for no matches', async () => {
             const classified = {
                 category: ErrorCategory.SYNTAX,
@@ -132,7 +144,7 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Unique error never seen before xyz123'
             };
 
-            const matches = await findSimilarFixes(classified, 5);
+            const matches = await findSimilarFixes(classified, 5, mockDbClient as any);
             expect(Array.isArray(matches)).toBe(true);
         });
 
@@ -146,7 +158,7 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Common error'
             };
 
-            const matches = await findSimilarFixes(classified, 3);
+            const matches = await findSimilarFixes(classified, 3, mockDbClient as any);
             expect(matches.length).toBeLessThanOrEqual(3);
         });
 
@@ -161,33 +173,45 @@ describe('Knowledge Base', () => {
             };
 
             // Should not throw even if runbook loading fails
-            const matches = await findSimilarFixes(classified, 5);
+            const matches = await findSimilarFixes(classified, 5, mockDbClient as any);
             expect(Array.isArray(matches)).toBe(true);
         });
     });
 
     describe('updateFixPatternStats', () => {
+        const mockDbClient = {
+            errorSolution: {
+                findFirst: vi.fn().mockResolvedValue(null)
+            }
+        };
+
         it('should handle non-existent fingerprint gracefully', async () => {
             // Should not throw for non-existent pattern
             await expect(
-                updateFixPatternStats('non-existent-fingerprint-xyz', true)
+                updateFixPatternStats('non-existent-fingerprint-xyz', true, mockDbClient as any)
             ).resolves.not.toThrow();
         });
     });
 
     describe('getTopFixPatterns', () => {
+        const mockDbClient = {
+            fixPattern: {
+                findMany: vi.fn().mockResolvedValue([])
+            }
+        };
+
         it('should return array of patterns', async () => {
-            const patterns = await getTopFixPatterns(10);
+            const patterns = await getTopFixPatterns(10, mockDbClient as any);
             expect(Array.isArray(patterns)).toBe(true);
         });
 
         it('should respect limit parameter', async () => {
-            const patterns = await getTopFixPatterns(5);
+            const patterns = await getTopFixPatterns(5, mockDbClient as any);
             expect(patterns.length).toBeLessThanOrEqual(5);
         });
 
         it('should use default limit of 20', async () => {
-            const patterns = await getTopFixPatterns();
+            const patterns = await getTopFixPatterns(undefined, mockDbClient as any);
             expect(Array.isArray(patterns)).toBe(true);
             expect(patterns.length).toBeLessThanOrEqual(20);
         });
