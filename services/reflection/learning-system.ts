@@ -111,8 +111,8 @@ export class ReflectionLearningSystem {
             this.failurePatterns.set(patternId, pattern);
         }
 
-        // Persist the failure pattern
-        await this.persistence.saveFailure(pattern).catch(e =>
+        // Persist immediately (fire & forget)
+        this.persistence.saveFailure(pattern).catch(e =>
             console.warn('[Learning] Failed to persist failure pattern:', e)
         );
     }
