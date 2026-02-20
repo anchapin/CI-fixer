@@ -32,7 +32,7 @@ describe('pathDetection - validatePath', () => {
         // The specific file should not exist
         if (pathStr.includes('non-existent')) return false;
         // But the parent dir should exist
-        if (pathStr.includes('src/utils')) return true;
+        if (pathStr === 'src/utils' || pathStr.endsWith('/src/utils')) return true;
         return false;
     });
 
