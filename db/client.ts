@@ -18,6 +18,12 @@ const globalForPrisma = globalThis as unknown as {
  */
 function getPrismaClient(): PrismaClient {
     if (!globalForPrisma.prisma) {
+        // Fallback for CI/Tests if DATABASE_URL is missing
+        if (!process.env.DATABASE_URL) {
+            console.warn('[Prisma] DATABASE_URL not set, using default sqlite file for safety.');
+            process.env.DATABASE_URL = 'file:./dev.db';
+        }
+
         globalForPrisma.prisma = new PrismaClient({
             log: process.env.NODE_ENV !== 'production' ? ['error', 'warn'] : ['error'],
         });
