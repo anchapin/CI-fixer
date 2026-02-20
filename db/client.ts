@@ -18,14 +18,23 @@ const globalForPrisma = globalThis as unknown as {
  */
 function getPrismaClient(): PrismaClient {
     if (!globalForPrisma.prisma) {
+        let datasourceUrl = process.env.DATABASE_URL;
+
         // Fallback for CI/Tests if DATABASE_URL is missing
-        if (!process.env.DATABASE_URL) {
+        if (!datasourceUrl) {
             console.warn('[Prisma] DATABASE_URL not set, using default sqlite file for safety.');
-            process.env.DATABASE_URL = 'file:./dev.db';
+            datasourceUrl = 'file:./dev.db';
+            // Also set env var for good measure, though explicit config below takes precedence
+            process.env.DATABASE_URL = datasourceUrl;
         }
 
         globalForPrisma.prisma = new PrismaClient({
             log: process.env.NODE_ENV !== 'production' ? ['error', 'warn'] : ['error'],
+            datasources: {
+                db: {
+                    url: datasourceUrl,
+                },
+            },
         });
 
         // Increase timeout for SQLite to handle concurrent writes
@@ -41,7 +50,7 @@ function getPrismaClient(): PrismaClient {
         globalForPrisma.prismaInitialized = true;
 
         if (process.env.NODE_ENV !== 'production') {
-            console.log('[Prisma] Client initialized with DATABASE_URL:', process.env.DATABASE_URL || 'default');
+            console.log('[Prisma] Client initialized with DATABASE_URL:', datasourceUrl || 'default');
             console.log('[Prisma] SQLite timeout configured for concurrent operations');
         }
     }
