@@ -96,5 +96,8 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": "eslint --fix"
+  },
+  "overrides": {
+    "chalk": "4.1.2"
   }
 }
