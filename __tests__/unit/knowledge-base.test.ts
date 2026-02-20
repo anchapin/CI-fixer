@@ -8,7 +8,34 @@ import {
     getTopFixPatterns
 } from '../../services/knowledge-base.js';
 
+// Mock the db/client.js module - CORRECT PATH
+vi.mock('../../db/client.js', () => {
+    const mockPrisma = {
+        fixPattern: {
+            findMany: vi.fn().mockResolvedValue([]),
+            findUnique: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({}),
+            update: vi.fn().mockResolvedValue({}),
+        },
+        errorSolution: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({}),
+            update: vi.fn().mockResolvedValue({}),
+        }
+    };
+    return { db: mockPrisma };
+});
+
+// Mock the runbooks loading to avoid filesystem errors
+vi.mock('../../services/runbooks.js', () => ({
+    findRelevantRunbooks: vi.fn().mockResolvedValue([])
+}));
+
 describe('Knowledge Base', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('generateErrorFingerprint', () => {
         it('should generate consistent fingerprints for same error', () => {
             const fp1 = generateErrorFingerprint('syntax', 'TypeError at line 42', ['src/app.ts']);
