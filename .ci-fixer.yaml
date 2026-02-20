@@ -1,0 +1,56 @@
+# CI-Fixer Configuration File
+# Copy this file to .ci-fixer.yaml and customize for your environment
+
+# GitHub Configuration
+github:
+  # GitHub personal access token (can use environment variable)
+  # Create at: https://github.com/settings/tokens
+  # Required scopes: repo, workflow
+  token: ${GITHUB_TOKEN}
+
+# Repository Configuration
+repo:
+  # Default repository URL (format: owner/repo)
+  # Can be overridden with --repo CLI flag
+  url: owner/repo
+
+# LLM Configuration
+llm:
+  # LLM provider: google, zai, openai
+  provider: google
+
+  # Model name
+  model: gemini-2.5-flash-preview-04-17
+
+# API Keys
+api_keys:
+  # Google Gemini API key
+  gemini: ${GEMINI_API_KEY}
+
+  # Optional: Tavily API key for web search
+  tavily: ${TAVILY_API_KEY}
+
+  # Optional: E2B API key for cloud sandbox
+  e2b: ${E2B_API_KEY}
+
+# Execution Environment
+execution:
+  # Development environment: simulation, e2b, github_actions
+  dev_env: e2b
+
+  # Check environment: simulation, github_actions, e2b
+  check_env: github_actions
+
+  # Execution backend: e2b, docker_local, kubernetes
+  backend: e2b
+
+  # Sandbox timeout in minutes
+  sandbox_timeout: 30
+
+# Logging
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+
+  # Output format: pretty, json, plain
+  format: pretty

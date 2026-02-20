@@ -1,0 +1,119 @@
+# CI-Fixer Configuration File
+# Copy this file to .ci-fixer.yaml and customize for your environment
+
+# GitHub Configuration
+github:
+  # GitHub personal access token (can use environment variable)
+  # Create at: https://github.com/settings/tokens
+  # Required scopes: repo, workflow
+  token: ${GITHUB_TOKEN}
+
+# Repository Configuration
+repo:
+  # Default repository URL (format: owner/repo)
+  # Can be overridden with --repo CLI flag
+  url: owner/repo
+
+  # Optional: Default PR number
+  # pr: 123
+
+# Workflow Selection
+workflows:
+  # Exclude workflow patterns (comma-separated list)
+  # Example: ["deploy", "release", "nightly"]
+  exclude:
+    - deploy
+    - release
+
+  # Optional: Specific workflow run IDs to fix
+  # Can be overridden with --run-ids CLI flag
+  run_ids: []
+
+# LLM Configuration
+llm:
+  # LLM provider: google, zai, openai
+  provider: google
+
+  # Model name
+  # Google: gemini-2.5-flash-preview-04-17, gemini-2.5-pro-preview-04-17, gemini-1.5-pro
+  # OpenAI: gpt-4, gpt-4-turbo, gpt-3.5-turbo
+  model: gemini-2.5-flash-preview-04-17
+
+  # Optional: Custom base URL (for proxy or self-hosted)
+  base_url: https://generativelanguage.googleapis.com
+
+  # Request timeout in milliseconds
+  timeout: 600000  # 10 minutes
+
+# API Keys
+api_keys:
+  # Google Gemini API key
+  # Get from: https://makersuite.google.com/app/apikey
+  gemini: ${GEMINI_API_KEY}
+
+  # Optional: Tavily API key for web search
+  # Get from: https://tavily.com
+  tavily: ${TAVILY_API_KEY}
+
+  # Optional: E2B API key for cloud sandbox
+  # Get from: https://e2b.dev
+  e2b: ${E2B_API_KEY}
+
+  # Optional: OpenAI API key (if using OpenAI provider)
+  # openai: ${OPENAI_API_KEY}
+
+# Execution Environment
+execution:
+  # Development environment: simulation, e2b, github_actions
+  dev_env: e2b
+
+  # Check environment: simulation, github_actions, e2b
+  check_env: github_actions
+
+  # Execution backend: e2b, docker_local, kubernetes
+  # - e2b: Cloud sandbox (requires E2B_API_KEY)
+  # - docker_local: Local Docker containers (requires Docker Desktop)
+  # - kubernetes: Kubernetes pods (requires k8s config)
+  backend: e2b
+
+  # Sandbox timeout in minutes
+  sandbox_timeout: 30
+
+  # Docker image (for docker_local backend)
+  docker_image: nikolaik/python-nodejs:python3.11-nodejs20-bullseye
+
+# Logging
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+
+  # Output format: pretty, json, plain
+  # - pretty: Colored, formatted output (default)
+  # - json: Machine-readable JSON
+  # - plain: Simple text output
+  format: pretty
+
+# Reliability Layer (optional)
+reliability:
+  # Enable adaptive thresholds
+  adaptive_thresholds: true
+
+  # Phase 2 reproduction threshold
+  phase2_reproduction_threshold: 1
+
+  # Phase 3 complexity threshold
+  phase3_complexity_threshold: 15
+
+  # Phase 3 iteration threshold
+  phase3_iteration_threshold: 2
+
+# Advanced Options (optional)
+# advanced:
+#   # Maximum number of fix iterations
+#   max_iterations: 10
+#
+#   # Enable parallel execution
+#   parallel_execution: false
+#
+#   # Enable learning from past fixes
+#   enable_learning: true
