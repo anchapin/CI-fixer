@@ -1,41 +1,28 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ReflectionLearningSystem } from '../../services/reflection/learning-system.js';
 import { db, disconnectDb } from '../../db/client.js';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library.js';
+import { TestDatabaseManager } from '../helpers/test-database.js';
 
 // Track the current system for flushing in afterEach
 let currentSystem: ReflectionLearningSystem | null = null;
-
-// Check if the learning tables exist
-async function learningTablesExist(): Promise<boolean> {
-    try {
-        await db.learningFailure.findMany({ take: 1 });
-        return true;
-    } catch (error) {
-        if (error instanceof PrismaClientKnownRequestError && error.code === 'P2021') {
-            return false;
-        }
-        throw error;
-    }
-}
+let dbManager: TestDatabaseManager;
 
 describe('Reflection Learning Persistence (Integration)', () => {
-    let tablesExist = false;
-
     beforeAll(async () => {
-        tablesExist = await learningTablesExist();
-        if (!tablesExist) {
-            console.log('Skipping: LearningFailure/LearningSuccess tables do not exist in database');
-            return;
-        }
-        // Clear any existing test data
+        // Setup isolated test database
+        dbManager = new TestDatabaseManager();
+        await dbManager.setup();
+
+        // Ensure the global db client uses the new connection string
+        await disconnectDb();
+
+        // Clear any existing test data (should be empty in new DB, but good practice)
         await db.learningFailure.deleteMany({});
         await db.learningSuccess.deleteMany({});
     });
 
     // Clear database before each test for proper isolation
     beforeEach(async () => {
-        if (!tablesExist) return;
         await db.learningFailure.deleteMany({});
         await db.learningSuccess.deleteMany({});
         currentSystem = null;
@@ -51,18 +38,14 @@ describe('Reflection Learning Persistence (Integration)', () => {
 
     afterAll(async () => {
         // Cleanup
-        if (tablesExist) {
-            await db.learningFailure.deleteMany({});
-            await db.learningSuccess.deleteMany({});
-        }
         await disconnectDb();
+        if (dbManager) {
+            await dbManager.teardown();
+        }
     });
 
     describe('Persistence Lifecycle', () => {
         it('should persist and reload failure patterns across instances', async () => {
-            if (!tablesExist) {
-                return; // Skip if tables don't exist
-            }
             // Create first instance and record failures
             const system1 = new ReflectionLearningSystem();
             currentSystem = system1;
@@ -89,9 +72,6 @@ describe('Reflection Learning Persistence (Integration)', () => {
         });
 
         it('should persist and reload success patterns across instances', async () => {
-            if (!tablesExist) {
-                return; // Skip if tables don't exist
-            }
             // Create first instance and record successes
             const system1 = new ReflectionLearningSystem();
             currentSystem = system1;
@@ -112,9 +92,6 @@ describe('Reflection Learning Persistence (Integration)', () => {
         });
 
         it('should track frequency updates across persistence', async () => {
-            if (!tablesExist) {
-                return; // Skip if tables don't exist
-            }
             const system1 = new ReflectionLearningSystem();
             currentSystem = system1;
             await system1.initialize();
@@ -146,9 +123,6 @@ describe('Reflection Learning Persistence (Integration)', () => {
 
     describe('Database Operations', () => {
         it('should upsert existing failure patterns', async () => {
-            if (!tablesExist) {
-                return; // Skip if tables don't exist
-            }
             const system = new ReflectionLearningSystem();
             currentSystem = system;
             await system.initialize();
@@ -173,9 +147,6 @@ describe('Reflection Learning Persistence (Integration)', () => {
         });
 
         it('should handle concurrent writes gracefully', async () => {
-            if (!tablesExist) {
-                return; // Skip if tables don't exist
-            }
             const system = new ReflectionLearningSystem();
             currentSystem = system;
             await system.initialize();
@@ -201,9 +172,6 @@ describe('Reflection Learning Persistence (Integration)', () => {
 
     describe('Error Handling', () => {
         it('should continue operation if persistence fails', async () => {
-            if (!tablesExist) {
-                return; // Skip if tables don't exist
-            }
             const system = new ReflectionLearningSystem();
             currentSystem = system;
             await system.initialize();

@@ -1,5 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ErrorCategory } from '../../types.js';
+
+// Define mocks first, but don't use variables in factory if hoisting is an issue.
+// Vitest hoisting means the factory runs before the variable declaration.
+// We must move the mock factory logic inside or use `vi.hoisted`.
+
+const { mockDbClient } = vi.hoisted(() => {
+    return {
+        mockDbClient: {
+            fixPattern: {
+                findMany: vi.fn(),
+                create: vi.fn(),
+                update: vi.fn(),
+                findFirst: vi.fn(),
+            },
+            errorSolution: {
+                findMany: vi.fn(),
+                findFirst: vi.fn(),
+                create: vi.fn(),
+                update: vi.fn(),
+            }
+        }
+    };
+});
+
+// Mock the module globally using the hoisted variable
+vi.mock('../../db/client.js', () => {
+    return {
+        db: mockDbClient
+    };
+});
+
 import { 
     findSimilarFixes, 
     generateErrorFingerprint,
@@ -9,6 +40,14 @@ import {
 } from '../../services/knowledge-base.js';
 
 describe('Knowledge Base', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Default mock implementations
+        mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+        mockDbClient.fixPattern.findFirst.mockResolvedValue(null);
+        mockDbClient.errorSolution.findFirst.mockResolvedValue(null);
+    });
+
     describe('generateErrorFingerprint', () => {
         it('should generate consistent fingerprints for same error', () => {
             const fp1 = generateErrorFingerprint('syntax', 'TypeError at line 42', ['src/app.ts']);
@@ -29,7 +68,6 @@ describe('Knowledge Base', () => {
             const fp1 = generateErrorFingerprint('runtime', 'Error at 2025-01-01 12:34:56', ['test.ts']);
             const fp2 = generateErrorFingerprint('runtime', 'Error at 2025-12-31 23:59:59', ['test.ts']);
 
-            // Exact match depends on normalization - at minimum they should be similar length
             expect(fp1).toHaveLength(16);
             expect(fp2).toHaveLength(16);
         });
@@ -94,35 +132,28 @@ describe('Knowledge Base', () => {
         });
     });
 
-    // Additional tests requiring database mocking
     describe('extractFixPattern', () => {
         it('should create new pattern when none exists', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
             expect(true).toBe(true);
         });
 
         it('should update existing pattern success count', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
             expect(true).toBe(true);
         });
 
         it('should handle command-based fixes', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
             expect(true).toBe(true);
         });
 
         it('should handle edit-based fixes', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
             expect(true).toBe(true);
         });
     });
 
     describe('findSimilarFixes', () => {
         it('should return empty array for no matches', async () => {
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+
             const classified = {
                 category: ErrorCategory.SYNTAX,
                 confidence: 0.9,
@@ -134,9 +165,15 @@ describe('Knowledge Base', () => {
 
             const matches = await findSimilarFixes(classified, 5);
             expect(Array.isArray(matches)).toBe(true);
+            expect(mockDbClient.fixPattern.findMany).toHaveBeenCalled();
         });
 
         it('should limit results to specified limit', async () => {
+            mockDbClient.fixPattern.findMany.mockResolvedValue([
+                { errorFingerprint: '1', successCount: 10, fixTemplate: '{}' },
+                { errorFingerprint: '2', successCount: 5, fixTemplate: '{}' }
+            ]);
+
             const classified = {
                 category: ErrorCategory.SYNTAX,
                 confidence: 0.9,
@@ -146,11 +183,16 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Common error'
             };
 
-            const matches = await findSimilarFixes(classified, 3);
-            expect(matches.length).toBeLessThanOrEqual(3);
+            const matches = await findSimilarFixes(classified, 2);
+            expect(matches.length).toBeLessThanOrEqual(2);
+            expect(mockDbClient.fixPattern.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                take: 2
+            }));
         });
 
         it('should handle runbook search failure gracefully', async () => {
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+
             const classified = {
                 category: ErrorCategory.RUNTIME,
                 confidence: 0.8,
@@ -160,7 +202,6 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Runtime error'
             };
 
-            // Should not throw even if runbook loading fails
             const matches = await findSimilarFixes(classified, 5);
             expect(Array.isArray(matches)).toBe(true);
         });
@@ -168,7 +209,8 @@ describe('Knowledge Base', () => {
 
     describe('updateFixPatternStats', () => {
         it('should handle non-existent fingerprint gracefully', async () => {
-            // Should not throw for non-existent pattern
+            mockDbClient.errorSolution.findFirst.mockResolvedValue(null);
+
             await expect(
                 updateFixPatternStats('non-existent-fingerprint-xyz', true)
             ).resolves.not.toThrow();
@@ -177,24 +219,24 @@ describe('Knowledge Base', () => {
 
     describe('getTopFixPatterns', () => {
         it('should return array of patterns', async () => {
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
             const patterns = await getTopFixPatterns(10);
             expect(Array.isArray(patterns)).toBe(true);
         });
 
         it('should respect limit parameter', async () => {
+            mockDbClient.fixPattern.findMany.mockResolvedValue([{}, {}]);
             const patterns = await getTopFixPatterns(5);
-            expect(patterns.length).toBeLessThanOrEqual(5);
+            expect(mockDbClient.fixPattern.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                take: 5
+            }));
         });
 
         it('should use default limit of 20', async () => {
             const patterns = await getTopFixPatterns();
-            expect(Array.isArray(patterns)).toBe(true);
-            expect(patterns.length).toBeLessThanOrEqual(20);
+            expect(mockDbClient.fixPattern.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                take: 20
+            }));
         });
     });
-
-    // Note: Full database integration tests for extractFixPattern, findSimilarFixes, 
-    // updateFixPatternStats, and getTopFixPatterns with actual database operations
-    // are covered in integration tests that use TestDatabaseManager.
-    // See __tests__/integration/knowledge-base-db.test.ts for full database tests.
 });
