@@ -28,7 +28,9 @@ describe('pathDetection - validatePath', () => {
 
   it('should suggest closest parent if path is deeply nested and missing', () => {
     vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        if (p.toString().includes('src/utils')) return true;
+        const str = p.toString();
+        if (str.endsWith('sub/file.ts')) return false; // Target file missing
+        if (str.includes('src/utils')) return true; // Parent exists
         return false;
     });
 
