@@ -9,6 +9,24 @@ import {
 } from '../../services/knowledge-base.js';
 
 describe('Knowledge Base', () => {
+    let mockDbClient: any;
+
+    beforeEach(() => {
+        mockDbClient = {
+            fixPattern: {
+                findMany: vi.fn(),
+                findFirst: vi.fn(),
+                update: vi.fn(),
+                create: vi.fn(),
+            },
+            errorSolution: {
+                findFirst: vi.fn(),
+                update: vi.fn(),
+                create: vi.fn(),
+            }
+        };
+    });
+
     describe('generateErrorFingerprint', () => {
         it('should generate consistent fingerprints for same error', () => {
             const fp1 = generateErrorFingerprint('syntax', 'TypeError at line 42', ['src/app.ts']);
@@ -88,8 +106,10 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Unknown error'
             };
 
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+
             // Should not throw
-            const matches = await findSimilarFixes(classified, 5);
+            const matches = await findSimilarFixes(classified, 5, mockDbClient);
             expect(Array.isArray(matches)).toBe(true);
         });
     });
@@ -132,7 +152,9 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Unique error never seen before xyz123'
             };
 
-            const matches = await findSimilarFixes(classified, 5);
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+
+            const matches = await findSimilarFixes(classified, 5, mockDbClient);
             expect(Array.isArray(matches)).toBe(true);
         });
 
@@ -146,7 +168,9 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Common error'
             };
 
-            const matches = await findSimilarFixes(classified, 3);
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+
+            const matches = await findSimilarFixes(classified, 3, mockDbClient);
             expect(matches.length).toBeLessThanOrEqual(3);
         });
 
@@ -160,36 +184,42 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Runtime error'
             };
 
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+
             // Should not throw even if runbook loading fails
-            const matches = await findSimilarFixes(classified, 5);
+            const matches = await findSimilarFixes(classified, 5, mockDbClient);
             expect(Array.isArray(matches)).toBe(true);
         });
     });
 
     describe('updateFixPatternStats', () => {
         it('should handle non-existent fingerprint gracefully', async () => {
+            mockDbClient.errorSolution.findFirst.mockResolvedValue(null);
+
             // Should not throw for non-existent pattern
             await expect(
-                updateFixPatternStats('non-existent-fingerprint-xyz', true)
+                updateFixPatternStats('non-existent-fingerprint-xyz', true, mockDbClient)
             ).resolves.not.toThrow();
         });
     });
 
     describe('getTopFixPatterns', () => {
         it('should return array of patterns', async () => {
-            const patterns = await getTopFixPatterns(10);
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+            const patterns = await getTopFixPatterns(10, mockDbClient);
             expect(Array.isArray(patterns)).toBe(true);
         });
 
         it('should respect limit parameter', async () => {
-            const patterns = await getTopFixPatterns(5);
-            expect(patterns.length).toBeLessThanOrEqual(5);
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+            await getTopFixPatterns(5, mockDbClient);
+            expect(mockDbClient.fixPattern.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5 }));
         });
 
         it('should use default limit of 20', async () => {
-            const patterns = await getTopFixPatterns();
-            expect(Array.isArray(patterns)).toBe(true);
-            expect(patterns.length).toBeLessThanOrEqual(20);
+            mockDbClient.fixPattern.findMany.mockResolvedValue([]);
+            await getTopFixPatterns(undefined, mockDbClient);
+            expect(mockDbClient.fixPattern.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 20 }));
         });
     });
 
