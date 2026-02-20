@@ -80,6 +80,6 @@ export default defineConfig({
         exclude: ['node_modules/**', 'dist/**'],
 
         // Setup files
-        setupFiles: []
+        setupFiles: ['./vitest.setup.ts']
     }
 });
