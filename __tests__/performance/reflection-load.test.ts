@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ReflectionLearningSystem } from '../../services/reflection/learning-system.js';
 import { db, disconnectDb } from '../../db/client.js';
+import { TestDatabaseManager } from '../helpers/test-database.js';
 
 interface PerformanceMetrics {
     totalOperations: number;
@@ -22,8 +23,16 @@ interface PerformanceMetrics {
 
 describe('Reflection Learning System - Performance Tests', () => {
     let system: ReflectionLearningSystem;
+    let dbManager: TestDatabaseManager;
 
     beforeAll(async () => {
+        // Setup isolated test database
+        dbManager = new TestDatabaseManager();
+        await dbManager.setup();
+
+        // Ensure the global db client uses the new connection string
+        await disconnectDb();
+
         // Clear any existing test data
         await db.learningFailure.deleteMany({});
         await db.learningSuccess.deleteMany({});
@@ -37,6 +46,9 @@ describe('Reflection Learning System - Performance Tests', () => {
         await db.learningFailure.deleteMany({});
         await db.learningSuccess.deleteMany({});
         await disconnectDb();
+        if (dbManager) {
+            await dbManager.teardown();
+        }
     });
 
     describe('Concurrent Write Performance', () => {
