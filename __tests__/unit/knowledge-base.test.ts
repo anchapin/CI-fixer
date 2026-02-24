@@ -1,5 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ErrorCategory } from '../../types.js';
+import { mockDeep } from 'vitest-mock-extended';
+import { PrismaClient } from '@prisma/client';
+
+// Use vi.hoisted to ensure the mock is created before the module is imported
+const { prismaMock } = vi.hoisted(() => {
+    // We need to import mockDeep here or use a simpler mock if imports are restricted in hoisted block
+    // However, vitest-mock-extended might not be available in hoisted scope easily if not handled carefully
+    // A safer bet is to return a plain object or use a simple factory,
+    // BUT since we need deep mocking, let's try to do it cleanly.
+    // Alternatively, we can rely on the fact that vi.mock calls are hoisted.
+
+    // Let's rely on standard jest/vitest pattern: define mock structure in factory
+    return { prismaMock: {
+        fixPattern: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+        errorSolution: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() }
+    }};
+});
+
+// Mock the real Prisma client import to return our mock
+vi.mock('../../db/client.js', () => ({
+    db: prismaMock
+}));
+
+// Import the service AFTER mocking the dependency
 import { 
     findSimilarFixes, 
     generateErrorFingerprint,
@@ -9,6 +33,10 @@ import {
 } from '../../services/knowledge-base.js';
 
 describe('Knowledge Base', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     describe('generateErrorFingerprint', () => {
         it('should generate consistent fingerprints for same error', () => {
             const fp1 = generateErrorFingerprint('syntax', 'TypeError at line 42', ['src/app.ts']);
@@ -88,36 +116,13 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Unknown error'
             };
 
+            // Mock empty return
+            prismaMock.fixPattern.findMany.mockResolvedValue([]);
+
             // Should not throw
             const matches = await findSimilarFixes(classified, 5);
             expect(Array.isArray(matches)).toBe(true);
-        });
-    });
-
-    // Additional tests requiring database mocking
-    describe('extractFixPattern', () => {
-        it('should create new pattern when none exists', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
-            expect(true).toBe(true);
-        });
-
-        it('should update existing pattern success count', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
-            expect(true).toBe(true);
-        });
-
-        it('should handle command-based fixes', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
-            expect(true).toBe(true);
-        });
-
-        it('should handle edit-based fixes', async () => {
-            // This would require mocking the prisma client
-            // Covered in integration tests with actual database
-            expect(true).toBe(true);
+            expect(matches).toEqual([]);
         });
     });
 
@@ -132,8 +137,11 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Unique error never seen before xyz123'
             };
 
+            prismaMock.fixPattern.findMany.mockResolvedValue([]);
+
             const matches = await findSimilarFixes(classified, 5);
             expect(Array.isArray(matches)).toBe(true);
+            expect(matches).toHaveLength(0);
         });
 
         it('should limit results to specified limit', async () => {
@@ -146,8 +154,27 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Common error'
             };
 
+            // Mock exact match return
+            const mockPattern = {
+                id: '1',
+                errorFingerprint: 'fp1',
+                errorCategory: ErrorCategory.SYNTAX,
+                filePath: 'app.ts',
+                fixTemplate: '{}',
+                successCount: 10,
+                lastUsed: new Date()
+            };
+
+            // Mock findMany to return enough items to test limit logic if it wasn't handled by Prisma
+            // In reality, Prisma handles limit, but we want to ensure our function passes it through
+            prismaMock.fixPattern.findMany.mockResolvedValue([mockPattern, mockPattern, mockPattern]);
+
             const matches = await findSimilarFixes(classified, 3);
-            expect(matches.length).toBeLessThanOrEqual(3);
+
+            // Verify findMany was called with take: 3
+            expect(prismaMock.fixPattern.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({ take: 3 })
+            );
         });
 
         it('should handle runbook search failure gracefully', async () => {
@@ -160,7 +187,9 @@ describe('Knowledge Base', () => {
                 errorMessage: 'Runtime error'
             };
 
-            // Should not throw even if runbook loading fails
+            prismaMock.fixPattern.findMany.mockResolvedValue([]);
+
+            // Should not throw even if runbook loading fails (which it might in this test env)
             const matches = await findSimilarFixes(classified, 5);
             expect(Array.isArray(matches)).toBe(true);
         });
@@ -168,33 +197,40 @@ describe('Knowledge Base', () => {
 
     describe('updateFixPatternStats', () => {
         it('should handle non-existent fingerprint gracefully', async () => {
+            prismaMock.errorSolution.findFirst.mockResolvedValue(null);
+
             // Should not throw for non-existent pattern
             await expect(
                 updateFixPatternStats('non-existent-fingerprint-xyz', true)
             ).resolves.not.toThrow();
+
+            expect(prismaMock.errorSolution.update).not.toHaveBeenCalled();
         });
     });
 
     describe('getTopFixPatterns', () => {
         it('should return array of patterns', async () => {
+            prismaMock.fixPattern.findMany.mockResolvedValue([]);
             const patterns = await getTopFixPatterns(10);
             expect(Array.isArray(patterns)).toBe(true);
         });
 
         it('should respect limit parameter', async () => {
-            const patterns = await getTopFixPatterns(5);
-            expect(patterns.length).toBeLessThanOrEqual(5);
+            prismaMock.fixPattern.findMany.mockResolvedValue([]);
+            await getTopFixPatterns(5);
+
+            expect(prismaMock.fixPattern.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({ take: 5 })
+            );
         });
 
         it('should use default limit of 20', async () => {
-            const patterns = await getTopFixPatterns();
-            expect(Array.isArray(patterns)).toBe(true);
-            expect(patterns.length).toBeLessThanOrEqual(20);
+            prismaMock.fixPattern.findMany.mockResolvedValue([]);
+            await getTopFixPatterns();
+
+            expect(prismaMock.fixPattern.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({ take: 20 })
+            );
         });
     });
-
-    // Note: Full database integration tests for extractFixPattern, findSimilarFixes, 
-    // updateFixPatternStats, and getTopFixPatterns with actual database operations
-    // are covered in integration tests that use TestDatabaseManager.
-    // See __tests__/integration/knowledge-base-db.test.ts for full database tests.
 });
