@@ -4,7 +4,19 @@ import { mockDeep } from 'vitest-mock-extended';
 import { PrismaClient } from '@prisma/client';
 
 // Use vi.hoisted to ensure the mock is created before the module is imported
-const prismaMock = vi.hoisted(() => mockDeep<PrismaClient>());
+const { prismaMock } = vi.hoisted(() => {
+    // We need to import mockDeep here or use a simpler mock if imports are restricted in hoisted block
+    // However, vitest-mock-extended might not be available in hoisted scope easily if not handled carefully
+    // A safer bet is to return a plain object or use a simple factory,
+    // BUT since we need deep mocking, let's try to do it cleanly.
+    // Alternatively, we can rely on the fact that vi.mock calls are hoisted.
+
+    // Let's rely on standard jest/vitest pattern: define mock structure in factory
+    return { prismaMock: {
+        fixPattern: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+        errorSolution: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() }
+    }};
+});
 
 // Mock the real Prisma client import to return our mock
 vi.mock('../../db/client.js', () => ({
