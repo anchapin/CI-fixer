@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { ErrorCategory } from '../../types.js';
 import { 
     findSimilarFixes, 
@@ -7,8 +7,19 @@ import {
     updateFixPatternStats,
     getTopFixPatterns
 } from '../../services/knowledge-base.js';
+import { InMemoryTestDatabase } from '../helpers/test-database.js';
 
 describe('Knowledge Base', () => {
+    let testDb: InMemoryTestDatabase;
+
+    beforeAll(async () => {
+        testDb = new InMemoryTestDatabase();
+        await testDb.setup();
+    });
+
+    afterAll(async () => {
+        await testDb.teardown();
+    });
     describe('generateErrorFingerprint', () => {
         it('should generate consistent fingerprints for same error', () => {
             const fp1 = generateErrorFingerprint('syntax', 'TypeError at line 42', ['src/app.ts']);

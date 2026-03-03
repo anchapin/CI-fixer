@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ReflectionLearningSystem } from '../../services/reflection/learning-system.js';
 import { db, disconnectDb } from '../../db/client.js';
+import { InMemoryTestDatabase } from '../helpers/test-database.js';
 
 interface PerformanceMetrics {
     totalOperations: number;
@@ -22,8 +23,12 @@ interface PerformanceMetrics {
 
 describe('Reflection Learning System - Performance Tests', () => {
     let system: ReflectionLearningSystem;
+    let testDb: InMemoryTestDatabase;
 
     beforeAll(async () => {
+        testDb = new InMemoryTestDatabase();
+        await testDb.setup();
+
         // Clear any existing test data
         await db.learningFailure.deleteMany({});
         await db.learningSuccess.deleteMany({});
@@ -36,6 +41,7 @@ describe('Reflection Learning System - Performance Tests', () => {
         // Cleanup
         await db.learningFailure.deleteMany({});
         await db.learningSuccess.deleteMany({});
+        await testDb.teardown();
         await disconnectDb();
     });
 
