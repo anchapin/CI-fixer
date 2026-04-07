@@ -257,3 +257,7 @@ The project includes a comprehensive test suite:
 -   **Integration Tests**: `npm run test:integration`
 -   **Coverage Report**: `npm run test:coverage`
 -   **E2E Tests**: `npm run test:e2e` (Playwright)
+
+## Issues and Research
+
+- [ISSUE-005: Incorporating Latest Research on Multi-Agent Systems and Automated Bug Fixing](./docs/issues/ISSUE-005-latest-research-on-agents-and-bug-fixing.md)
