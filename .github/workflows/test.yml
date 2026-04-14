@@ -1,44 +1,39 @@
 name: Test Suite
-
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: [ main, develop ]
-
+    branches:
+      - main
+      - develop
 jobs:
   test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
-
+        node-version:
+          - 18.x
+          - 20.x
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-
+          cache: npm
       - name: Install dependencies
         run: npm ci
-
       - name: Run linter
         run: npm run lint --if-present
-
       - name: Run unit tests
         run: npm run test:unit
-
       - name: Run integration tests
         run: npm run test:integration
-
       - name: Run all tests with coverage
         run: npm run test:coverage
-
       - name: Check coverage thresholds
         run: |
           echo "Checking coverage thresholds..."
@@ -48,7 +43,6 @@ jobs:
           # - Functions: 80%
           # - Branches: 75%
           # - Statements: 85%
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         if: matrix.node-version == '20.x'
@@ -57,12 +51,13 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
-
       - name: Generate coverage report
         if: always() && matrix.node-version == '20.x'
-        run: |
+        run: >
           echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+
           echo "" >> $GITHUB_STEP_SUMMARY
+
           if [ -f coverage/coverage-summary.json ]; then
             node -e "
               const fs = require('fs');
@@ -76,35 +71,53 @@ jobs:
               console.log(\`| Branches | \${total.branches.pct}% | \${total.branches.pct >= 75 ? '✅' : '❌'} |\`);
             " >> $GITHUB_STEP_SUMMARY
           fi
-
       - name: Comment PR with coverage
         if: github.event_name == 'pull_request' && matrix.node-version == '20.x'
         uses: actions/github-script@v7
         with:
-          script: |
+          script: >
             const fs = require('fs');
+
 
             if (!fs.existsSync('coverage/coverage-summary.json')) {
               console.log('No coverage file found');
               return;
             }
 
-            const coverage = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+
+            const coverage =
+            JSON.parse(fs.readFileSync('coverage/coverage-summary.json',
+            'utf8'));
+
             const total = coverage.total;
+
 
             const coverageComment = `## 📊 Test Coverage Report
 
-            | Metric | Coverage | Threshold | Status |
-            |--------|----------|-----------|--------|
-            | Lines | ${total.lines.pct}% | 85% | ${total.lines.pct >= 85 ? '✅ Pass' : '❌ Fail'} |
-            | Statements | ${total.statements.pct}% | 85% | ${total.statements.pct >= 85 ? '✅ Pass' : '❌ Fail'} |
-            | Functions | ${total.functions.pct}% | 80% | ${total.functions.pct >= 80 ? '✅ Pass' : '❌ Fail'} |
-            | Branches | ${total.branches.pct}% | 75% | ${total.branches.pct >= 75 ? '✅ Pass' : '❌ Fail'} |
 
-            ${total.lines.pct >= 85 && total.statements.pct >= 85 && total.functions.pct >= 80 && total.branches.pct >= 75
+            | Metric | Coverage | Threshold | Status |
+
+            |--------|----------|-----------|--------|
+
+            | Lines | ${total.lines.pct}% | 85% | ${total.lines.pct >= 85 ? '✅
+            Pass' : '❌ Fail'} |
+
+            | Statements | ${total.statements.pct}% | 85% |
+            ${total.statements.pct >= 85 ? '✅ Pass' : '❌ Fail'} |
+
+            | Functions | ${total.functions.pct}% | 80% | ${total.functions.pct
+            >= 80 ? '✅ Pass' : '❌ Fail'} |
+
+            | Branches | ${total.branches.pct}% | 75% | ${total.branches.pct >=
+            75 ? '✅ Pass' : '❌ Fail'} |
+
+
+            ${total.lines.pct >= 85 && total.statements.pct >= 85 &&
+            total.functions.pct >= 80 && total.branches.pct >= 75
               ? '✅ All coverage thresholds met!' 
               : '⚠️ Some coverage thresholds not met. Please add more tests.'}
             `;
+
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -112,7 +125,6 @@ jobs:
               repo: context.repo.name,
               body: coverageComment
             });
-
       - name: Archive coverage reports
         if: always() && matrix.node-version == '20.x'
         uses: actions/upload-artifact@v4
@@ -120,29 +132,34 @@ jobs:
           name: coverage-reports
           path: coverage/
           retention-days: 30
-
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
   performance:
     runs-on: ubuntu-latest
     needs: test
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-          cache: 'npm'
-
+          node-version: 20.x
+          cache: npm
       - name: Install dependencies
         run: npm ci
-
       - name: Run performance benchmarks
         run: npm test -- __tests__/performance/
-
       - name: Check performance regressions
-        run: |
+        run: >
           echo "## ⚡ Performance Benchmarks" >> $GITHUB_STEP_SUMMARY
+
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Performance tests completed. Check logs for timing details." >> $GITHUB_STEP_SUMMARY
+
+          echo "Performance tests completed. Check logs for timing details." >>
+          $GITHUB_STEP_SUMMARY
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
