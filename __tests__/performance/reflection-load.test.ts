@@ -25,8 +25,12 @@ describe('Reflection Learning System - Performance Tests', () => {
 
     beforeAll(async () => {
         // Clear any existing test data
-        await db.learningFailure.deleteMany({});
-        await db.learningSuccess.deleteMany({});
+        try {
+            await db.learningFailure.deleteMany({});
+            await db.learningSuccess.deleteMany({});
+        } catch (e) {
+            console.log('Database tables not present, skipping cleanup');
+        }
 
         system = new ReflectionLearningSystem();
         await system.initialize();
@@ -34,8 +38,12 @@ describe('Reflection Learning System - Performance Tests', () => {
 
     afterAll(async () => {
         // Cleanup
-        await db.learningFailure.deleteMany({});
-        await db.learningSuccess.deleteMany({});
+        try {
+            await db.learningFailure.deleteMany({});
+            await db.learningSuccess.deleteMany({});
+        } catch (e) {
+            console.log('Database tables not present, skipping cleanup');
+        }
         await disconnectDb();
     });
 
