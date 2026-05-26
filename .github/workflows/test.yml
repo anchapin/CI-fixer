@@ -12,7 +12,7 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        node-version: [20.x, 22.x]
     
     steps:
       - name: Checkout code
@@ -30,14 +30,23 @@ jobs:
       - name: Run linter
         run: npm run lint --if-present
       
+      - name: Initialize Prisma DB
+        run: |
+          DATABASE_URL="file:./test.db" npx prisma generate
+          DATABASE_URL="file:./test.db" npx prisma db push --accept-data-loss
+
       - name: Run unit tests
-        run: npm run test:unit
+        run: DATABASE_URL="file:./test.db" npm run test:unit
       
       - name: Run integration tests
-        run: npm run test:integration
+        run: DATABASE_URL="file:./test.db" npm run test:integration
       
+      - name: Initialize Prisma DB for Coverage
+        run: |
+          DATABASE_URL="file:./test.db" npx prisma db push --accept-data-loss
+
       - name: Run all tests with coverage
-        run: npm run test:coverage
+        run: DATABASE_URL="file:./test.db" npm run test:coverage
       
       - name: Check coverage thresholds
         run: |
@@ -51,7 +60,7 @@ jobs:
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
-        if: matrix.node-version == '20.x'
+        if: matrix.node-version == '22.x'
         with:
           files: ./coverage/lcov.info
           flags: unittests
@@ -59,7 +68,7 @@ jobs:
           fail_ci_if_error: false
       
       - name: Generate coverage report
-        if: always() && matrix.node-version == '20.x'
+        if: always() && matrix.node-version == '22.x'
         run: |
           echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -78,7 +87,7 @@ jobs:
           fi
       
       - name: Comment PR with coverage
-        if: github.event_name == 'pull_request' && matrix.node-version == '20.x'
+        if: github.event_name == 'pull_request' && matrix.node-version == '22.x'
         uses: actions/github-script@v7
         with:
           script: |
@@ -114,7 +123,7 @@ jobs:
             });
       
       - name: Archive coverage reports
-        if: always() && matrix.node-version == '20.x'
+        if: always() && matrix.node-version == '22.x'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-reports
@@ -132,7 +141,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'npm'
       
       - name: Install dependencies
