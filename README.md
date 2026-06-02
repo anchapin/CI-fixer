@@ -18,6 +18,12 @@ The application architecture has evolved to separate concerns for better stabili
 -   **Language Scoping**: Implements strict language boundaries (JS/TS, Python, Go) using hybrid keyword/manifest detection to ensure the agent prioritizes relevant files and tools for the detected technology stack.
 -   **Context Engine**: Uses AST-based dependency graph analysis to understand code relationships and intelligently isolate relevant files.
 
+## 📚 Issues and Research
+
+Research findings, architectural proposals, and simulated GitHub issues are documented in the `docs/issues/` directory:
+
+- [ISSUE-010: Latest Research Review on Automated Bug Fixing and Multi-Agent Frameworks](./docs/issues/ISSUE-010-latest-research-review.md)
+
 ## 🚀 Getting Started
 
 ### Prerequisites
