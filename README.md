@@ -240,6 +240,12 @@ Runs the agent's reproduction steps in a container on your local machine.
 -   **Requires**: Docker Desktop running locally.
 -   **Configuration**: Select **Execution Strategy: Local Docker Container** in Settings. You can specify a custom Docker image (default: `nikolaik/python-nodejs:python3.11-nodejs20-bullseye`).
 
+## 📚 Issues and Research
+
+We actively monitor academic research and community discussions to improve CI-Fixer's architecture. Check out our research summaries:
+
+- [ISSUE-012: Latest Research on Multi-Agent Automated Bug Fixing](./docs/issues/ISSUE-012-latest-research-on-multi-agent-bug-fixing.md)
+
 ## ⚡ Benchmarks & RL Gym
 
 CI-Fixer now features a Reinforcement Learning (RL) ready environment and benchmark suite.
