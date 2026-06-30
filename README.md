@@ -257,3 +257,9 @@ The project includes a comprehensive test suite:
 -   **Integration Tests**: `npm run test:integration`
 -   **Coverage Report**: `npm run test:coverage`
 -   **E2E Tests**: `npm run test:e2e` (Playwright)
+
+## Issues and Research
+
+We document major architectural proposals and research reviews as simulated GitHub issues in our docs directory. See the latest research reviews below:
+
+- [ISSUE-014: Incorporate Latest Research on Automated Bug Fixing and Multi-Agent Systems into CI-Fixer](./docs/issues/ISSUE-014-latest-research-automated-bug-fixing.md)
