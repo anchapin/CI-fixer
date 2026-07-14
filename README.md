@@ -257,3 +257,7 @@ The project includes a comprehensive test suite:
 -   **Integration Tests**: `npm run test:integration`
 -   **Coverage Report**: `npm run test:coverage`
 -   **E2E Tests**: `npm run test:e2e` (Playwright)
+
+## Issues and Research
+
+*   [ISSUE-015: Incorporating Latest Research on Automated Bug Fixing into CI-Fixer (2026)](./docs/issues/ISSUE-015-latest-research-automated-bug-fixing.md)
