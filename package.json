@@ -64,6 +64,11 @@
   "optionalDependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.53.3"
   },
+  "overrides": {
+    "e2b": {
+      "chalk": "^4.1.2"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@octokit/rest": "^22.0.1",
