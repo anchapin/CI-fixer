@@ -248,6 +248,12 @@ CI-Fixer now features a Reinforcement Learning (RL) ready environment and benchm
 
 Full documentation: [BENCHMARKS.md](./BENCHMARKS.md)
 
+## 📚 Issues and Research
+
+We track ongoing architectural research, literature reviews, and system evolution in the `docs/issues/` directory.
+
+- [ISSUE-017: Latest Research on Automated Bug Fixing and Multi-Agent Frameworks](./docs/issues/ISSUE-017-latest-research-review.md)
+
 ## 🧪 Testing
 
 The project includes a comprehensive test suite:
